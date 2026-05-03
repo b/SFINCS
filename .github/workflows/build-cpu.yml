@@ -1,0 +1,67 @@
+name: build-cpu
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  gfortran:
+    name: Ubuntu 24.04 / gfortran
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            m4 \
+            pkg-config \
+            libnetcdf-dev \
+            libnetcdff-dev \
+            gfortran
+
+      - name: Configure
+        working-directory: source
+        run: |
+          autoreconf -ivf
+          ./autogen.sh
+          ./configure \
+            FC=gfortran \
+            FCFLAGS="-fopenmp -O3 -fallow-argument-mismatch -w" \
+            FFLAGS="-fopenmp -O3 -fallow-argument-mismatch -w" \
+            --disable-shared \
+            --prefix="${GITHUB_WORKSPACE}/install"
+
+      # Single-threaded by design: Automake does not encode Fortran .mod
+      # dependencies. See CLAUDE.md.
+      - name: Build
+        working-directory: source
+        run: make
+
+      - name: Install
+        working-directory: source
+        run: make install
+
+      - name: Smoke test (binary launches and reports build revision)
+        run: |
+          set +e
+          out=$("${GITHUB_WORKSPACE}/install/bin/sfincs" 2>&1)
+          rc=$?
+          echo "$out"
+          # Expected: exit code 2 from STOP 2 when sfincs.inp is absent.
+          if [ "$rc" -ne 2 ]; then
+            echo "::error::sfincs exited $rc, expected 2 (STOP 2 on missing sfincs.inp)"
+            exit 1
+          fi
+          echo "$out" | grep -q "Welcome to SFINCS" \
+            || { echo "::error::startup banner missing"; exit 1; }
+          echo "$out" | grep -q "Build-Revision:" \
+            || { echo "::error::Build-Revision line missing"; exit 1; }
