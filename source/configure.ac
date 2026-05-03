@@ -36,6 +36,22 @@ dnl detect openacc flag
 AX_OPENACC
 AC_LANG_POP
 
+dnl optional CUDA Fortran build (requires nvfortran)
+AC_ARG_ENABLE([cuda],
+   AS_HELP_STRING([--enable-cuda], [Build with CUDA Fortran (requires nvfortran)]),
+   [enable_cuda=$enableval], [enable_cuda=no])
+
+AM_CONDITIONAL([USE_CUDA], [test "x$enable_cuda" = "xyes"])
+
+AS_IF([test "x$enable_cuda" = "xyes"], [
+   AC_DEFINE([USE_CUDA], [1], [Build with CUDA Fortran kernels])
+   # Verify nvfortran
+   AS_IF([test "$FC" = "nvfortran" -o -n "`echo $FC | grep nvfortran`"], [],
+      [AC_MSG_ERROR([--enable-cuda requires FC=nvfortran])])
+   # Append CUDA flags
+   FCFLAGS="$FCFLAGS -cuda -gpu=cc86,cc80,cc90 -DUSE_CUDA"
+])
+
 
 # NetCDF, the c version
 dnl the fortran version is compiled in place so we can link it statically
