@@ -3,6 +3,9 @@ on: [pull_request]
 
 jobs:
   sigridci:
+    # Sigrid CI runs only on the Deltares upstream repo, where SIGRID_CI_TOKEN
+    # is configured. On forks the secret is absent and the job fails; skip it.
+    if: github.repository == 'Deltares/SFINCS'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
