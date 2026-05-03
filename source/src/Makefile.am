@@ -14,19 +14,23 @@ lib_LTLIBRARIES = libsfincs.la
 #-------------------------------------------------------------------------------
 
 #all sources for sfincs that go into the library (all but the program)
-libsfincs_la_SOURCES = \
+libsfincs_la_SOURCES =
+if USE_CUDA
+# populated by sub-epic 2 (gpu-dispatcher-scaffolding)
+else
+libsfincs_la_SOURCES += \
 	sfincs_log.f90 \
 	sfincs_date.f90 \
 	sfincs_spiderweb.f90 \
 	sfincs_data.f90 \
     ../third_party_open/Delft3D/astro.f90 \
 	../third_party_open/utils/geometry.f90 \
-	sfincs_error.f90 \		
+	sfincs_error.f90 \
 	sfincs_quadtree.f90 \
 	snapwave/interp.F90 \
 	snapwave/snapwave_data.f90 \
-	snapwave/snapwave_ncinput.F90 \		
-	snapwave/snapwave_infragravity.f90 \	
+	snapwave/snapwave_ncinput.F90 \
+	snapwave/snapwave_infragravity.f90 \
 	snapwave/snapwave_boundaries.f90 \
 	snapwave/snapwave_date.f90 \
 	snapwave/snapwave_domain.f90 \
@@ -40,8 +44,8 @@ libsfincs_la_SOURCES = \
 	sfincs_crosssections.f90 \
 	sfincs_discharges.f90 \
 	sfincs_subgrid.F90 \
-	sfincs_timestep_analysis.f90 \	
-	sfincs_infiltration.f90 \	
+	sfincs_timestep_analysis.f90 \
+	sfincs_infiltration.f90 \
 	sfincs_domain.f90 \
 	sfincs_structures.f90 \
 	sfincs_obspoints.f90 \
@@ -60,7 +64,8 @@ libsfincs_la_SOURCES = \
 	sfincs_openacc.f90 \
 	sfincs_lib.f90 \
 	sfincs_bmi.f90
-        
+endif
+
 libsfincs_la_LIBADD = \
 	$(top_builddir)/third_party_open/netcdf/netcdf-fortran-4.6.1/fortran/libnetcdff.la
 # these files are not included
