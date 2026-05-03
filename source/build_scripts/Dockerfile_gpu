@@ -1,0 +1,18 @@
+FROM nvcr.io/nvidia/nvhpc:25.9-devel-cuda13.0-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        autoconf \
+        automake \
+        libtool \
+        m4 \
+        pkg-config \
+        libnetcdf-dev \
+        libnetcdff-dev \
+        ca-certificates \
+        gdb \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
