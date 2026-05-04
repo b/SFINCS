@@ -706,7 +706,16 @@ contains
       !
       ! Per-uv timestep candidate; alfa is applied later in sfincs_lib.
       !
-      min_dt_ip = 1.0 / (max(sqrt(g_in * hu), abs(uv(ip))) * dxuvinv)
+      ! Evaluate the formula in f64 to swamp per-cell FMA-contraction
+      ! / sqrt-precision differences between gfortran's CPU loop and
+      ! nvfortran's CUDA kernel. f32 intermediate values diverge at the
+      ! single-cell level by tens of ULPs, which then leaks into the global
+      ! min via atomicmin; f64 evaluation provides ~30 extra mantissa bits
+      ! of headroom and brings the per-step `min_dt` envelope back inside
+      ! the criterion-17 tolerance.
+      !
+      min_dt_ip = real(1.0_8 / (max(sqrt(real(g_in, 8) * real(hu, 8)), &
+                                    abs(real(uv(ip), 8))) * real(dxuvinv, 8)), 4)
       !
       ! Atomic min on IEEE 754 bit pattern. min_dt_ip > 0 by construction
       ! (hu >= huthresh > 0 so sqrt(g*hu) > 0), so the int representation is
