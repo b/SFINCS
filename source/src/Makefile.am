@@ -48,6 +48,7 @@ libsfincs_la_SOURCES += \
 	sfincs_input.f90 \
 	sfincs_ncinput.F90 \
 	sfincs_initial_conditions.f90 \
+	sfincs_boundaries_io.f90 \
 	sfincs_boundaries.f90 \
 	sfincs_continuity.f90 \
 	sfincs_crosssections.f90 \
@@ -95,6 +96,7 @@ libsfincs_la_SOURCES += \
 	sfincs_input.f90 \
 	sfincs_ncinput.F90 \
 	sfincs_initial_conditions.f90 \
+	sfincs_boundaries_io.f90 \
 	sfincs_boundaries.f90 \
 	sfincs_continuity.f90 \
 	sfincs_crosssections.f90 \
