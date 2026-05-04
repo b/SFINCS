@@ -67,7 +67,7 @@ libsfincs_la_SOURCES += \
 	sfincs_snapwave.f90 \
 	../third_party_open/utils/deg2utm.f90 \
 	sfincs_meteo_io.f90 \
-	sfincs_meteo.f90 \
+	sfincs_meteo_gpu.cuf \
     ../third_party_open/bicgstab/bicgstab_solver_ilu.f90 \
 	sfincs_nonhydrostatic.f90 \
 	sfincs_ncoutput.F90 \

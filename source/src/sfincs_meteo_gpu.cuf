@@ -1,0 +1,574 @@
+module sfincs_meteo
+   !
+   ! GPU sibling of source/src/sfincs_meteo.f90.
+   !
+   ! Shadows the CPU module's public surface using native CUDA Fortran kernels
+   ! that operate on device-resident state declared by sfincs_data_device.
+   !
+   ! IO routines (read_meteo_data, update_spiderweb_data, update_amuv_data,
+   ! update_amp_data, update_ampr_data) are re-exported from sfincs_meteo_io.
+   ! Those helpers continue to write host-side staging arrays (tauwu0/tauwu1,
+   ! patm0/patm1, prcp0/prcp1, windu0/windu1, ...). The per-step kernels
+   ! refresh the device shadows from those host arrays at launch (bridge-IN)
+   ! and publish the writes back to host at completion (bridge-OUT). The
+   ! bridge is wasted bandwidth once every per-step module is GPU-resident
+   ! but is required for correctness during the staging period.
+   !
+   use cudafor
+   use sfincs_data_device
+   use sfincs_meteo_io, only: read_meteo_data, &
+                              update_spiderweb_data, &
+                              update_amuv_data, &
+                              update_amp_data, &
+                              update_ampr_data
+   !
+   implicit none
+   !
+   private
+   public :: read_meteo_data, &
+             update_spiderweb_data, &
+             update_amuv_data, &
+             update_amp_data, &
+             update_ampr_data, &
+             update_meteo_forcing, &
+             update_wind_forcing_from_timeseries, &
+             update_precipitation_from_timeseries, &
+             update_meteo_fields
+   !
+   integer, parameter :: TPB = 128   ! threads per block, intentionally simple
+   !
+contains
+   !
+   ! -----------------------------------------------------------------
+   ! Per-step time-interpolation of wind/pressure/precipitation. Mirrors
+   ! CPU sibling lines 11-192.
+   ! -----------------------------------------------------------------
+   subroutine update_meteo_forcing(t, dt, tloop)
+      !
+      use sfincs_data, only: &
+         meteo3d_h => meteo3d, &
+         meteo_t0_h => meteo_t0, meteo_t1_h => meteo_t1, &
+         wind_h => wind, patmos_h => patmos, precip_h => precip, &
+         subgrid_h => subgrid, &
+         store_wind_h => store_wind, &
+         store_wind_max_h => store_wind_max, &
+         store_cumulative_precipitation_h => store_cumulative_precipitation, &
+         spinup_meteo_h => spinup_meteo, &
+         tspinup_h => tspinup, t0_h => t0, gapres_h => gapres, &
+         pavbnd_h => pavbnd, ngbnd_h => ngbnd, &
+         wndfile_h => wndfile, prcpfile_h => prcpfile, &
+         tauwu_h => tauwu, tauwv_h => tauwv, &
+         tauwu0_h => tauwu0, tauwv0_h => tauwv0, &
+         tauwu1_h => tauwu1, tauwv1_h => tauwv1, &
+         windu_h => windu, windv_h => windv, &
+         windu0_h => windu0, windv0_h => windv0, &
+         windu1_h => windu1, windv1_h => windv1, &
+         windmax_h => windmax, &
+         patm_h => patm, patm0_h => patm0, patm1_h => patm1, &
+         patmb_h => patmb, &
+         prcp_h => prcp, prcp0_h => prcp0, prcp1_h => prcp1, &
+         cumprcp_h => cumprcp, netprcp_h => netprcp, &
+         z_volume_h => z_volume, zs_h => zs, zb_h => zb, &
+         nmindbnd_h => nmindbnd
+      !
+      implicit none
+      !
+      integer  :: count0
+      integer  :: count1
+      integer  :: count_rate
+      integer  :: count_max
+      real     :: tloop
+      !
+      real*8    :: t
+      real*4    :: dt
+      real*4    :: twfact, onemintwfact
+      real*4    :: smfac, oneminsmfac
+      logical   :: do_spinup
+      integer   :: blocks
+      integer   :: bnd_blocks
+      integer   :: istat
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      if (meteo3d_h) then
+         !
+         twfact       = (t - meteo_t0_h) / (meteo_t1_h - meteo_t0_h)
+         onemintwfact = 1.0 - twfact
+         !
+         do_spinup = (t < (tspinup_h - 1.0e-3) .and. spinup_meteo_h)
+         if (do_spinup) then
+            smfac       = (t - t0_h) / (tspinup_h - t0_h)
+            oneminsmfac = 1.0 - smfac
+         else
+            smfac       = 1.0
+            oneminsmfac = 0.0
+         endif
+         !
+         ! ------ Copy-IN: host -> device for kernel READ set ----------------
+         !
+         if (wind_h) then
+            tauwu0 = tauwu0_h
+            tauwv0 = tauwv0_h
+            tauwu1 = tauwu1_h
+            tauwv1 = tauwv1_h
+            tauwu  = tauwu_h
+            tauwv  = tauwv_h
+            if (store_wind_h) then
+               windu0 = windu0_h
+               windv0 = windv0_h
+               windu1 = windu1_h
+               windv1 = windv1_h
+               windu  = windu_h
+               windv  = windv_h
+               if (store_wind_max_h) windmax = windmax_h
+            endif
+         endif
+         !
+         if (patmos_h) then
+            patm0 = patm0_h
+            patm1 = patm1_h
+            patm  = patm_h
+         endif
+         !
+         if (precip_h) then
+            prcp0   = prcp0_h
+            prcp1   = prcp1_h
+            prcp    = prcp_h
+            netprcp = netprcp_h
+            if (store_cumulative_precipitation_h) cumprcp = cumprcp_h
+            if (subgrid_h) then
+               z_volume = z_volume_h
+            else
+               zs = zs_h
+               zb = zb_h
+            endif
+         endif
+         !
+         ! ------ Per-cell time interpolation kernel -------------------------
+         !
+         blocks = (npn_local + TPB - 1) / TPB
+         !
+         call k_meteo_time_interp<<<blocks, TPB>>>( &
+            dt, npn_local, &
+            twfact, onemintwfact, smfac, oneminsmfac, &
+            do_spinup, gapres_h, &
+            wind_h, patmos_h, precip_h, subgrid_h, &
+            store_wind_h, store_wind_max_h, &
+            store_cumulative_precipitation_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         ! ------ Boundary atmospheric pressure update -----------------------
+         !
+         if (patmos_h .and. pavbnd_h > 0.0) then
+            !
+            nmindbnd = nmindbnd_h
+            !
+            bnd_blocks = (ngbnd_h + TPB - 1) / TPB
+            call k_meteo_patmb<<<bnd_blocks, TPB>>>(ngbnd_h)
+            istat = cudaDeviceSynchronize()
+            !
+         endif
+         !
+         ! ------ Copy-OUT: device -> host for WRITE set ---------------------
+         !
+         if (wind_h) then
+            tauwu_h = tauwu
+            tauwv_h = tauwv
+            if (store_wind_h) then
+               windu_h = windu
+               windv_h = windv
+               if (store_wind_max_h) windmax_h = windmax
+            endif
+         endif
+         !
+         if (patmos_h) then
+            patm_h = patm
+            if (pavbnd_h > 0.0) patmb_h = patmb
+         endif
+         !
+         if (precip_h) then
+            prcp_h    = prcp
+            netprcp_h = netprcp
+            if (store_cumulative_precipitation_h) cumprcp_h = cumprcp
+         endif
+         !
+      endif
+      !
+      ! Wind from time series
+      !
+      if (wndfile_h(1:4) /= 'none') then
+         call update_wind_forcing_from_timeseries(t)
+      endif
+      !
+      ! Rainfall from time series
+      !
+      if (prcpfile_h(1:4) /= 'none') then
+         call update_precipitation_from_timeseries(t, dt)
+      endif
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0 * (count1 - count0) / count_rate
+      !
+   end subroutine update_meteo_forcing
+   !
+   ! -----------------------------------------------------------------
+   ! Spatially-uniform wind from time series. Mirrors CPU sibling
+   ! lines 195-255.
+   ! -----------------------------------------------------------------
+   subroutine update_wind_forcing_from_timeseries(t)
+      !
+      use sfincs_data, only: pi, rhoa, rhow, &
+                             ntwnd, itwndlast, twnd, wndmag, wnddir, cdval, &
+                             store_wind_h => store_wind, &
+                             tauwu_h => tauwu, tauwv_h => tauwv, &
+                             windu_h => windu, windv_h => windv
+      !
+      implicit none
+      !
+      real*8 :: t
+      !
+      integer :: itw
+      integer :: blocks
+      integer :: istat
+      real*4  :: twfac, vmag, vdir, dr0, dr1, cd
+      real*8  :: twu, twv
+      real*4  :: wu_uni, wv_uni
+      !
+      do itw = itwndlast, ntwnd
+         !
+         if (twnd(itw) > t) then
+            !
+            twfac = (t - twnd(itw - 1)) / (twnd(itw) - twnd(itw - 1))
+            !
+            vmag = wndmag(itw - 1) * (1.0 - twfac) + wndmag(itw) * twfac
+            dr0  = modulo(wnddir(itw - 1), 2 * pi)
+            dr1  = modulo(wnddir(itw    ), 2 * pi)
+            if (dr1 > dr0 + pi) then
+               dr0 = dr0 + 2 * pi
+            elseif (dr0 > dr1 + pi) then
+               dr1 = dr1 + 2 * pi
+            endif
+            vdir = dr0 * (1.0 - twfac) + dr1 * twfac
+            !
+            cd = cdval(int(vmag * 10) + 1)
+            !
+            twu = vmag**2 * cos(vdir) * rhoa * cd / rhow
+            twv = vmag**2 * sin(vdir) * rhoa * cd / rhow
+            !
+            wu_uni = vmag * cos(vdir)
+            wv_uni = vmag * sin(vdir)
+            !
+            blocks = (npn_local + TPB - 1) / TPB
+            !
+            call k_wind_uniform<<<blocks, TPB>>>(npn_local, &
+               real(twu, kind=4), real(twv, kind=4), &
+               wu_uni, wv_uni, store_wind_h)
+            !
+            istat = cudaDeviceSynchronize()
+            !
+            ! Publish device -> host for downstream CPU consumers
+            !
+            tauwu_h = tauwu
+            tauwv_h = tauwv
+            if (store_wind_h) then
+               windu_h = windu
+               windv_h = windv
+            endif
+            !
+            itwndlast = itw - 1
+            !
+            exit
+            !
+         endif
+         !
+      enddo
+      !
+   end subroutine update_wind_forcing_from_timeseries
+   !
+   ! -----------------------------------------------------------------
+   ! Spatially-uniform precipitation from time series. Mirrors CPU
+   ! sibling lines 257-302.
+   ! -----------------------------------------------------------------
+   subroutine update_precipitation_from_timeseries(t, dt)
+      !
+      use sfincs_data, only: ntprcp, itprcplast, tprcpt, tprcpv, &
+                             store_cumulative_precipitation_h => store_cumulative_precipitation, &
+                             prcp_h => prcp, netprcp_h => netprcp, &
+                             cumprcp_h => cumprcp
+      !
+      implicit none
+      !
+      real*8 :: t
+      real*4 :: dt
+      !
+      integer :: itp
+      integer :: blocks
+      integer :: istat
+      real*4  :: twfac, ptmp
+      !
+      do itp = itprcplast, ntprcp
+         if (tprcpt(itp) > t) exit
+      enddo
+      !
+      itp = max(min(itp, ntprcp), 1)
+      !
+      twfac = (t - tprcpt(itp - 1)) / (tprcpt(itp) - tprcpt(itp - 1))
+      !
+      ptmp = (tprcpv(itp - 1) * (1.0 - twfac) + tprcpv(itp) * twfac) / (1000 * 3600)
+      !
+      ! Copy-IN cumprcp if used (read-modify-write pattern)
+      !
+      if (store_cumulative_precipitation_h) cumprcp = cumprcp_h
+      !
+      blocks = (npn_local + TPB - 1) / TPB
+      !
+      call k_precip_uniform<<<blocks, TPB>>>(npn_local, dt, ptmp, &
+         store_cumulative_precipitation_h)
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      ! Copy-OUT
+      !
+      prcp_h    = prcp
+      netprcp_h = netprcp
+      if (store_cumulative_precipitation_h) cumprcp_h = cumprcp
+      !
+      itprcplast = itp - 1
+      !
+   end subroutine update_precipitation_from_timeseries
+   !
+   ! -----------------------------------------------------------------
+   ! Per-step host dispatcher to IO trampolines that read meteo data
+   ! and (in the case of update_spiderweb_data) interpolate spatially
+   ! onto the SFINCS grid into host-side staging arrays.
+   !
+   ! Mirrors the CPU sibling lines 305-352. The per-cell interpolation
+   ! work for spiderweb is performed inside update_spiderweb_data
+   ! (writing to host arrays tauwu0/tauwu1, patm0/patm1, prcp0/prcp1,
+   ! windu0/windu1); update_meteo_forcing then refreshes the device
+   ! shadows from those host arrays via bridge-IN before time-interp.
+   ! -----------------------------------------------------------------
+   subroutine update_meteo_fields(t, tloop)
+      !
+      use sfincs_data, only: amufile, netamuamvfile, &
+                             ampfile, netampfile, &
+                             amprfile, netamprfile, &
+                             spwfile, netspwfile, patmos
+      !
+      implicit none
+      !
+      integer  :: count0
+      integer  :: count1
+      integer  :: count_rate
+      integer  :: count_max
+      real     :: tloop
+      !
+      real*8   :: t
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      if (amufile(1:4) /= 'none' .or. netamuamvfile(1:4) /= 'none') then
+         call update_amuv_data()
+      endif
+      !
+      if ((ampfile(1:4) /= 'none' .or. netampfile(1:4) /= 'none') .and. patmos) then
+         call update_amp_data()
+      endif
+      !
+      if (amprfile(1:4) /= 'none' .or. netamprfile(1:4) /= 'none') then
+         call update_ampr_data()
+      endif
+      !
+      if (spwfile(1:4) /= 'none' .or. netspwfile(1:4) /= 'none') then
+         call update_spiderweb_data()
+      endif
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0 * (count1 - count0) / count_rate
+      !
+   end subroutine update_meteo_fields
+   !
+   ! ===================================================================
+   !                              KERNELS
+   ! ===================================================================
+   !
+   ! Per-cell time-interpolation kernel. Mirrors the inner loops at CPU
+   ! sibling lines 43-101 (twfact branch) and 115-149 (spinup branch),
+   ! plus the negative-prcp guard at lines 75-87 and 132-144.
+   !
+   attributes(global) subroutine k_meteo_time_interp(dt, npn_in, &
+                                                     twfact, onemintwfact, &
+                                                     smfac, oneminsmfac, &
+                                                     do_spinup_in, gapres_in, &
+                                                     wind_in, patmos_in, &
+                                                     precip_in, subgrid_in, &
+                                                     store_wind_in, &
+                                                     store_wind_max_in, &
+                                                     store_cumprcp_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: npn_in
+      real*4,  value :: twfact
+      real*4,  value :: onemintwfact
+      real*4,  value :: smfac
+      real*4,  value :: oneminsmfac
+      logical, value :: do_spinup_in
+      real*4,  value :: gapres_in
+      logical, value :: wind_in
+      logical, value :: patmos_in
+      logical, value :: precip_in
+      logical, value :: subgrid_in
+      logical, value :: store_wind_in
+      logical, value :: store_wind_max_in
+      logical, value :: store_cumprcp_in
+      !
+      integer :: nm
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      if (wind_in) then
+         tauwu(nm) = tauwu0(nm) * onemintwfact + tauwu1(nm) * twfact
+         tauwv(nm) = tauwv0(nm) * onemintwfact + tauwv1(nm) * twfact
+         if (store_wind_in) then
+            windu(nm) = windu0(nm) * onemintwfact + windu1(nm) * twfact
+            windv(nm) = windv0(nm) * onemintwfact + windv1(nm) * twfact
+            if (store_wind_max_in) then
+               windmax(nm) = max(windmax(nm), sqrt(windu(nm)**2 + windv(nm)**2))
+            endif
+         endif
+      endif
+      !
+      if (patmos_in) then
+         patm(nm) = patm0(nm) * onemintwfact + patm1(nm) * twfact
+      endif
+      !
+      if (precip_in) then
+         !
+         prcp(nm) = prcp0(nm) * onemintwfact + prcp1(nm) * twfact
+         !
+         if (prcp(nm) < 0.0) then
+            if (subgrid_in) then
+               if (z_volume(nm) <= 0.0) prcp(nm) = 0.0
+            else
+               if (zs(nm) <= zb(nm)) prcp(nm) = 0.0
+            endif
+         endif
+         !
+         netprcp(nm) = prcp(nm)
+         !
+         if (store_cumprcp_in) then
+            cumprcp(nm) = cumprcp(nm) + prcp(nm) * dt
+         endif
+         !
+      endif
+      !
+      ! Spinup factor branch
+      !
+      if (do_spinup_in) then
+         !
+         if (wind_in) then
+            tauwu(nm) = tauwu(nm) * smfac
+            tauwv(nm) = tauwv(nm) * smfac
+         endif
+         !
+         if (patmos_in) then
+            patm(nm) = patm(nm) * smfac + gapres_in * oneminsmfac
+         endif
+         !
+         if (precip_in) then
+            !
+            netprcp(nm) = netprcp(nm) * smfac
+            !
+            if (netprcp(nm) < 0.0) then
+               if (subgrid_in) then
+                  if (z_volume(nm) <= 0.0) netprcp(nm) = 0.0
+               else
+                  if (zs(nm) <= zb(nm)) netprcp(nm) = 0.0
+               endif
+            endif
+            !
+         endif
+         !
+      endif
+      !
+   end subroutine k_meteo_time_interp
+   !
+   ! Boundary patmb update kernel. Mirrors CPU sibling lines 159-163.
+   !
+   attributes(global) subroutine k_meteo_patmb(ngbnd_in)
+      !
+      implicit none
+      !
+      integer, value :: ngbnd_in
+      !
+      integer :: ib
+      !
+      ib = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (ib > ngbnd_in) return
+      !
+      patmb(ib) = patm(nmindbnd(ib))
+      !
+   end subroutine k_meteo_patmb
+   !
+   ! Spatially-uniform wind kernel. Mirrors CPU sibling lines 234-248.
+   !
+   attributes(global) subroutine k_wind_uniform(npn_in, twu_in, twv_in, &
+                                                wu_uni_in, wv_uni_in, &
+                                                store_wind_in)
+      !
+      implicit none
+      !
+      integer, value :: npn_in
+      real*4,  value :: twu_in
+      real*4,  value :: twv_in
+      real*4,  value :: wu_uni_in
+      real*4,  value :: wv_uni_in
+      logical, value :: store_wind_in
+      !
+      integer :: nm
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      tauwu(nm) = twu_in
+      tauwv(nm) = twv_in
+      !
+      if (store_wind_in) then
+         windu(nm) = wu_uni_in
+         windv(nm) = wv_uni_in
+      endif
+      !
+   end subroutine k_wind_uniform
+   !
+   ! Spatially-uniform precipitation kernel. Mirrors CPU sibling
+   ! lines 287-296.
+   !
+   attributes(global) subroutine k_precip_uniform(npn_in, dt, ptmp_in, &
+                                                  store_cumprcp_in)
+      !
+      implicit none
+      !
+      integer, value :: npn_in
+      real*4,  value :: dt
+      real*4,  value :: ptmp_in
+      logical, value :: store_cumprcp_in
+      !
+      integer :: nm
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      prcp(nm)    = ptmp_in
+      netprcp(nm) = ptmp_in
+      !
+      if (store_cumprcp_in) then
+         cumprcp(nm) = cumprcp(nm) + ptmp_in * dt
+      endif
+      !
+   end subroutine k_precip_uniform
+   !
+end module sfincs_meteo
