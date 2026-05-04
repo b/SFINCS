@@ -1,0 +1,465 @@
+module sfincs_partition
+   !
+   ! GPU partition / device-binding / halo-exchange entry points.
+   !
+   ! This module owns the bridge between the host-side state in sfincs_data
+   ! and its device shadow in sfincs_data_device. The single-rank path is
+   ! implemented; multi-rank halo construction and exchange are deferred to
+   ! sub-epic 8 (gpu-multi-gpu) and sub-epic 7 (gpu-output-sync).
+   !
+   use cudafor
+   use mpi
+   use sfincs_data_device
+   !
+   ! Host-side counterparts. The catalog mirrors source/src/sfincs_openacc.f90
+   ! lines 15-39. NOTE: the architect mandate refers to a host-side scalar
+   ! `npn`; the actual identifier in sfincs_data is `np` (rank-local cell
+   ! count). It is renamed here as `npn_h` so the device-side `npn_local`
+   ! still maps to a recognisable host name.
+   !
+   use sfincs_data, only: &
+      npn_h => np, npuv_h => npuv, &
+      kcs_h => kcs, kfuv_h => kfuv, kcuv_h => kcuv, &
+      zs_h => zs, zs0_h => zs0, zsderv_h => zsderv, &
+      q_h => q, q0_h => q0, uv_h => uv, uv0_h => uv0, &
+      zb_h => zb, zbuv_h => zbuv, zbuvmx_h => zbuvmx, &
+      zsmax_h => zsmax, maxzsm_h => maxzsm, qmax_h => qmax, vmax_h => vmax, &
+      twet_h => twet, zsm_h => zsm, z_volume_h => z_volume, &
+      z_flags_iref_h => z_flags_iref, uv_flags_iref_h => uv_flags_iref, &
+      uv_flags_type_h => uv_flags_type, uv_flags_dir_h => uv_flags_dir, &
+      mask_adv_h => mask_adv, &
+      index_kcuv2_h => index_kcuv2, nmikcuv2_h => nmikcuv2, &
+      nmbkcuv2_h => nmbkcuv2, ibkcuv2_h => ibkcuv2, &
+      zsb_h => zsb, zsb0_h => zsb0, ibuvdir_h => ibuvdir, uvmean_h => uvmean, &
+      subgrid_uv_zmin_h => subgrid_uv_zmin, subgrid_uv_zmax_h => subgrid_uv_zmax, &
+      subgrid_uv_havg_h => subgrid_uv_havg, subgrid_uv_nrep_h => subgrid_uv_nrep, &
+      subgrid_uv_pwet_h => subgrid_uv_pwet, &
+      subgrid_uv_havg_zmax_h => subgrid_uv_havg_zmax, &
+      subgrid_uv_nrep_zmax_h => subgrid_uv_nrep_zmax, &
+      subgrid_uv_fnfit_h => subgrid_uv_fnfit, subgrid_uv_navg_w_h => subgrid_uv_navg_w, &
+      subgrid_z_zmin_h => subgrid_z_zmin, subgrid_z_zmax_h => subgrid_z_zmax, &
+      subgrid_z_dep_h => subgrid_z_dep, subgrid_z_volmax_h => subgrid_z_volmax, &
+      z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
+      z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
+      uv_index_z_nm_h => uv_index_z_nm, uv_index_z_nmu_h => uv_index_z_nmu, &
+      uv_index_u_nmd_h => uv_index_u_nmd, uv_index_u_nmu_h => uv_index_u_nmu, &
+      uv_index_u_ndm_h => uv_index_u_ndm, uv_index_u_num_h => uv_index_u_num, &
+      uv_index_v_ndm_h => uv_index_v_ndm, uv_index_v_ndmu_h => uv_index_v_ndmu, &
+      uv_index_v_nm_h => uv_index_v_nm, uv_index_v_nmu_h => uv_index_v_nmu, &
+      nmindsrc_h => nmindsrc, qtsrc_h => qtsrc, &
+      drainage_type_h => drainage_type, drainage_params_h => drainage_params, &
+      z_index_wavemaker_h => z_index_wavemaker, wavemaker_uvmean_h => wavemaker_uvmean, &
+      wavemaker_nmd_h => wavemaker_nmd, wavemaker_nmu_h => wavemaker_nmu, &
+      wavemaker_ndm_h => wavemaker_ndm, wavemaker_num_h => wavemaker_num, &
+      structure_uv_index_h => structure_uv_index, &
+      structure_parameters_h => structure_parameters, &
+      structure_type_h => structure_type, structure_length_h => structure_length, &
+      fwuv_h => fwuv, &
+      tauwu_h => tauwu, tauwv_h => tauwv, &
+      tauwu0_h => tauwu0, tauwv0_h => tauwv0, &
+      tauwu1_h => tauwu1, tauwv1_h => tauwv1, &
+      windu_h => windu, windv_h => windv, &
+      windu0_h => windu0, windv0_h => windv0, &
+      windu1_h => windu1, windv1_h => windv1, windmax_h => windmax, &
+      patm_h => patm, patm0_h => patm0, patm1_h => patm1, patmb_h => patmb, &
+      nmindbnd_h => nmindbnd, &
+      prcp_h => prcp, prcp0_h => prcp0, prcp1_h => prcp1, &
+      cumprcp_h => cumprcp, netprcp_h => netprcp, qext_h => qext, &
+      dxminv_h => dxminv, dxrinv_h => dxrinv, dyrinv_h => dyrinv, &
+      dxm2inv_h => dxm2inv, dxr2inv_h => dxr2inv, dyr2inv_h => dyr2inv, &
+      dxrinvc_h => dxrinvc, dyrinvc_h => dyrinvc, &
+      dxm_h => dxm, dxrm_h => dxrm, dyrm_h => dyrm, &
+      cell_area_m2_h => cell_area_m2, cell_area_h => cell_area, &
+      gn2uv_h => gn2uv, fcorio2d_h => fcorio2d, &
+      storage_volume_h => storage_volume, nuvisc_h => nuvisc, &
+      cuv_index_uv_h => cuv_index_uv, cuv_index_uv1_h => cuv_index_uv1, &
+      cuv_index_uv2_h => cuv_index_uv2, &
+      x73_h => x73, gnapp2_h => gnapp2, &
+      timestep_analysis_required_timestep_h => timestep_analysis_required_timestep, &
+      timestep_analysis_average_required_timestep_h => timestep_analysis_average_required_timestep, &
+      timestep_analysis_times_wet_h => timestep_analysis_times_wet, &
+      timestep_analysis_times_limiting_h => timestep_analysis_times_limiting, &
+      qinffield_h => qinffield, qinfmap_h => qinfmap, cuminf_h => cuminf, &
+      scs_rain_h => scs_rain, scs_Se_h => scs_Se, scs_P1_h => scs_P1, &
+      scs_F1_h => scs_F1, scs_S1_h => scs_S1, rain_T1_h => rain_T1, &
+      ksfield_h => ksfield, &
+      GA_head_h => GA_head, GA_sigma_h => GA_sigma, GA_sigma_max_h => GA_sigma_max, &
+      GA_F_h => GA_F, GA_Lu_h => GA_Lu, inf_kr_h => inf_kr, &
+      horton_kd_h => horton_kd, horton_fc_h => horton_fc, horton_f0_h => horton_f0
+   !
+   implicit none
+   !
+   public :: partition_and_localize, device_finalize, &
+             halo_exchange_zs, halo_exchange_q_uv, &
+             device_to_host_for_output
+   !
+contains
+   !
+   subroutine partition_and_localize()
+      !
+      integer :: ierr
+      integer :: nGpus, istat
+      logical :: flag
+      !
+      ! --- Phase 1: MPI bootstrap -------------------------------------------
+      ! The orchestrator (sfincs_lib) may have already called mpi_init in the
+      ! same PR; guard with mpi_initialized so we never double-init.
+      !
+      call mpi_initialized(flag, ierr)
+      if (.not. flag) then
+         call mpi_init(ierr)
+      end if
+      call mpi_comm_rank(MPI_COMM_WORLD, mpi_rank, ierr)
+      call mpi_comm_size(MPI_COMM_WORLD, mpi_size, ierr)
+      !
+      ! --- Phase 2: Device binding ------------------------------------------
+      !
+      istat = cudaGetDeviceCount(nGpus)
+      local_rank = mod(mpi_rank, nGpus)
+      istat = cudaSetDevice(local_rank)
+      if (istat /= cudaSuccess) then
+         error stop 'cudaSetDevice failed'
+      end if
+      !
+      ! --- Phase 3: Degenerate (single-rank) partition ----------------------
+      !
+      if (mpi_size > 1) then
+         error stop 'multi-rank not yet supported; awaiting sub-epic 8'
+      end if
+      npn_local        = npn_h
+      npuv_local       = npuv_h
+      cell_index_first = 1
+      cell_index_last  = npn_h
+      !
+      ! --- Phase 4: Allocate device shadows + copyin ------------------------
+      ! Skip arrays whose host counterpart is unallocated (wavemaker,
+      ! drainage, structures, etc. only allocated when their input is given).
+      !
+      if (allocated(kcs_h))           then; allocate(kcs,           mold=kcs_h);           kcs           = kcs_h;           end if
+      if (allocated(kfuv_h))          then; allocate(kfuv,          mold=kfuv_h);          kfuv          = kfuv_h;          end if
+      if (allocated(kcuv_h))          then; allocate(kcuv,          mold=kcuv_h);          kcuv          = kcuv_h;          end if
+      if (allocated(zs_h))            then; allocate(zs,            mold=zs_h);            zs            = zs_h;            end if
+      if (allocated(zs0_h))           then; allocate(zs0,           mold=zs0_h);           zs0           = zs0_h;           end if
+      if (allocated(zsderv_h))        then; allocate(zsderv,        mold=zsderv_h);        zsderv        = zsderv_h;        end if
+      if (allocated(q_h))             then; allocate(q,             mold=q_h);             q             = q_h;             end if
+      if (allocated(q0_h))            then; allocate(q0,            mold=q0_h);            q0            = q0_h;            end if
+      if (allocated(uv_h))            then; allocate(uv,            mold=uv_h);            uv            = uv_h;            end if
+      if (allocated(uv0_h))           then; allocate(uv0,           mold=uv0_h);           uv0           = uv0_h;           end if
+      if (allocated(zb_h))            then; allocate(zb,            mold=zb_h);            zb            = zb_h;            end if
+      if (allocated(zbuv_h))          then; allocate(zbuv,          mold=zbuv_h);          zbuv          = zbuv_h;          end if
+      if (allocated(zbuvmx_h))        then; allocate(zbuvmx,        mold=zbuvmx_h);        zbuvmx        = zbuvmx_h;        end if
+      if (allocated(zsmax_h))         then; allocate(zsmax,         mold=zsmax_h);         zsmax         = zsmax_h;         end if
+      if (allocated(maxzsm_h))        then; allocate(maxzsm,        mold=maxzsm_h);        maxzsm        = maxzsm_h;        end if
+      if (allocated(qmax_h))          then; allocate(qmax,          mold=qmax_h);          qmax          = qmax_h;          end if
+      if (allocated(vmax_h))          then; allocate(vmax,          mold=vmax_h);          vmax          = vmax_h;          end if
+      if (allocated(twet_h))          then; allocate(twet,          mold=twet_h);          twet          = twet_h;          end if
+      if (allocated(zsm_h))           then; allocate(zsm,           mold=zsm_h);           zsm           = zsm_h;           end if
+      if (allocated(z_volume_h))      then; allocate(z_volume,      mold=z_volume_h);      z_volume      = z_volume_h;      end if
+      if (allocated(z_flags_iref_h))  then; allocate(z_flags_iref,  mold=z_flags_iref_h);  z_flags_iref  = z_flags_iref_h;  end if
+      if (allocated(uv_flags_iref_h)) then; allocate(uv_flags_iref, mold=uv_flags_iref_h); uv_flags_iref = uv_flags_iref_h; end if
+      if (allocated(uv_flags_type_h)) then; allocate(uv_flags_type, mold=uv_flags_type_h); uv_flags_type = uv_flags_type_h; end if
+      if (allocated(uv_flags_dir_h))  then; allocate(uv_flags_dir,  mold=uv_flags_dir_h);  uv_flags_dir  = uv_flags_dir_h;  end if
+      if (allocated(mask_adv_h))      then; allocate(mask_adv,      mold=mask_adv_h);      mask_adv      = mask_adv_h;      end if
+      if (allocated(index_kcuv2_h))   then; allocate(index_kcuv2,   mold=index_kcuv2_h);   index_kcuv2   = index_kcuv2_h;   end if
+      if (allocated(nmikcuv2_h))      then; allocate(nmikcuv2,      mold=nmikcuv2_h);      nmikcuv2      = nmikcuv2_h;      end if
+      if (allocated(nmbkcuv2_h))      then; allocate(nmbkcuv2,      mold=nmbkcuv2_h);      nmbkcuv2      = nmbkcuv2_h;      end if
+      if (allocated(ibkcuv2_h))       then; allocate(ibkcuv2,       mold=ibkcuv2_h);       ibkcuv2       = ibkcuv2_h;       end if
+      if (allocated(zsb_h))           then; allocate(zsb,           mold=zsb_h);           zsb           = zsb_h;           end if
+      if (allocated(zsb0_h))          then; allocate(zsb0,          mold=zsb0_h);          zsb0          = zsb0_h;          end if
+      if (allocated(ibuvdir_h))       then; allocate(ibuvdir,       mold=ibuvdir_h);       ibuvdir       = ibuvdir_h;       end if
+      if (allocated(uvmean_h))        then; allocate(uvmean,        mold=uvmean_h);        uvmean        = uvmean_h;        end if
+      if (allocated(subgrid_uv_zmin_h))      then; allocate(subgrid_uv_zmin,      mold=subgrid_uv_zmin_h);      subgrid_uv_zmin      = subgrid_uv_zmin_h;      end if
+      if (allocated(subgrid_uv_zmax_h))      then; allocate(subgrid_uv_zmax,      mold=subgrid_uv_zmax_h);      subgrid_uv_zmax      = subgrid_uv_zmax_h;      end if
+      if (allocated(subgrid_uv_havg_h))      then; allocate(subgrid_uv_havg,      mold=subgrid_uv_havg_h);      subgrid_uv_havg      = subgrid_uv_havg_h;      end if
+      if (allocated(subgrid_uv_nrep_h))      then; allocate(subgrid_uv_nrep,      mold=subgrid_uv_nrep_h);      subgrid_uv_nrep      = subgrid_uv_nrep_h;      end if
+      if (allocated(subgrid_uv_pwet_h))      then; allocate(subgrid_uv_pwet,      mold=subgrid_uv_pwet_h);      subgrid_uv_pwet      = subgrid_uv_pwet_h;      end if
+      if (allocated(subgrid_uv_havg_zmax_h)) then; allocate(subgrid_uv_havg_zmax, mold=subgrid_uv_havg_zmax_h); subgrid_uv_havg_zmax = subgrid_uv_havg_zmax_h; end if
+      if (allocated(subgrid_uv_nrep_zmax_h)) then; allocate(subgrid_uv_nrep_zmax, mold=subgrid_uv_nrep_zmax_h); subgrid_uv_nrep_zmax = subgrid_uv_nrep_zmax_h; end if
+      if (allocated(subgrid_uv_fnfit_h))     then; allocate(subgrid_uv_fnfit,     mold=subgrid_uv_fnfit_h);     subgrid_uv_fnfit     = subgrid_uv_fnfit_h;     end if
+      if (allocated(subgrid_uv_navg_w_h))    then; allocate(subgrid_uv_navg_w,    mold=subgrid_uv_navg_w_h);    subgrid_uv_navg_w    = subgrid_uv_navg_w_h;    end if
+      if (allocated(subgrid_z_zmin_h))       then; allocate(subgrid_z_zmin,       mold=subgrid_z_zmin_h);       subgrid_z_zmin       = subgrid_z_zmin_h;       end if
+      if (allocated(subgrid_z_zmax_h))       then; allocate(subgrid_z_zmax,       mold=subgrid_z_zmax_h);       subgrid_z_zmax       = subgrid_z_zmax_h;       end if
+      if (allocated(subgrid_z_dep_h))        then; allocate(subgrid_z_dep,        mold=subgrid_z_dep_h);        subgrid_z_dep        = subgrid_z_dep_h;        end if
+      if (allocated(subgrid_z_volmax_h))     then; allocate(subgrid_z_volmax,     mold=subgrid_z_volmax_h);     subgrid_z_volmax     = subgrid_z_volmax_h;     end if
+      if (allocated(z_index_uv_md_h))   then; allocate(z_index_uv_md,   mold=z_index_uv_md_h);   z_index_uv_md   = z_index_uv_md_h;   end if
+      if (allocated(z_index_uv_nd_h))   then; allocate(z_index_uv_nd,   mold=z_index_uv_nd_h);   z_index_uv_nd   = z_index_uv_nd_h;   end if
+      if (allocated(z_index_uv_mu_h))   then; allocate(z_index_uv_mu,   mold=z_index_uv_mu_h);   z_index_uv_mu   = z_index_uv_mu_h;   end if
+      if (allocated(z_index_uv_nu_h))   then; allocate(z_index_uv_nu,   mold=z_index_uv_nu_h);   z_index_uv_nu   = z_index_uv_nu_h;   end if
+      if (allocated(uv_index_z_nm_h))   then; allocate(uv_index_z_nm,   mold=uv_index_z_nm_h);   uv_index_z_nm   = uv_index_z_nm_h;   end if
+      if (allocated(uv_index_z_nmu_h))  then; allocate(uv_index_z_nmu,  mold=uv_index_z_nmu_h);  uv_index_z_nmu  = uv_index_z_nmu_h;  end if
+      if (allocated(uv_index_u_nmd_h))  then; allocate(uv_index_u_nmd,  mold=uv_index_u_nmd_h);  uv_index_u_nmd  = uv_index_u_nmd_h;  end if
+      if (allocated(uv_index_u_nmu_h))  then; allocate(uv_index_u_nmu,  mold=uv_index_u_nmu_h);  uv_index_u_nmu  = uv_index_u_nmu_h;  end if
+      if (allocated(uv_index_u_ndm_h))  then; allocate(uv_index_u_ndm,  mold=uv_index_u_ndm_h);  uv_index_u_ndm  = uv_index_u_ndm_h;  end if
+      if (allocated(uv_index_u_num_h))  then; allocate(uv_index_u_num,  mold=uv_index_u_num_h);  uv_index_u_num  = uv_index_u_num_h;  end if
+      if (allocated(uv_index_v_ndm_h))  then; allocate(uv_index_v_ndm,  mold=uv_index_v_ndm_h);  uv_index_v_ndm  = uv_index_v_ndm_h;  end if
+      if (allocated(uv_index_v_ndmu_h)) then; allocate(uv_index_v_ndmu, mold=uv_index_v_ndmu_h); uv_index_v_ndmu = uv_index_v_ndmu_h; end if
+      if (allocated(uv_index_v_nm_h))   then; allocate(uv_index_v_nm,   mold=uv_index_v_nm_h);   uv_index_v_nm   = uv_index_v_nm_h;   end if
+      if (allocated(uv_index_v_nmu_h))  then; allocate(uv_index_v_nmu,  mold=uv_index_v_nmu_h);  uv_index_v_nmu  = uv_index_v_nmu_h;  end if
+      if (allocated(nmindsrc_h))        then; allocate(nmindsrc,        mold=nmindsrc_h);        nmindsrc        = nmindsrc_h;        end if
+      if (allocated(qtsrc_h))           then; allocate(qtsrc,           mold=qtsrc_h);           qtsrc           = qtsrc_h;           end if
+      if (allocated(drainage_type_h))   then; allocate(drainage_type,   mold=drainage_type_h);   drainage_type   = drainage_type_h;   end if
+      if (allocated(drainage_params_h)) then; allocate(drainage_params, mold=drainage_params_h); drainage_params = drainage_params_h; end if
+      if (allocated(z_index_wavemaker_h)) then; allocate(z_index_wavemaker, mold=z_index_wavemaker_h); z_index_wavemaker = z_index_wavemaker_h; end if
+      if (allocated(wavemaker_uvmean_h))  then; allocate(wavemaker_uvmean,  mold=wavemaker_uvmean_h);  wavemaker_uvmean  = wavemaker_uvmean_h;  end if
+      if (allocated(wavemaker_nmd_h))     then; allocate(wavemaker_nmd,     mold=wavemaker_nmd_h);     wavemaker_nmd     = wavemaker_nmd_h;     end if
+      if (allocated(wavemaker_nmu_h))     then; allocate(wavemaker_nmu,     mold=wavemaker_nmu_h);     wavemaker_nmu     = wavemaker_nmu_h;     end if
+      if (allocated(wavemaker_ndm_h))     then; allocate(wavemaker_ndm,     mold=wavemaker_ndm_h);     wavemaker_ndm     = wavemaker_ndm_h;     end if
+      if (allocated(wavemaker_num_h))     then; allocate(wavemaker_num,     mold=wavemaker_num_h);     wavemaker_num     = wavemaker_num_h;     end if
+      if (allocated(structure_uv_index_h))   then; allocate(structure_uv_index,   mold=structure_uv_index_h);   structure_uv_index   = structure_uv_index_h;   end if
+      if (allocated(structure_parameters_h)) then; allocate(structure_parameters, mold=structure_parameters_h); structure_parameters = structure_parameters_h; end if
+      if (allocated(structure_type_h))       then; allocate(structure_type,       mold=structure_type_h);       structure_type       = structure_type_h;       end if
+      if (allocated(structure_length_h))     then; allocate(structure_length,     mold=structure_length_h);     structure_length     = structure_length_h;     end if
+      if (allocated(fwuv_h))    then; allocate(fwuv,    mold=fwuv_h);    fwuv    = fwuv_h;    end if
+      if (allocated(tauwu_h))   then; allocate(tauwu,   mold=tauwu_h);   tauwu   = tauwu_h;   end if
+      if (allocated(tauwv_h))   then; allocate(tauwv,   mold=tauwv_h);   tauwv   = tauwv_h;   end if
+      if (allocated(tauwu0_h))  then; allocate(tauwu0,  mold=tauwu0_h);  tauwu0  = tauwu0_h;  end if
+      if (allocated(tauwv0_h))  then; allocate(tauwv0,  mold=tauwv0_h);  tauwv0  = tauwv0_h;  end if
+      if (allocated(tauwu1_h))  then; allocate(tauwu1,  mold=tauwu1_h);  tauwu1  = tauwu1_h;  end if
+      if (allocated(tauwv1_h))  then; allocate(tauwv1,  mold=tauwv1_h);  tauwv1  = tauwv1_h;  end if
+      if (allocated(windu_h))   then; allocate(windu,   mold=windu_h);   windu   = windu_h;   end if
+      if (allocated(windv_h))   then; allocate(windv,   mold=windv_h);   windv   = windv_h;   end if
+      if (allocated(windu0_h))  then; allocate(windu0,  mold=windu0_h);  windu0  = windu0_h;  end if
+      if (allocated(windv0_h))  then; allocate(windv0,  mold=windv0_h);  windv0  = windv0_h;  end if
+      if (allocated(windu1_h))  then; allocate(windu1,  mold=windu1_h);  windu1  = windu1_h;  end if
+      if (allocated(windv1_h))  then; allocate(windv1,  mold=windv1_h);  windv1  = windv1_h;  end if
+      if (allocated(windmax_h)) then; allocate(windmax, mold=windmax_h); windmax = windmax_h; end if
+      if (allocated(patm_h))    then; allocate(patm,    mold=patm_h);    patm    = patm_h;    end if
+      if (allocated(patm0_h))   then; allocate(patm0,   mold=patm0_h);   patm0   = patm0_h;   end if
+      if (allocated(patm1_h))   then; allocate(patm1,   mold=patm1_h);   patm1   = patm1_h;   end if
+      if (allocated(patmb_h))   then; allocate(patmb,   mold=patmb_h);   patmb   = patmb_h;   end if
+      if (allocated(nmindbnd_h)) then; allocate(nmindbnd, mold=nmindbnd_h); nmindbnd = nmindbnd_h; end if
+      if (allocated(prcp_h))    then; allocate(prcp,    mold=prcp_h);    prcp    = prcp_h;    end if
+      if (allocated(prcp0_h))   then; allocate(prcp0,   mold=prcp0_h);   prcp0   = prcp0_h;   end if
+      if (allocated(prcp1_h))   then; allocate(prcp1,   mold=prcp1_h);   prcp1   = prcp1_h;   end if
+      if (allocated(cumprcp_h)) then; allocate(cumprcp, mold=cumprcp_h); cumprcp = cumprcp_h; end if
+      if (allocated(netprcp_h)) then; allocate(netprcp, mold=netprcp_h); netprcp = netprcp_h; end if
+      if (allocated(qext_h))    then; allocate(qext,    mold=qext_h);    qext    = qext_h;    end if
+      if (allocated(dxminv_h))  then; allocate(dxminv,  mold=dxminv_h);  dxminv  = dxminv_h;  end if
+      if (allocated(dxrinv_h))  then; allocate(dxrinv,  mold=dxrinv_h);  dxrinv  = dxrinv_h;  end if
+      if (allocated(dyrinv_h))  then; allocate(dyrinv,  mold=dyrinv_h);  dyrinv  = dyrinv_h;  end if
+      if (allocated(dxm2inv_h)) then; allocate(dxm2inv, mold=dxm2inv_h); dxm2inv = dxm2inv_h; end if
+      if (allocated(dxr2inv_h)) then; allocate(dxr2inv, mold=dxr2inv_h); dxr2inv = dxr2inv_h; end if
+      if (allocated(dyr2inv_h)) then; allocate(dyr2inv, mold=dyr2inv_h); dyr2inv = dyr2inv_h; end if
+      if (allocated(dxrinvc_h)) then; allocate(dxrinvc, mold=dxrinvc_h); dxrinvc = dxrinvc_h; end if
+      if (allocated(dyrinvc_h)) then; allocate(dyrinvc, mold=dyrinvc_h); dyrinvc = dyrinvc_h; end if
+      if (allocated(dxm_h))     then; allocate(dxm,     mold=dxm_h);     dxm     = dxm_h;     end if
+      if (allocated(dxrm_h))    then; allocate(dxrm,    mold=dxrm_h);    dxrm    = dxrm_h;    end if
+      if (allocated(dyrm_h))    then; allocate(dyrm,    mold=dyrm_h);    dyrm    = dyrm_h;    end if
+      if (allocated(cell_area_m2_h)) then; allocate(cell_area_m2, mold=cell_area_m2_h); cell_area_m2 = cell_area_m2_h; end if
+      if (allocated(cell_area_h))    then; allocate(cell_area,    mold=cell_area_h);    cell_area    = cell_area_h;    end if
+      if (allocated(gn2uv_h))          then; allocate(gn2uv,          mold=gn2uv_h);          gn2uv          = gn2uv_h;          end if
+      if (allocated(fcorio2d_h))       then; allocate(fcorio2d,       mold=fcorio2d_h);       fcorio2d       = fcorio2d_h;       end if
+      if (allocated(storage_volume_h)) then; allocate(storage_volume, mold=storage_volume_h); storage_volume = storage_volume_h; end if
+      if (allocated(nuvisc_h))         then; allocate(nuvisc,         mold=nuvisc_h);         nuvisc         = nuvisc_h;         end if
+      if (allocated(cuv_index_uv_h))  then; allocate(cuv_index_uv,  mold=cuv_index_uv_h);  cuv_index_uv  = cuv_index_uv_h;  end if
+      if (allocated(cuv_index_uv1_h)) then; allocate(cuv_index_uv1, mold=cuv_index_uv1_h); cuv_index_uv1 = cuv_index_uv1_h; end if
+      if (allocated(cuv_index_uv2_h)) then; allocate(cuv_index_uv2, mold=cuv_index_uv2_h); cuv_index_uv2 = cuv_index_uv2_h; end if
+      if (allocated(x73_h))    then; allocate(x73,    mold=x73_h);    x73    = x73_h;    end if
+      if (allocated(gnapp2_h)) then; allocate(gnapp2, mold=gnapp2_h); gnapp2 = gnapp2_h; end if
+      if (allocated(timestep_analysis_required_timestep_h)) then
+         allocate(timestep_analysis_required_timestep, mold=timestep_analysis_required_timestep_h)
+         timestep_analysis_required_timestep = timestep_analysis_required_timestep_h
+      end if
+      if (allocated(timestep_analysis_average_required_timestep_h)) then
+         allocate(timestep_analysis_average_required_timestep, mold=timestep_analysis_average_required_timestep_h)
+         timestep_analysis_average_required_timestep = timestep_analysis_average_required_timestep_h
+      end if
+      if (allocated(timestep_analysis_times_wet_h)) then
+         allocate(timestep_analysis_times_wet, mold=timestep_analysis_times_wet_h)
+         timestep_analysis_times_wet = timestep_analysis_times_wet_h
+      end if
+      if (allocated(timestep_analysis_times_limiting_h)) then
+         allocate(timestep_analysis_times_limiting, mold=timestep_analysis_times_limiting_h)
+         timestep_analysis_times_limiting = timestep_analysis_times_limiting_h
+      end if
+      if (allocated(qinffield_h)) then; allocate(qinffield, mold=qinffield_h); qinffield = qinffield_h; end if
+      if (allocated(qinfmap_h))   then; allocate(qinfmap,   mold=qinfmap_h);   qinfmap   = qinfmap_h;   end if
+      if (allocated(cuminf_h))    then; allocate(cuminf,    mold=cuminf_h);    cuminf    = cuminf_h;    end if
+      if (allocated(scs_rain_h))  then; allocate(scs_rain,  mold=scs_rain_h);  scs_rain  = scs_rain_h;  end if
+      if (allocated(scs_Se_h))    then; allocate(scs_Se,    mold=scs_Se_h);    scs_Se    = scs_Se_h;    end if
+      if (allocated(scs_P1_h))    then; allocate(scs_P1,    mold=scs_P1_h);    scs_P1    = scs_P1_h;    end if
+      if (allocated(scs_F1_h))    then; allocate(scs_F1,    mold=scs_F1_h);    scs_F1    = scs_F1_h;    end if
+      if (allocated(scs_S1_h))    then; allocate(scs_S1,    mold=scs_S1_h);    scs_S1    = scs_S1_h;    end if
+      if (allocated(rain_T1_h))   then; allocate(rain_T1,   mold=rain_T1_h);   rain_T1   = rain_T1_h;   end if
+      if (allocated(ksfield_h))   then; allocate(ksfield,   mold=ksfield_h);   ksfield   = ksfield_h;   end if
+      if (allocated(GA_head_h))      then; allocate(GA_head,      mold=GA_head_h);      GA_head      = GA_head_h;      end if
+      if (allocated(GA_sigma_h))     then; allocate(GA_sigma,     mold=GA_sigma_h);     GA_sigma     = GA_sigma_h;     end if
+      if (allocated(GA_sigma_max_h)) then; allocate(GA_sigma_max, mold=GA_sigma_max_h); GA_sigma_max = GA_sigma_max_h; end if
+      if (allocated(GA_F_h))         then; allocate(GA_F,         mold=GA_F_h);         GA_F         = GA_F_h;         end if
+      if (allocated(GA_Lu_h))        then; allocate(GA_Lu,        mold=GA_Lu_h);        GA_Lu        = GA_Lu_h;        end if
+      if (allocated(inf_kr_h))       then; allocate(inf_kr,       mold=inf_kr_h);       inf_kr       = inf_kr_h;       end if
+      if (allocated(horton_kd_h))    then; allocate(horton_kd,    mold=horton_kd_h);    horton_kd    = horton_kd_h;    end if
+      if (allocated(horton_fc_h))    then; allocate(horton_fc,    mold=horton_fc_h);    horton_fc    = horton_fc_h;    end if
+      if (allocated(horton_f0_h))    then; allocate(horton_f0,    mold=horton_f0_h);    horton_f0    = horton_f0_h;    end if
+      !
+      ! --- Phase 5: Halo descriptor build -----------------------------------
+      ! Halo descriptor build; sub-epic 8 (gpu-multi-gpu) will populate this.
+      !
+   end subroutine partition_and_localize
+   !
+   subroutine device_finalize()
+      !
+      integer :: ierr
+      !
+      if (allocated(kcs))           deallocate(kcs)
+      if (allocated(kfuv))          deallocate(kfuv)
+      if (allocated(kcuv))          deallocate(kcuv)
+      if (allocated(zs))            deallocate(zs)
+      if (allocated(zs0))           deallocate(zs0)
+      if (allocated(zsderv))        deallocate(zsderv)
+      if (allocated(q))             deallocate(q)
+      if (allocated(q0))            deallocate(q0)
+      if (allocated(uv))            deallocate(uv)
+      if (allocated(uv0))           deallocate(uv0)
+      if (allocated(zb))            deallocate(zb)
+      if (allocated(zbuv))          deallocate(zbuv)
+      if (allocated(zbuvmx))        deallocate(zbuvmx)
+      if (allocated(zsmax))         deallocate(zsmax)
+      if (allocated(maxzsm))        deallocate(maxzsm)
+      if (allocated(qmax))          deallocate(qmax)
+      if (allocated(vmax))          deallocate(vmax)
+      if (allocated(twet))          deallocate(twet)
+      if (allocated(zsm))           deallocate(zsm)
+      if (allocated(z_volume))      deallocate(z_volume)
+      if (allocated(z_flags_iref))  deallocate(z_flags_iref)
+      if (allocated(uv_flags_iref)) deallocate(uv_flags_iref)
+      if (allocated(uv_flags_type)) deallocate(uv_flags_type)
+      if (allocated(uv_flags_dir))  deallocate(uv_flags_dir)
+      if (allocated(mask_adv))      deallocate(mask_adv)
+      if (allocated(index_kcuv2))   deallocate(index_kcuv2)
+      if (allocated(nmikcuv2))      deallocate(nmikcuv2)
+      if (allocated(nmbkcuv2))      deallocate(nmbkcuv2)
+      if (allocated(ibkcuv2))       deallocate(ibkcuv2)
+      if (allocated(zsb))           deallocate(zsb)
+      if (allocated(zsb0))          deallocate(zsb0)
+      if (allocated(ibuvdir))       deallocate(ibuvdir)
+      if (allocated(uvmean))        deallocate(uvmean)
+      if (allocated(subgrid_uv_zmin))      deallocate(subgrid_uv_zmin)
+      if (allocated(subgrid_uv_zmax))      deallocate(subgrid_uv_zmax)
+      if (allocated(subgrid_uv_havg))      deallocate(subgrid_uv_havg)
+      if (allocated(subgrid_uv_nrep))      deallocate(subgrid_uv_nrep)
+      if (allocated(subgrid_uv_pwet))      deallocate(subgrid_uv_pwet)
+      if (allocated(subgrid_uv_havg_zmax)) deallocate(subgrid_uv_havg_zmax)
+      if (allocated(subgrid_uv_nrep_zmax)) deallocate(subgrid_uv_nrep_zmax)
+      if (allocated(subgrid_uv_fnfit))     deallocate(subgrid_uv_fnfit)
+      if (allocated(subgrid_uv_navg_w))    deallocate(subgrid_uv_navg_w)
+      if (allocated(subgrid_z_zmin))       deallocate(subgrid_z_zmin)
+      if (allocated(subgrid_z_zmax))       deallocate(subgrid_z_zmax)
+      if (allocated(subgrid_z_dep))        deallocate(subgrid_z_dep)
+      if (allocated(subgrid_z_volmax))     deallocate(subgrid_z_volmax)
+      if (allocated(z_index_uv_md))   deallocate(z_index_uv_md)
+      if (allocated(z_index_uv_nd))   deallocate(z_index_uv_nd)
+      if (allocated(z_index_uv_mu))   deallocate(z_index_uv_mu)
+      if (allocated(z_index_uv_nu))   deallocate(z_index_uv_nu)
+      if (allocated(uv_index_z_nm))   deallocate(uv_index_z_nm)
+      if (allocated(uv_index_z_nmu))  deallocate(uv_index_z_nmu)
+      if (allocated(uv_index_u_nmd))  deallocate(uv_index_u_nmd)
+      if (allocated(uv_index_u_nmu))  deallocate(uv_index_u_nmu)
+      if (allocated(uv_index_u_ndm))  deallocate(uv_index_u_ndm)
+      if (allocated(uv_index_u_num))  deallocate(uv_index_u_num)
+      if (allocated(uv_index_v_ndm))  deallocate(uv_index_v_ndm)
+      if (allocated(uv_index_v_ndmu)) deallocate(uv_index_v_ndmu)
+      if (allocated(uv_index_v_nm))   deallocate(uv_index_v_nm)
+      if (allocated(uv_index_v_nmu))  deallocate(uv_index_v_nmu)
+      if (allocated(nmindsrc))        deallocate(nmindsrc)
+      if (allocated(qtsrc))           deallocate(qtsrc)
+      if (allocated(drainage_type))   deallocate(drainage_type)
+      if (allocated(drainage_params)) deallocate(drainage_params)
+      if (allocated(z_index_wavemaker)) deallocate(z_index_wavemaker)
+      if (allocated(wavemaker_uvmean))  deallocate(wavemaker_uvmean)
+      if (allocated(wavemaker_nmd))     deallocate(wavemaker_nmd)
+      if (allocated(wavemaker_nmu))     deallocate(wavemaker_nmu)
+      if (allocated(wavemaker_ndm))     deallocate(wavemaker_ndm)
+      if (allocated(wavemaker_num))     deallocate(wavemaker_num)
+      if (allocated(structure_uv_index))   deallocate(structure_uv_index)
+      if (allocated(structure_parameters)) deallocate(structure_parameters)
+      if (allocated(structure_type))       deallocate(structure_type)
+      if (allocated(structure_length))     deallocate(structure_length)
+      if (allocated(fwuv))    deallocate(fwuv)
+      if (allocated(tauwu))   deallocate(tauwu)
+      if (allocated(tauwv))   deallocate(tauwv)
+      if (allocated(tauwu0))  deallocate(tauwu0)
+      if (allocated(tauwv0))  deallocate(tauwv0)
+      if (allocated(tauwu1))  deallocate(tauwu1)
+      if (allocated(tauwv1))  deallocate(tauwv1)
+      if (allocated(windu))   deallocate(windu)
+      if (allocated(windv))   deallocate(windv)
+      if (allocated(windu0))  deallocate(windu0)
+      if (allocated(windv0))  deallocate(windv0)
+      if (allocated(windu1))  deallocate(windu1)
+      if (allocated(windv1))  deallocate(windv1)
+      if (allocated(windmax)) deallocate(windmax)
+      if (allocated(patm))    deallocate(patm)
+      if (allocated(patm0))   deallocate(patm0)
+      if (allocated(patm1))   deallocate(patm1)
+      if (allocated(patmb))   deallocate(patmb)
+      if (allocated(nmindbnd)) deallocate(nmindbnd)
+      if (allocated(prcp))    deallocate(prcp)
+      if (allocated(prcp0))   deallocate(prcp0)
+      if (allocated(prcp1))   deallocate(prcp1)
+      if (allocated(cumprcp)) deallocate(cumprcp)
+      if (allocated(netprcp)) deallocate(netprcp)
+      if (allocated(qext))    deallocate(qext)
+      if (allocated(dxminv))  deallocate(dxminv)
+      if (allocated(dxrinv))  deallocate(dxrinv)
+      if (allocated(dyrinv))  deallocate(dyrinv)
+      if (allocated(dxm2inv)) deallocate(dxm2inv)
+      if (allocated(dxr2inv)) deallocate(dxr2inv)
+      if (allocated(dyr2inv)) deallocate(dyr2inv)
+      if (allocated(dxrinvc)) deallocate(dxrinvc)
+      if (allocated(dyrinvc)) deallocate(dyrinvc)
+      if (allocated(dxm))     deallocate(dxm)
+      if (allocated(dxrm))    deallocate(dxrm)
+      if (allocated(dyrm))    deallocate(dyrm)
+      if (allocated(cell_area_m2)) deallocate(cell_area_m2)
+      if (allocated(cell_area))    deallocate(cell_area)
+      if (allocated(gn2uv))          deallocate(gn2uv)
+      if (allocated(fcorio2d))       deallocate(fcorio2d)
+      if (allocated(storage_volume)) deallocate(storage_volume)
+      if (allocated(nuvisc))         deallocate(nuvisc)
+      if (allocated(cuv_index_uv))  deallocate(cuv_index_uv)
+      if (allocated(cuv_index_uv1)) deallocate(cuv_index_uv1)
+      if (allocated(cuv_index_uv2)) deallocate(cuv_index_uv2)
+      if (allocated(x73))    deallocate(x73)
+      if (allocated(gnapp2)) deallocate(gnapp2)
+      if (allocated(timestep_analysis_required_timestep))         deallocate(timestep_analysis_required_timestep)
+      if (allocated(timestep_analysis_average_required_timestep)) deallocate(timestep_analysis_average_required_timestep)
+      if (allocated(timestep_analysis_times_wet))                 deallocate(timestep_analysis_times_wet)
+      if (allocated(timestep_analysis_times_limiting))            deallocate(timestep_analysis_times_limiting)
+      if (allocated(qinffield)) deallocate(qinffield)
+      if (allocated(qinfmap))   deallocate(qinfmap)
+      if (allocated(cuminf))    deallocate(cuminf)
+      if (allocated(scs_rain))  deallocate(scs_rain)
+      if (allocated(scs_Se))    deallocate(scs_Se)
+      if (allocated(scs_P1))    deallocate(scs_P1)
+      if (allocated(scs_F1))    deallocate(scs_F1)
+      if (allocated(scs_S1))    deallocate(scs_S1)
+      if (allocated(rain_T1))   deallocate(rain_T1)
+      if (allocated(ksfield))   deallocate(ksfield)
+      if (allocated(GA_head))      deallocate(GA_head)
+      if (allocated(GA_sigma))     deallocate(GA_sigma)
+      if (allocated(GA_sigma_max)) deallocate(GA_sigma_max)
+      if (allocated(GA_F))         deallocate(GA_F)
+      if (allocated(GA_Lu))        deallocate(GA_Lu)
+      if (allocated(inf_kr))       deallocate(inf_kr)
+      if (allocated(horton_kd))    deallocate(horton_kd)
+      if (allocated(horton_fc))    deallocate(horton_fc)
+      if (allocated(horton_f0))    deallocate(horton_f0)
+      !
+      call mpi_finalize(ierr)
+      !
+   end subroutine device_finalize
+   !
+   subroutine halo_exchange_zs()
+      ! Stub; sub-epic 8 (gpu-multi-gpu) implements.
+   end subroutine halo_exchange_zs
+   !
+   subroutine halo_exchange_q_uv()
+      ! Stub; sub-epic 8 (gpu-multi-gpu) implements.
+   end subroutine halo_exchange_q_uv
+   !
+   subroutine device_to_host_for_output()
+      ! Stub; sub-epic 7 (gpu-output-sync) implements.
+   end subroutine device_to_host_for_output
+   !
+end module sfincs_partition
