@@ -52,6 +52,22 @@ AS_IF([test "x$enable_cuda" = "xyes"], [
    FCFLAGS="$FCFLAGS -cuda -gpu=cc86,cc80,cc90 -DUSE_CUDA"
 ])
 
+dnl MPI detection for CUDA builds (NVHPC HPC-X provides mpifort wrapping nvfortran).
+dnl Gated on --enable-cuda so CPU builds never invoke mpifort.
+AC_SUBST([MPI_FCFLAGS])
+AC_SUBST([MPI_LIBS])
+AS_IF([test "x$enable_cuda" = "xyes"], [
+   AC_PATH_PROG([MPIFORT], [mpifort])
+   AS_IF([test -z "$MPIFORT"],
+      [AC_MSG_ERROR([mpifort required for --enable-cuda; install NVHPC HPC-X or set PATH])])
+   MPI_FCFLAGS=`$MPIFORT --showme:compile 2>/dev/null`
+   MPI_LIBS=`$MPIFORT --showme:link 2>/dev/null`
+   AS_IF([test -z "$MPI_FCFLAGS" -o -z "$MPI_LIBS"],
+      [AC_MSG_ERROR([mpifort --showme:compile/--showme:link failed; HPC-X / OpenMPI required (MPICH -compile_info syntax not supported)])])
+   AC_MSG_NOTICE([MPI_FCFLAGS=$MPI_FCFLAGS])
+   AC_MSG_NOTICE([MPI_LIBS=$MPI_LIBS])
+])
+
 
 # NetCDF, the c version
 dnl the fortran version is compiled in place so we can link it statically
