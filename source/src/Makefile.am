@@ -16,7 +16,10 @@ lib_LTLIBRARIES = libsfincs.la
 #all sources for sfincs that go into the library (all but the program)
 libsfincs_la_SOURCES =
 if USE_CUDA
-# populated by sub-epic 2 (gpu-dispatcher-scaffolding)
+# CUDA Fortran build: per-step compute modules are populated incrementally
+# by GPU sibling files (e.g., sfincs_momentum_gpu.cuf) declaring the same
+# Fortran module name as their CPU sibling. Build-time selection via
+# this conditional; no runtime dispatch.
 else
 libsfincs_la_SOURCES += \
 	sfincs_log.f90 \
