@@ -48,8 +48,11 @@ AS_IF([test "x$enable_cuda" = "xyes"], [
    # Verify nvfortran
    AS_IF([test "$FC" = "nvfortran" -o -n "`echo $FC | grep nvfortran`"], [],
       [AC_MSG_ERROR([--enable-cuda requires FC=nvfortran])])
-   # Append CUDA flags
-   FCFLAGS="$FCFLAGS -cuda -gpu=cc86,cc80,cc90 -DUSE_CUDA"
+   # Append CUDA flags. -Kieee disables the non-IEEE shortcuts that `-fast`
+   # enables (FMA contraction, denormal flushing, reciprocal approximations,
+   # reassociation), so nvfortran's float arithmetic matches gfortran's
+   # default IEEE-strict behavior. Required for CPU/GPU numeric agreement.
+   FCFLAGS="$FCFLAGS -cuda -gpu=cc86,cc80,cc90 -Kieee -DUSE_CUDA"
 ])
 
 dnl MPI detection for CUDA builds (NVHPC HPC-X provides mpifort wrapping nvfortran).
