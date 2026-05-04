@@ -57,6 +57,7 @@ libsfincs_la_SOURCES += \
 	sfincs_timestep_analysis.f90 \
 	sfincs_infiltration.f90 \
 	sfincs_domain.f90 \
+	sfincs_structures_io.f90 \
 	sfincs_structures.f90 \
 	sfincs_obspoints.f90 \
 	sfincs_runup_gauges.f90 \
@@ -107,6 +108,7 @@ libsfincs_la_SOURCES += \
 	sfincs_timestep_analysis.f90 \
 	sfincs_infiltration.f90 \
 	sfincs_domain.f90 \
+	sfincs_structures_io.f90 \
 	sfincs_structures.f90 \
 	sfincs_obspoints.f90 \
 	sfincs_runup_gauges.f90 \
