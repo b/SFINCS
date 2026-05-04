@@ -405,13 +405,12 @@ contains
       ! (pre-kernel; zsmax_h was never written on host between copy-in and
       ! copy-out, so it still holds the pre-kernel snapshot).
       !
-      if (store_t_zsmax_h) then
+      if (store_t_zsmax_h .and. bndtype_h == 1) then
          do ib = 1, nkcuv2_h
             nmb = nmbkcuv2_h(ib)
-            if (kcs_h(nmb) == 2) then
-               if (real(zs_h(nmb), kind=4) > zsmax_h(nmb)) then
-                  t_zsmax_h(nmb) = t
-               endif
+            if (kcs_h(nmb) == 6) cycle  ! mirrors kernel's `if (kcs(nmb) == 6) return`
+            if (real(zs_h(nmb), kind=4) > zsmax_h(nmb)) then
+               t_zsmax_h(nmb) = t
             endif
          enddo
       endif
