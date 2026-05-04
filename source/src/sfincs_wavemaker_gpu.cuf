@@ -1,0 +1,461 @@
+module sfincs_wavemaker
+   !
+   ! GPU sibling of source/src/sfincs_wavemaker.f90.
+   !
+   ! Shadows the CPU module's public surface. The host-only initialisation
+   ! routine is re-exported from sfincs_wavemaker_io exactly like the CPU
+   ! sibling (which also does `use sfincs_wavemaker_io`). The per-step entry
+   ! update_wavemaker_fluxes is reimplemented here as a CUDA kernel that
+   ! operates on device-resident state declared by sfincs_data_device.
+   !
+   ! IO routines (initialize_wavemakers) continue to populate host arrays
+   ! (wavemaker_index_uv, wavemaker_idir, wavemaker_uvmean, ...). Per step,
+   ! update_wavemaker_fluxes refreshes the device shadows from those host
+   ! arrays at launch (bridge-IN) and publishes the kernel writes back to
+   ! host at completion (bridge-OUT). The bridge is wasted bandwidth once
+   ! every per-step module is GPU-resident but is required for correctness
+   ! during the staging period.
+   !
+   use cudafor
+   use sfincs_log
+   use sfincs_error
+   use sfincs_data_device
+   use sfincs_wavemaker_io, only: initialize_wavemakers
+   !
+   implicit none
+   !
+   private
+   public :: initialize_wavemakers, update_wavemaker_fluxes
+   !
+   integer, parameter :: TPB = 128   ! threads per block
+   !
+   ! Module-private device shadows of per-call forcing time-series
+   ! temporaries. These mirror the CPU sibling's local allocatables
+   ! (wavemaker_forcing_hm0_ig_t / wavemaker_forcing_setup_t) but live at
+   ! module scope so the kernel can see them. Allocated/deallocated per
+   ! call to match CPU semantics; never added to sfincs_data_device.
+   !
+   real*4, device, dimension(:), allocatable :: wavemaker_forcing_hm0_ig_t_d
+   real*4, device, dimension(:), allocatable :: wavemaker_forcing_setup_t_d
+   !
+contains
+   !
+   subroutine update_wavemaker_fluxes(t, dt, tloop)
+      !
+      ! Update fluxes q at wave-maker uv points.
+      !
+      use sfincs_data, only: &
+         g_h => g, pi_h => pi, t0_h => t0, tspinup_h => tspinup, &
+         subgrid_h => subgrid, &
+         wavemaker_filter_time_h => wavemaker_filter_time, &
+         wavemaker_filter_fred_h => wavemaker_filter_fred, &
+         wavemaker_hm0_ig_factor_h => wavemaker_hm0_ig_factor, &
+         wavemaker_hm0_inc_factor_h => wavemaker_hm0_inc_factor, &
+         wavemaker_gammax_h => wavemaker_gammax, &
+         wavemaker_hmin_h => wavemaker_hmin, &
+         wavemaker_Tinc2ig_h => wavemaker_Tinc2ig, &
+         wavemaker_tpmin_h => wavemaker_tpmin, &
+         wavemaker_timeseries_h => wavemaker_timeseries, &
+         wavemaker_spectrum_h => wavemaker_spectrum, &
+         wavemaker_hig_h => wavemaker_hig, &
+         wavemaker_hinc_h => wavemaker_hinc, &
+         wavemaker_nfreqs_ig_h => wavemaker_nfreqs_ig, &
+         wavemaker_nfreqs_inc_h => wavemaker_nfreqs_inc, &
+         wavemaker_dfreq_ig_h => wavemaker_dfreq_ig, &
+         wavemaker_dfreq_inc_h => wavemaker_dfreq_inc, &
+         wavemaker_freq_ig_h => wavemaker_freq_ig, &
+         wavemaker_freq_inc_h => wavemaker_freq_inc, &
+         wavemaker_phi_ig_h => wavemaker_phi_ig, &
+         wavemaker_phi_inc_h => wavemaker_phi_inc, &
+         wavemaker_dphi_ig_h => wavemaker_dphi_ig, &
+         wavemaker_dphi_inc_h => wavemaker_dphi_inc, &
+         wavemaker_cost_ig_h => wavemaker_cost_ig, &
+         wavemaker_cost_inc_h => wavemaker_cost_inc, &
+         wavemaker_nr_uv_points_h => wavemaker_nr_uv_points, &
+         wavemaker_nr_forcing_points_h => wavemaker_nr_forcing_points, &
+         wavemaker_nr_forcing_timesteps_h => wavemaker_nr_forcing_timesteps, &
+         wavemaker_itlast_h => wavemaker_itlast, &
+         wavemaker_forcing_time_h => wavemaker_forcing_time, &
+         wavemaker_forcing_hm0_ig_h => wavemaker_forcing_hm0_ig, &
+         wavemaker_forcing_tp_ig_h => wavemaker_forcing_tp_ig, &
+         wavemaker_forcing_setup_h => wavemaker_forcing_setup, &
+         subgrid_nlevels_h => subgrid_nlevels, &
+         zs_h => zs, zb_h => zb, zbuv_h => zbuv, &
+         hm0_h => hm0, hm0_ig_h => hm0_ig, &
+         q_h => q, &
+         subgrid_z_zmax_h => subgrid_z_zmax, &
+         subgrid_z_zmin_h => subgrid_z_zmin, &
+         subgrid_uv_zmin_h => subgrid_uv_zmin, &
+         subgrid_uv_zmax_h => subgrid_uv_zmax, &
+         subgrid_uv_havg_h => subgrid_uv_havg, &
+         subgrid_uv_nrep_h => subgrid_uv_nrep, &
+         subgrid_uv_havg_zmax_h => subgrid_uv_havg_zmax, &
+         wavemaker_uvmean_h => wavemaker_uvmean, &
+         wavemaker_uvtrend_h => wavemaker_uvtrend, &
+         wavemaker_idir_h => wavemaker_idir, &
+         wavemaker_angfac_h => wavemaker_angfac, &
+         wavemaker_index_uv_h => wavemaker_index_uv, &
+         wavemaker_index_nmi_h => wavemaker_index_nmi, &
+         wavemaker_index_nmb_h => wavemaker_index_nmb, &
+         wavemaker_index_wmfp1_h => wavemaker_index_wmfp1, &
+         wavemaker_index_wmfp2_h => wavemaker_index_wmfp2, &
+         wavemaker_fac_wmfp_h => wavemaker_fac_wmfp
+      use sfincs_snapwave, only: snapwave_tpmean, snapwave_tpigmean
+      !
+      implicit none
+      !
+      real*8 :: t
+      real*4 :: dt
+      real   :: tloop
+      !
+      integer :: ib, ifreq, itb, itb0, itb1
+      real*4  :: alpha, beta
+      real*4  :: tbfac, hs, tp_ig, tp_inc, tpsum, setup
+      real*4  :: fm_ig, fm_inc, a, zwav_ig, zwav_inc
+      real*8  :: tb
+      !
+      integer :: count0, count1, count_rate, count_max
+      integer :: blocks
+      integer :: istat
+      !
+      real*4, dimension(:), allocatable :: wavemaker_forcing_hm0_ig_t
+      real*4, dimension(:), allocatable :: wavemaker_forcing_tp_ig_t
+      real*4, dimension(:), allocatable :: wavemaker_forcing_setup_t
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      ! Factors for double-exponential filtering
+      !
+      alpha = min(dt / wavemaker_filter_time_h, 1.0)
+      beta  = min(dt / (0.2 * wavemaker_filter_time_h), 1.0)
+      !
+      ! ===== Layer 1: host-side setup =====================================
+      !
+      ! For time-series forcing, update values at the forcing points and
+      ! determine Tp_ig. For SnapWave forcing, only Tp_ig is needed.
+      !
+      if (wavemaker_timeseries_h) then
+         !
+         allocate(wavemaker_forcing_hm0_ig_t(wavemaker_nr_forcing_points_h))
+         allocate(wavemaker_forcing_tp_ig_t(wavemaker_nr_forcing_points_h))
+         allocate(wavemaker_forcing_setup_t(wavemaker_nr_forcing_points_h))
+         !
+         ! Interpolate boundary conditions in time
+         !
+         if (wavemaker_forcing_time_h(1) > t - 1.0e-3) then
+            itb0 = 1
+            itb1 = 1
+            tb   = wavemaker_forcing_time_h(itb0)
+         elseif (wavemaker_forcing_time_h(wavemaker_nr_forcing_timesteps_h) < t + 1.0e-3) then
+            itb0 = wavemaker_nr_forcing_timesteps_h
+            itb1 = wavemaker_nr_forcing_timesteps_h
+            tb   = wavemaker_forcing_time_h(itb0)
+         else
+            do itb = wavemaker_itlast_h, wavemaker_nr_forcing_timesteps_h
+               if (wavemaker_forcing_time_h(itb) > t + 1.0e-6) then
+                  itb0 = itb - 1
+                  itb1 = itb
+                  tb   = t
+                  wavemaker_itlast_h = itb - 1
+                  exit
+               endif
+            enddo
+         endif
+         !
+         tbfac = (tb - wavemaker_forcing_time_h(itb0)) / max(wavemaker_forcing_time_h(itb1) - wavemaker_forcing_time_h(itb0), 1.0e-6)
+         !
+         tpsum = 0.0
+         !
+         do ib = 1, wavemaker_nr_forcing_points_h
+            hs    = wavemaker_forcing_hm0_ig_h(ib, itb0) + (wavemaker_forcing_hm0_ig_h(ib, itb1) - wavemaker_forcing_hm0_ig_h(ib, itb0)) * tbfac
+            tp_ig = wavemaker_forcing_tp_ig_h(ib, itb0)  + (wavemaker_forcing_tp_ig_h(ib, itb1)  - wavemaker_forcing_tp_ig_h(ib, itb0)) * tbfac
+            setup = wavemaker_forcing_setup_h(ib, itb0)  + (wavemaker_forcing_setup_h(ib, itb1)  - wavemaker_forcing_setup_h(ib, itb0)) * tbfac
+            !
+            wavemaker_forcing_hm0_ig_t(ib) = hs
+            wavemaker_forcing_setup_t(ib)  = setup
+            !
+            tpsum = tpsum + tp_ig
+         enddo
+         !
+         tp_ig  = tpsum / wavemaker_nr_forcing_points_h
+         tp_inc = 10.0
+         !
+      else
+         !
+         tp_ig = snapwave_tpigmean
+         !
+         if (wavemaker_Tinc2ig_h > 0.0) then
+            tp_ig = snapwave_tpmean * wavemaker_Tinc2ig_h
+         endif
+         !
+         tp_inc = max(snapwave_tpmean, wavemaker_tpmin_h)
+         tp_ig  = max(tp_ig, wavemaker_tpmin_h)
+         !
+      endif
+      !
+      ! Spectrum / monochromatic accumulation of zwav_ig and zwav_inc.
+      !
+      zwav_ig  = 0.0
+      zwav_inc = 0.0
+      !
+      if (wavemaker_spectrum_h) then
+         !
+         if (wavemaker_hig_h) then
+            !
+            fm_ig = 1.0 / tp_ig
+            !
+            do ifreq = 1, wavemaker_nfreqs_ig_h
+               wavemaker_phi_ig_h(ifreq)  = modulo(wavemaker_phi_ig_h(ifreq) + wavemaker_dphi_ig_h(ifreq) * dt, 2 * pi_h)
+               wavemaker_cost_ig_h(ifreq) = cos(2 * pi_h * t * wavemaker_freq_ig_h(ifreq) + wavemaker_phi_ig_h(ifreq))
+               !
+               a = 0.125 * (fm_ig**-2) * wavemaker_freq_ig_h(ifreq) * (exp(-wavemaker_freq_ig_h(ifreq) / fm_ig))
+               !
+               zwav_ig = zwav_ig + wavemaker_cost_ig_h(ifreq) * sqrt(a * wavemaker_dfreq_ig_h)
+            enddo
+            !
+         endif
+         !
+         if (wavemaker_hinc_h) then
+            !
+            fm_inc = 1.0 / tp_inc
+            !
+            do ifreq = 1, wavemaker_nfreqs_inc_h
+               wavemaker_phi_inc_h(ifreq)  = modulo(wavemaker_phi_inc_h(ifreq) + wavemaker_dphi_inc_h(ifreq) * dt, 2 * pi_h)
+               wavemaker_cost_inc_h(ifreq) = cos(2 * pi_h * t * wavemaker_freq_inc_h(ifreq) + wavemaker_phi_inc_h(ifreq))
+               !
+               a = 0.625 * (fm_inc**4) * (wavemaker_freq_inc_h(ifreq)**-5) * (exp(-1.25 * (wavemaker_freq_inc_h(ifreq) / fm_inc)**-4))
+               !
+               zwav_inc = zwav_inc + wavemaker_cost_inc_h(ifreq) * sqrt(a * wavemaker_dfreq_inc_h)
+            enddo
+            !
+         endif
+         !
+      else
+         !
+         if (wavemaker_hig_h) then
+            zwav_ig = 0.5 * sin(2 * pi_h * t / tp_ig)
+         endif
+         !
+         if (wavemaker_hinc_h) then
+            zwav_inc = 0.5 * sin(2 * pi_h * t / tp_inc)
+         endif
+         !
+      endif
+      !
+      ! Spinup scaling
+      !
+      if (t < tspinup_h) then
+         zwav_ig  = zwav_ig  * (t - t0_h) / (tspinup_h - t0_h)
+         zwav_inc = zwav_inc * (t - t0_h) / (tspinup_h - t0_h)
+      endif
+      !
+      ! ===== Layer 2: copy-IN host -> device for kernel READ set ==========
+      !
+      ! Refresh device shadows of arrays the kernel reads. Required during
+      ! the staging period because unported per-step modules write only
+      ! host arrays and leave device shadows stale.
+      !
+      ! q is also bridged-IN: the kernel only writes the wavemaker uv-face
+      ! subset, but the copy-OUT step below replaces the entire device q
+      ! into host q. Without this bridge-IN the non-wavemaker entries on
+      ! the device would be stale and the copy-OUT would clobber the host
+      ! q values just written by compute_fluxes.
+      !
+      q    = q_h
+      zs   = zs_h
+      zb   = zb_h
+      zbuv = zbuv_h
+      if (allocated(hm0_h))    hm0    = hm0_h
+      if (allocated(hm0_ig_h)) hm0_ig = hm0_ig_h
+      if (subgrid_h) then
+         subgrid_z_zmax       = subgrid_z_zmax_h
+         subgrid_z_zmin       = subgrid_z_zmin_h
+         subgrid_uv_zmin      = subgrid_uv_zmin_h
+         subgrid_uv_zmax      = subgrid_uv_zmax_h
+         subgrid_uv_havg      = subgrid_uv_havg_h
+         subgrid_uv_nrep      = subgrid_uv_nrep_h
+         subgrid_uv_havg_zmax = subgrid_uv_havg_zmax_h
+      endif
+      wavemaker_uvmean    = wavemaker_uvmean_h
+      wavemaker_uvtrend   = wavemaker_uvtrend_h
+      wavemaker_idir      = wavemaker_idir_h
+      wavemaker_angfac    = wavemaker_angfac_h
+      wavemaker_index_uv  = wavemaker_index_uv_h
+      wavemaker_index_nmi = wavemaker_index_nmi_h
+      wavemaker_index_nmb = wavemaker_index_nmb_h
+      if (wavemaker_timeseries_h) then
+         wavemaker_index_wmfp1 = wavemaker_index_wmfp1_h
+         wavemaker_index_wmfp2 = wavemaker_index_wmfp2_h
+         wavemaker_fac_wmfp    = wavemaker_fac_wmfp_h
+         !
+         allocate(wavemaker_forcing_hm0_ig_t_d(wavemaker_nr_forcing_points_h))
+         allocate(wavemaker_forcing_setup_t_d(wavemaker_nr_forcing_points_h))
+         wavemaker_forcing_hm0_ig_t_d = wavemaker_forcing_hm0_ig_t
+         wavemaker_forcing_setup_t_d  = wavemaker_forcing_setup_t
+      endif
+      !
+      ! ===== Layer 3: kernel launch =======================================
+      !
+      ! Iterate over locally-owned uv points. In degenerate N=1 single-rank
+      ! case wavemaker_nr_uv_points equals the global count.
+      !
+      if (wavemaker_nr_uv_points_h > 0) then
+         !
+         blocks = (wavemaker_nr_uv_points_h + TPB - 1) / TPB
+         !
+         call k_wavemaker_fluxes<<<blocks, TPB>>>( &
+            wavemaker_nr_uv_points_h, &
+            zwav_ig, zwav_inc, alpha, beta, &
+            g_h, &
+            subgrid_h, wavemaker_timeseries_h, &
+            wavemaker_hmin_h, wavemaker_gammax_h, &
+            wavemaker_filter_time_h, wavemaker_filter_fred_h, &
+            wavemaker_hm0_ig_factor_h, wavemaker_hm0_inc_factor_h, &
+            subgrid_nlevels_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         ! ===== Layer 4: copy-OUT device -> host for WRITE set =============
+         !
+         q_h                 = q
+         wavemaker_uvmean_h  = wavemaker_uvmean
+         wavemaker_uvtrend_h = wavemaker_uvtrend
+         !
+      endif
+      !
+      if (wavemaker_timeseries_h) then
+         deallocate(wavemaker_forcing_hm0_ig_t)
+         deallocate(wavemaker_forcing_tp_ig_t)
+         deallocate(wavemaker_forcing_setup_t)
+         deallocate(wavemaker_forcing_hm0_ig_t_d)
+         deallocate(wavemaker_forcing_setup_t_d)
+      endif
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0 * (count1 - count0) / count_rate
+      !
+   end subroutine update_wavemaker_fluxes
+   !
+   ! ===================================================================
+   !                              KERNEL
+   ! ===================================================================
+   !
+   ! Mirrors the CPU sibling's parallel `do ib = 1, wavemaker_nr_uv_points`
+   ! loop. Each thread handles one wavemaker uv-face. Writes to q(ip) are
+   ! scattered but non-conflicting (each ip is touched by at most one ib;
+   ! verified against initialize_wavemakers which assigns a fresh nmu to
+   ! each iwm). Writes to wavemaker_uvmean(ib) and wavemaker_uvtrend(ib)
+   ! are ib-indexed and parallel-safe by construction.
+   !
+   attributes(global) subroutine k_wavemaker_fluxes( &
+         nr_uv_in, zwav_ig_in, zwav_inc_in, alpha_in, beta_in, &
+         g_in, subgrid_in, timeseries_in, hmin_in, gammax_in, &
+         filter_time_in, filter_fred_in, hm0_ig_factor_in, hm0_inc_factor_in, &
+         nlevels_in)
+      !
+      implicit none
+      !
+      integer, value :: nr_uv_in
+      real*4,  value :: zwav_ig_in
+      real*4,  value :: zwav_inc_in
+      real*4,  value :: alpha_in
+      real*4,  value :: beta_in
+      real*4,  value :: g_in
+      logical, value :: subgrid_in
+      logical, value :: timeseries_in
+      real*4,  value :: hmin_in
+      real*4,  value :: gammax_in
+      real*4,  value :: filter_time_in
+      real*4,  value :: filter_fred_in
+      real*4,  value :: hm0_ig_factor_in
+      real*4,  value :: hm0_inc_factor_in
+      integer, value :: nlevels_in
+      !
+      integer :: ib, nmi, nmb, iuv, ip
+      real*4  :: hnmb, zsnmi, zsnmb, zs0nmb
+      real*4  :: hs, setup, zinc, zig, dwvm
+      real*4  :: ui, ub, dzuv, facint, zsuv, depthuv, uvm0
+      !
+      ib = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (ib > nr_uv_in) return
+      !
+      ip  = wavemaker_index_uv(ib)
+      nmi = wavemaker_index_nmi(ib)
+      nmb = wavemaker_index_nmb(ib)
+      !
+      zsnmi = zs(nmi)
+      !
+      if (timeseries_in) then
+         !
+         hs    = wavemaker_forcing_hm0_ig_t_d(wavemaker_index_wmfp1(ib)) * wavemaker_fac_wmfp(ib) &
+               + wavemaker_forcing_hm0_ig_t_d(wavemaker_index_wmfp2(ib)) * (1.0 - wavemaker_fac_wmfp(ib))
+         setup = wavemaker_forcing_setup_t_d(wavemaker_index_wmfp1(ib)) * wavemaker_fac_wmfp(ib) &
+               + wavemaker_forcing_setup_t_d(wavemaker_index_wmfp2(ib)) * (1.0 - wavemaker_fac_wmfp(ib))
+         !
+         zs0nmb = zs(nmb) + setup
+         zsnmb  = zs0nmb + zwav_ig_in * hs
+         !
+      else
+         !
+         zs0nmb = zs(nmb)
+         !
+         zig    = hm0_ig_factor_in * zwav_ig_in * hm0_ig(nmb)
+         zinc   = hm0_inc_factor_in * zwav_inc_in * hm0(nmb)
+         !
+         if (subgrid_in) then
+            dwvm = max(zs0nmb + zig - subgrid_z_zmax(nmb), 0.0)
+         else
+            dwvm = max(zs0nmb + zig - zb(nmb), 0.0)
+         endif
+         !
+         zsnmb = zs0nmb + min(zinc + zig, gammax_in * dwvm)
+         !
+      endif
+      !
+      if (subgrid_in) then
+         !
+         zsuv = max(zsnmb, zsnmi)
+         !
+         if (zsuv >= subgrid_uv_zmax(ip) - 1.0e-3) then
+            depthuv = subgrid_uv_havg_zmax(ip) + zsuv
+         elseif (zsuv > subgrid_uv_zmin(ip)) then
+            dzuv    = (subgrid_uv_zmax(ip) - subgrid_uv_zmin(ip)) / (nlevels_in - 1)
+            iuv     = int((zsuv - subgrid_uv_zmin(ip)) / dzuv) + 1
+            facint  = (zsuv - (subgrid_uv_zmin(ip) + (iuv - 1) * dzuv)) / dzuv
+            depthuv = subgrid_uv_havg(iuv, ip) + (subgrid_uv_havg(iuv + 1, ip) - subgrid_uv_havg(iuv, ip)) * facint
+         else
+            depthuv = 0.0
+         endif
+         !
+         hnmb   = depthuv
+         zsnmb  = max(zsnmb,  subgrid_z_zmin(nmb))
+         zs0nmb = max(zs0nmb, subgrid_z_zmin(nmb))
+         !
+      else
+         !
+         hnmb   = 0.5 * (zsnmb + zsnmi) - zbuv(ip)
+         zsnmb  = max(zsnmb,  zb(nmb))
+         zs0nmb = max(zs0nmb, zb(nmb))
+         !
+      endif
+      !
+      if (hnmb < hmin_in) then
+         q(ip) = 0.0
+         wavemaker_uvmean(ib) = 0.0
+      else
+         ui = sqrt(g_in / hnmb) * (zsnmb - zs0nmb)
+         ub = wavemaker_idir(ib) * (2 * ui - sqrt(g_in / hnmb) * (zsnmi - zs0nmb)) * wavemaker_angfac(ib)
+         q(ip) = ub * hnmb + wavemaker_uvmean(ib)
+      endif
+      !
+      if (filter_time_in >= 0.0) then
+         uvm0 = wavemaker_uvmean(ib)
+         wavemaker_uvmean(ib)  = alpha_in * q(ip) + filter_fred_in * (1.0 - alpha_in) * (wavemaker_uvmean(ib) + wavemaker_uvtrend(ib))
+         wavemaker_uvtrend(ib) = beta_in * (wavemaker_uvmean(ib) - uvm0) + (1.0 - beta_in) * wavemaker_uvtrend(ib)
+      else
+         wavemaker_uvmean(ib) = 0.0
+      endif
+      !
+   end subroutine k_wavemaker_fluxes
+   !
+end module sfincs_wavemaker

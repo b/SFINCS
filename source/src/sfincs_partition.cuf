@@ -87,6 +87,21 @@ module sfincs_partition
       GA_F_h => GA_F, GA_Lu_h => GA_Lu, inf_kr_h => inf_kr, &
       horton_kd_h => horton_kd, horton_fc_h => horton_fc, horton_f0_h => horton_f0
    !
+   ! ===== gpu-wavemaker-snapwave-coupling supplemental ====
+   !
+   use sfincs_data, only: &
+      wavemaker_index_uv_h    => wavemaker_index_uv, &
+      wavemaker_index_nmi_h   => wavemaker_index_nmi, &
+      wavemaker_index_nmb_h   => wavemaker_index_nmb, &
+      wavemaker_index_wmfp1_h => wavemaker_index_wmfp1, &
+      wavemaker_index_wmfp2_h => wavemaker_index_wmfp2, &
+      wavemaker_fac_wmfp_h    => wavemaker_fac_wmfp, &
+      wavemaker_idir_h        => wavemaker_idir, &
+      wavemaker_angfac_h      => wavemaker_angfac, &
+      wavemaker_uvtrend_h     => wavemaker_uvtrend, &
+      hm0_h                   => hm0, &
+      hm0_ig_h                => hm0_ig
+   !
    implicit none
    !
    public :: partition_and_localize, device_finalize, &
@@ -292,6 +307,20 @@ contains
       if (allocated(horton_fc_h))    then; allocate(horton_fc,    mold=horton_fc_h);    horton_fc    = horton_fc_h;    end if
       if (allocated(horton_f0_h))    then; allocate(horton_f0,    mold=horton_f0_h);    horton_f0    = horton_f0_h;    end if
       !
+      ! ===== gpu-wavemaker-snapwave-coupling supplemental ====
+      !
+      if (allocated(wavemaker_index_uv_h))    then; allocate(wavemaker_index_uv,    mold=wavemaker_index_uv_h);    wavemaker_index_uv    = wavemaker_index_uv_h;    end if
+      if (allocated(wavemaker_index_nmi_h))   then; allocate(wavemaker_index_nmi,   mold=wavemaker_index_nmi_h);   wavemaker_index_nmi   = wavemaker_index_nmi_h;   end if
+      if (allocated(wavemaker_index_nmb_h))   then; allocate(wavemaker_index_nmb,   mold=wavemaker_index_nmb_h);   wavemaker_index_nmb   = wavemaker_index_nmb_h;   end if
+      if (allocated(wavemaker_index_wmfp1_h)) then; allocate(wavemaker_index_wmfp1, mold=wavemaker_index_wmfp1_h); wavemaker_index_wmfp1 = wavemaker_index_wmfp1_h; end if
+      if (allocated(wavemaker_index_wmfp2_h)) then; allocate(wavemaker_index_wmfp2, mold=wavemaker_index_wmfp2_h); wavemaker_index_wmfp2 = wavemaker_index_wmfp2_h; end if
+      if (allocated(wavemaker_fac_wmfp_h))    then; allocate(wavemaker_fac_wmfp,    mold=wavemaker_fac_wmfp_h);    wavemaker_fac_wmfp    = wavemaker_fac_wmfp_h;    end if
+      if (allocated(wavemaker_idir_h))        then; allocate(wavemaker_idir,        mold=wavemaker_idir_h);        wavemaker_idir        = wavemaker_idir_h;        end if
+      if (allocated(wavemaker_angfac_h))      then; allocate(wavemaker_angfac,      mold=wavemaker_angfac_h);      wavemaker_angfac      = wavemaker_angfac_h;      end if
+      if (allocated(wavemaker_uvtrend_h))     then; allocate(wavemaker_uvtrend,     mold=wavemaker_uvtrend_h);     wavemaker_uvtrend     = wavemaker_uvtrend_h;     end if
+      if (allocated(hm0_h))                   then; allocate(hm0,                   mold=hm0_h);                   hm0                   = hm0_h;                   end if
+      if (allocated(hm0_ig_h))                then; allocate(hm0_ig,                mold=hm0_ig_h);                hm0_ig                = hm0_ig_h;                end if
+      !
       ! --- Phase 5: Halo descriptor build -----------------------------------
       ! Halo descriptor build; sub-epic 8 (gpu-multi-gpu) will populate this.
       !
@@ -445,6 +474,20 @@ contains
       if (allocated(horton_kd))    deallocate(horton_kd)
       if (allocated(horton_fc))    deallocate(horton_fc)
       if (allocated(horton_f0))    deallocate(horton_f0)
+      !
+      ! ===== gpu-wavemaker-snapwave-coupling supplemental ====
+      !
+      if (allocated(wavemaker_index_uv))    deallocate(wavemaker_index_uv)
+      if (allocated(wavemaker_index_nmi))   deallocate(wavemaker_index_nmi)
+      if (allocated(wavemaker_index_nmb))   deallocate(wavemaker_index_nmb)
+      if (allocated(wavemaker_index_wmfp1)) deallocate(wavemaker_index_wmfp1)
+      if (allocated(wavemaker_index_wmfp2)) deallocate(wavemaker_index_wmfp2)
+      if (allocated(wavemaker_fac_wmfp))    deallocate(wavemaker_fac_wmfp)
+      if (allocated(wavemaker_idir))        deallocate(wavemaker_idir)
+      if (allocated(wavemaker_angfac))      deallocate(wavemaker_angfac)
+      if (allocated(wavemaker_uvtrend))     deallocate(wavemaker_uvtrend)
+      if (allocated(hm0))                   deallocate(hm0)
+      if (allocated(hm0_ig))                deallocate(hm0_ig)
       !
       call mpi_finalize(ierr)
       !

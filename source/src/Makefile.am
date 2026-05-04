@@ -76,7 +76,7 @@ libsfincs_la_SOURCES += \
 	sfincs_output.f90 \
 	sfincs_momentum.f90 \
 	sfincs_wavemaker_io.f90 \
-	sfincs_wavemaker.f90 \
+	sfincs_wavemaker_gpu.cuf \
 	sfincs_bathtub.f90 \
 	sfincs_partition.cuf \
 	sfincs_lib.F90 \
