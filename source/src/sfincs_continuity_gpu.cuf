@@ -1,0 +1,876 @@
+module sfincs_continuity
+   !
+   ! GPU sibling of source/src/sfincs_continuity.f90.
+   !
+   ! Shadows the CPU module's public surface (compute_water_levels,
+   ! compute_store_variables) using native CUDA Fortran kernels that operate
+   ! on the device-resident catalog declared by sfincs_data_device. The two
+   ! private helpers (compute_water_levels_regular, compute_water_levels_subgrid)
+   ! mirror the CPU dispatch on the host scalar `subgrid`.
+   !
+   ! Bridge convention (gpu-foundation): host-side `use sfincs_data` arrays are
+   ! suffixed _h via USE-rename; device-side `use sfincs_data_device` arrays are
+   ! suffixed _d. CUDA Fortran translates `<dev> = <host>` (and vice-versa) to
+   ! cudaMemcpy at the assignment level.
+   !
+   ! The bridge is intentional and stays until consumer modules become
+   ! GPU-resident in later sub-epics; the bandwidth waste becomes harmless then.
+   !
+   use cudafor
+   use sfincs_data_device
+   !
+   implicit none
+   !
+   private
+   public :: compute_water_levels, compute_store_variables
+   !
+   integer, parameter :: TPB = 128   ! threads per block, intentionally simple
+   !
+contains
+   !
+   ! -----------------------------------------------------------------
+   ! Public dispatch: same control flow as the CPU sibling.
+   ! -----------------------------------------------------------------
+   subroutine compute_water_levels(t, dt, tloop)
+      !
+      use sfincs_data, only: subgrid, &
+                             store_maximum_velocity, &
+                             store_maximum_flux, &
+                             store_twet
+      !
+      implicit none
+      !
+      real*4           :: dt
+      real*8           :: t
+      !
+      integer          :: count0
+      integer          :: count1
+      integer          :: count_rate
+      integer          :: count_max
+      real             :: tloop
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      if (subgrid) then
+         !
+         call compute_water_levels_subgrid(dt, t)
+         !
+      else
+         !
+         call compute_water_levels_regular(dt, t)
+         !
+      endif
+      !
+      if ((store_maximum_velocity .eqv. .true.) .or. &
+          (store_maximum_flux     .eqv. .true.) .or. &
+          (store_twet             .eqv. .true.)) then
+         !
+         call compute_store_variables(dt)
+         !
+      endif
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0*(count1 - count0)/count_rate
+      !
+   end subroutine compute_water_levels
+   !
+   ! -----------------------------------------------------------------
+   ! Regular (non-subgrid) water-level update.
+   ! -----------------------------------------------------------------
+   subroutine compute_water_levels_regular(dt, t)
+      !
+      use sfincs_data, only: &
+         np_h => np, nsrcdrn_h => nsrcdrn, &
+         precip_h => precip, use_qext_h => use_qext, &
+         wavemaker_h => wavemaker, snapwave_h => snapwave, &
+         crsgeo_h => crsgeo, &
+         store_maximum_waterlevel_h => store_maximum_waterlevel, &
+         store_t_zsmax_h => store_t_zsmax, &
+         huthresh_h => huthresh, &
+         wavemaker_filter_time_h => wavemaker_filter_time, &
+         kcs_h => kcs, zs_h => zs, zb_h => zb, &
+         q_h => q, prcp_h => prcp, netprcp_h => netprcp, qext_h => qext, &
+         z_flags_iref_h => z_flags_iref, &
+         z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
+         z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
+         dxm_h => dxm, dxrinv_h => dxrinv, dyrinv_h => dyrinv, &
+         cell_area_m2_h => cell_area_m2, cell_area_h => cell_area, &
+         nmindsrc_h => nmindsrc, qtsrc_h => qtsrc, &
+         z_index_wavemaker_h => z_index_wavemaker, &
+         wavemaker_uvmean_h => wavemaker_uvmean, &
+         wavemaker_nmd_h => wavemaker_nmd, wavemaker_nmu_h => wavemaker_nmu, &
+         wavemaker_ndm_h => wavemaker_ndm, wavemaker_num_h => wavemaker_num, &
+         zsm_h => zsm, zsmax_h => zsmax, maxzsm_h => maxzsm, &
+         t_zsmax_h => t_zsmax
+      !
+      implicit none
+      !
+      real*4           :: dt
+      real*8           :: t
+      !
+      integer :: blocks
+      integer :: istat
+      integer :: nm
+      real*4  :: factime
+      !
+      ! Compute factime on the host; matches CPU sibling line 72-76.
+      !
+      if (snapwave_h) then
+         factime = min(dt / wavemaker_filter_time_h, 1.0)
+      else
+         factime = 0.0
+      endif
+      !
+      ! ------ Copy-IN: host -> device for kernel READ set ----------------
+      !
+      kcs            = kcs_h
+      zs             = zs_h
+      zb             = zb_h
+      q              = q_h
+      z_flags_iref   = z_flags_iref_h
+      z_index_uv_md  = z_index_uv_md_h
+      z_index_uv_mu  = z_index_uv_mu_h
+      z_index_uv_nd  = z_index_uv_nd_h
+      z_index_uv_nu  = z_index_uv_nu_h
+      dxrinv         = dxrinv_h
+      dyrinv         = dyrinv_h
+      !
+      if (crsgeo_h) then
+         dxm          = dxm_h
+         cell_area_m2 = cell_area_m2_h
+      else
+         cell_area    = cell_area_h
+      endif
+      !
+      if (precip_h)    netprcp = netprcp_h
+      if (precip_h)    prcp    = prcp_h
+      if (use_qext_h)  qext    = qext_h
+      !
+      if (nsrcdrn_h > 0) then
+         nmindsrc = nmindsrc_h
+         qtsrc    = qtsrc_h
+      endif
+      !
+      if (wavemaker_h) then
+         z_index_wavemaker = z_index_wavemaker_h
+         wavemaker_uvmean  = wavemaker_uvmean_h
+         wavemaker_nmd     = wavemaker_nmd_h
+         wavemaker_nmu     = wavemaker_nmu_h
+         wavemaker_ndm     = wavemaker_ndm_h
+         wavemaker_num     = wavemaker_num_h
+      endif
+      !
+      if (snapwave_h) then
+         zsm    = zsm_h
+         maxzsm = maxzsm_h
+      endif
+      !
+      if (store_maximum_waterlevel_h) zsmax = zsmax_h
+      !
+      ! ------ Discharges: small sequential update on a single thread -----
+      !
+      if (nsrcdrn_h > 0) then
+         call k_regular_discharge<<<1, 1>>>(dt, nsrcdrn_h, crsgeo_h)
+         istat = cudaDeviceSynchronize()
+      endif
+      !
+      ! ------ Main per-cell kernel ---------------------------------------
+      !
+      blocks = (npn_local + TPB - 1) / TPB
+      !
+      call k_regular_main<<<blocks, TPB>>>( &
+         dt, t, factime, npn_local, &
+         precip_h, use_qext_h, wavemaker_h, snapwave_h, crsgeo_h, &
+         store_maximum_waterlevel_h)
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      ! ------ Copy-OUT: device -> host for WRITE set ---------------------
+      !
+      zs_h = zs
+      !
+      if (snapwave_h) then
+         zsm_h    = zsm
+         maxzsm_h = maxzsm
+      endif
+      !
+      if (store_maximum_waterlevel_h) then
+         !
+         ! t_zsmax is host-only (not in foundation catalog). We compare the new
+         ! zs_h (just copied from device) against the old zsmax_h (still the
+         ! pre-kernel value) to decide whether each cell's zsmax was updated;
+         ! same predicate as the CPU sibling.
+         !
+         if (store_t_zsmax_h) then
+            do nm = 1, np_h
+               if (zs_h(nm) > zsmax_h(nm)) then
+                  if ((zs_h(nm) - zb_h(nm)) > huthresh_h) then
+                     t_zsmax_h(nm) = t
+                  endif
+               endif
+            enddo
+         endif
+         !
+         zsmax_h = zsmax
+         !
+      endif
+      !
+   end subroutine compute_water_levels_regular
+   !
+   ! -----------------------------------------------------------------
+   ! Subgrid water-level update.
+   ! -----------------------------------------------------------------
+   subroutine compute_water_levels_subgrid(dt, t)
+      !
+      use sfincs_data, only: &
+         np_h => np, nsrcdrn_h => nsrcdrn, subgrid_nlevels_h => subgrid_nlevels, &
+         precip_h => precip, use_qext_h => use_qext, &
+         wavemaker_h => wavemaker, snapwave_h => snapwave, &
+         use_quadtree_h => use_quadtree, crsgeo_h => crsgeo, &
+         use_storage_volume_h => use_storage_volume, &
+         wiggle_suppression_h => wiggle_suppression, &
+         store_maximum_waterlevel_h => store_maximum_waterlevel, &
+         store_t_zsmax_h => store_t_zsmax, &
+         huthresh_h => huthresh, &
+         wavemaker_filter_time_h => wavemaker_filter_time, &
+         dx_h => dx, dy_h => dy, &
+         kcs_h => kcs, zs_h => zs, zs0_h => zs0, zb_h => zb, &
+         q_h => q, prcp_h => prcp, netprcp_h => netprcp, qext_h => qext, &
+         z_flags_iref_h => z_flags_iref, &
+         z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
+         z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
+         dxm_h => dxm, dxrm_h => dxrm, dyrm_h => dyrm, &
+         cell_area_m2_h => cell_area_m2, cell_area_h => cell_area, &
+         nmindsrc_h => nmindsrc, qtsrc_h => qtsrc, &
+         z_index_wavemaker_h => z_index_wavemaker, &
+         wavemaker_uvmean_h => wavemaker_uvmean, &
+         wavemaker_nmd_h => wavemaker_nmd, wavemaker_nmu_h => wavemaker_nmu, &
+         wavemaker_ndm_h => wavemaker_ndm, wavemaker_num_h => wavemaker_num, &
+         storage_volume_h => storage_volume, &
+         subgrid_z_zmin_h => subgrid_z_zmin, &
+         subgrid_z_zmax_h => subgrid_z_zmax, &
+         subgrid_z_dep_h  => subgrid_z_dep, &
+         subgrid_z_volmax_h => subgrid_z_volmax, &
+         z_volume_h => z_volume, zsderv_h => zsderv, &
+         zsm_h => zsm, zsmax_h => zsmax, maxzsm_h => maxzsm, &
+         t_zsmax_h => t_zsmax
+      !
+      implicit none
+      !
+      real*4           :: dt
+      real*8           :: t
+      !
+      integer :: blocks
+      integer :: istat
+      integer :: nm
+      real*4  :: factime
+      !
+      ! Mirror CPU subgrid sibling: factime is computed inside `if (wavemaker)`.
+      !
+      if (wavemaker_h) then
+         factime = min(dt / wavemaker_filter_time_h, 1.0)
+      else
+         factime = 0.0
+      endif
+      !
+      ! ------ Copy-IN ----------------------------------------------------
+      !
+      kcs            = kcs_h
+      zs             = zs_h
+      zb             = zb_h
+      q              = q_h
+      z_flags_iref   = z_flags_iref_h
+      z_index_uv_md  = z_index_uv_md_h
+      z_index_uv_mu  = z_index_uv_mu_h
+      z_index_uv_nd  = z_index_uv_nd_h
+      z_index_uv_nu  = z_index_uv_nu_h
+      z_volume       = z_volume_h
+      !
+      if (use_quadtree_h .or. crsgeo_h) then
+         dxrm = dxrm_h
+         dyrm = dyrm_h
+      endif
+      if (crsgeo_h) then
+         dxm          = dxm_h
+         cell_area_m2 = cell_area_m2_h
+      else
+         cell_area    = cell_area_h
+      endif
+      !
+      if (precip_h)    netprcp = netprcp_h
+      if (precip_h)    prcp    = prcp_h
+      if (use_qext_h)  qext    = qext_h
+      !
+      if (nsrcdrn_h > 0) then
+         nmindsrc = nmindsrc_h
+         qtsrc    = qtsrc_h
+      endif
+      !
+      if (wavemaker_h) then
+         z_index_wavemaker = z_index_wavemaker_h
+         wavemaker_uvmean  = wavemaker_uvmean_h
+         wavemaker_nmd     = wavemaker_nmd_h
+         wavemaker_nmu     = wavemaker_nmu_h
+         wavemaker_ndm     = wavemaker_ndm_h
+         wavemaker_num     = wavemaker_num_h
+      endif
+      !
+      if (use_storage_volume_h) storage_volume = storage_volume_h
+      !
+      if (wiggle_suppression_h) then
+         zs0    = zs0_h
+         zsderv = zsderv_h
+      endif
+      !
+      ! Subgrid Z-tables are always allocated when subgrid==.true.
+      !
+      subgrid_z_zmin   = subgrid_z_zmin_h
+      subgrid_z_zmax   = subgrid_z_zmax_h
+      subgrid_z_dep    = subgrid_z_dep_h
+      subgrid_z_volmax = subgrid_z_volmax_h
+      !
+      if (snapwave_h) then
+         zsm    = zsm_h
+         maxzsm = maxzsm_h
+      endif
+      !
+      if (store_maximum_waterlevel_h) zsmax = zsmax_h
+      !
+      ! ------ Discharges -------------------------------------------------
+      !
+      if (nsrcdrn_h > 0) then
+         call k_subgrid_discharge<<<1, 1>>>(dt, nsrcdrn_h)
+         istat = cudaDeviceSynchronize()
+      endif
+      !
+      ! ------ Main kernel ------------------------------------------------
+      !
+      blocks = (npn_local + TPB - 1) / TPB
+      !
+      call k_subgrid_main<<<blocks, TPB>>>( &
+         dt, t, factime, npn_local, subgrid_nlevels_h, dx_h, dy_h, &
+         precip_h, use_qext_h, wavemaker_h, snapwave_h, &
+         use_quadtree_h, crsgeo_h, &
+         use_storage_volume_h, wiggle_suppression_h, &
+         store_maximum_waterlevel_h)
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      ! ------ Copy-OUT ---------------------------------------------------
+      !
+      zs_h       = zs
+      z_volume_h = z_volume
+      !
+      if (wiggle_suppression_h) then
+         zs0_h    = zs0
+         zsderv_h = zsderv
+      endif
+      !
+      if (use_storage_volume_h) storage_volume_h = storage_volume
+      !
+      if (snapwave_h) then
+         zsm_h    = zsm
+         maxzsm_h = maxzsm
+      endif
+      !
+      if (store_maximum_waterlevel_h) then
+         !
+         ! Host-side t_zsmax (not in catalog). See compute_water_levels_regular
+         ! for the same pattern.
+         !
+         if (store_t_zsmax_h) then
+            do nm = 1, np_h
+               if (zs_h(nm) > zsmax_h(nm)) then
+                  if ((zs_h(nm) - subgrid_z_zmin_h(nm)) > huthresh_h) then
+                     t_zsmax_h(nm) = t
+                  endif
+               endif
+            enddo
+         endif
+         !
+         zsmax_h = zsmax
+         !
+      endif
+      !
+   end subroutine compute_water_levels_subgrid
+   !
+   ! -----------------------------------------------------------------
+   ! Optional store-variables update (vmax / qmax / twet).
+   ! -----------------------------------------------------------------
+   subroutine compute_store_variables(dt)
+      !
+      use sfincs_data, only: &
+         subgrid_h => subgrid, &
+         store_maximum_velocity_h => store_maximum_velocity, &
+         store_maximum_flux_h => store_maximum_flux, &
+         store_twet_h => store_twet, &
+         twet_threshold_h => twet_threshold, &
+         kcs_h => kcs, zs_h => zs, zb_h => zb, &
+         q_h => q, uv_h => uv, &
+         z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
+         z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
+         subgrid_z_zmin_h => subgrid_z_zmin, &
+         vmax_h => vmax, qmax_h => qmax, twet_h => twet
+      !
+      implicit none
+      !
+      real*4 :: dt
+      !
+      integer :: blocks
+      integer :: istat
+      !
+      ! ------ Copy-IN ----------------------------------------------------
+      !
+      kcs           = kcs_h
+      zs            = zs_h
+      q             = q_h
+      uv            = uv_h
+      z_index_uv_md = z_index_uv_md_h
+      z_index_uv_mu = z_index_uv_mu_h
+      z_index_uv_nd = z_index_uv_nd_h
+      z_index_uv_nu = z_index_uv_nu_h
+      !
+      if (subgrid_h) then
+         subgrid_z_zmin = subgrid_z_zmin_h
+      else
+         zb             = zb_h
+      endif
+      !
+      if (store_maximum_velocity_h) vmax = vmax_h
+      if (store_maximum_flux_h)     qmax = qmax_h
+      if (store_twet_h)             twet = twet_h
+      !
+      ! ------ Kernel -----------------------------------------------------
+      !
+      blocks = (npn_local + TPB - 1) / TPB
+      !
+      call k_store_variables<<<blocks, TPB>>>( &
+         dt, npn_local, subgrid_h, &
+         store_maximum_velocity_h, store_maximum_flux_h, store_twet_h, &
+         twet_threshold_h)
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      ! ------ Copy-OUT ---------------------------------------------------
+      !
+      if (store_maximum_velocity_h) vmax_h = vmax
+      if (store_maximum_flux_h)     qmax_h = qmax
+      if (store_twet_h)             twet_h = twet
+      !
+   end subroutine compute_store_variables
+   !
+   ! ===================================================================
+   !                              KERNELS
+   ! ===================================================================
+   !
+   ! Tiny single-threaded kernel that applies point discharges to zs in the
+   ! regular (non-subgrid) path. Mirrors CPU sibling lines 87-106.
+   !
+   attributes(global) subroutine k_regular_discharge(dt, nsrcdrn_in, crsgeo_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: nsrcdrn_in
+      logical, value :: crsgeo_in
+      !
+      integer :: isrc
+      integer :: nm
+      !
+      do isrc = 1, nsrcdrn_in
+         nm = nmindsrc(isrc)
+         if (crsgeo_in) then
+            zs(nm) = max(zs(nm) + qtsrc(isrc) * dt / cell_area_m2(nm), &
+                         real(zb(nm), kind=8))
+         else
+            zs(nm) = max(zs(nm) + qtsrc(isrc) * dt / cell_area(z_flags_iref(nm)), &
+                         real(zb(nm), kind=8))
+         endif
+      enddo
+      !
+   end subroutine k_regular_discharge
+   !
+   ! Per-cell regular kernel.
+   !
+   attributes(global) subroutine k_regular_main(dt, t, factime, npn_in, &
+                                                precip_in, use_qext_in, &
+                                                wavemaker_in, snapwave_in, &
+                                                crsgeo_in, &
+                                                store_max_zs_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      real*8,  value :: t
+      real*4,  value :: factime
+      integer, value :: npn_in
+      logical, value :: precip_in
+      logical, value :: use_qext_in
+      logical, value :: wavemaker_in
+      logical, value :: snapwave_in
+      logical, value :: crsgeo_in
+      logical, value :: store_max_zs_in
+      !
+      integer :: nm
+      integer :: nmu
+      integer :: nmd
+      integer :: num
+      integer :: ndm
+      integer :: iwm
+      real*4  :: qnmu
+      real*4  :: qnmd
+      real*4  :: qnum
+      real*4  :: qndm
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      if (kcs(nm) == 1) then
+         !
+         if (precip_in) then
+            zs(nm) = zs(nm) + netprcp(nm) * dt
+         endif
+         !
+         if (use_qext_in) then
+            zs(nm) = zs(nm) + qext(nm) * dt
+         endif
+         !
+         nmd = z_index_uv_md(nm)
+         nmu = z_index_uv_mu(nm)
+         ndm = z_index_uv_nd(nm)
+         num = z_index_uv_nu(nm)
+         !
+         if (crsgeo_in) then
+            zs(nm) = zs(nm) + ( (q(nmd) - q(nmu)) / dxm(nm) &
+                              + (q(ndm) - q(num)) * dyrinv(z_flags_iref(nm)) ) * dt
+         else
+            zs(nm) = zs(nm) + ( (q(nmd) - q(nmu)) * dxrinv(z_flags_iref(nm)) &
+                              + (q(ndm) - q(num)) * dyrinv(z_flags_iref(nm)) ) * dt
+         endif
+         !
+      endif
+      !
+      if (wavemaker_in) then
+         if (kcs(nm) == 4) then
+            !
+            iwm = z_index_wavemaker(nm)
+            !
+            if (wavemaker_nmd(iwm) > 0) then
+               qnmd = wavemaker_uvmean(wavemaker_nmd(iwm))
+            else
+               qnmd = q(z_index_uv_md(nm))
+            endif
+            !
+            if (wavemaker_nmu(iwm) > 0) then
+               qnmu = wavemaker_uvmean(wavemaker_nmu(iwm))
+            else
+               qnmu = q(z_index_uv_mu(nm))
+            endif
+            !
+            if (wavemaker_ndm(iwm) > 0) then
+               qndm = wavemaker_uvmean(wavemaker_ndm(iwm))
+            else
+               qndm = q(z_index_uv_nd(nm))
+            endif
+            !
+            if (wavemaker_num(iwm) > 0) then
+               qnum = wavemaker_uvmean(wavemaker_num(iwm))
+            else
+               qnum = q(z_index_uv_nu(nm))
+            endif
+            !
+            zs(nm) = zs(nm) + ( (qnmd - qnmu) * dxrinv(z_flags_iref(nm)) &
+                              + (qndm - qnum) * dyrinv(z_flags_iref(nm)) ) * dt
+            !
+         endif
+      endif
+      !
+      if (snapwave_in) then
+         zsm(nm) = factime * zs(nm) + (1.0 - factime) * zsm(nm)
+         if (store_max_zs_in) then
+            maxzsm(nm) = max(maxzsm(nm), zsm(nm))
+         endif
+      endif
+      !
+      if (store_max_zs_in) then
+         zsmax(nm) = max(zsmax(nm), real(zs(nm), kind=4))
+      endif
+      !
+   end subroutine k_regular_main
+   !
+   ! Tiny single-threaded kernel for subgrid discharges. Mirrors CPU sibling
+   ! lines 311-325.
+   !
+   attributes(global) subroutine k_subgrid_discharge(dt, nsrcdrn_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: nsrcdrn_in
+      !
+      integer :: isrc
+      integer :: nm
+      !
+      do isrc = 1, nsrcdrn_in
+         nm = nmindsrc(isrc)
+         if ((z_volume(nm) >= 0) .or. ((qtsrc(isrc) < 0.0) .and. (z_volume(nm) >= 0))) then
+            z_volume(nm) = z_volume(nm) + qtsrc(isrc) * dt
+         endif
+      enddo
+      !
+   end subroutine k_subgrid_discharge
+   !
+   ! Per-cell subgrid kernel.
+   !
+   attributes(global) subroutine k_subgrid_main(dt, t, factime, npn_in, &
+                                                subgrid_nlevels_in, dx_in, dy_in, &
+                                                precip_in, use_qext_in, &
+                                                wavemaker_in, snapwave_in, &
+                                                use_quadtree_in, crsgeo_in, &
+                                                use_storage_volume_in, &
+                                                wiggle_suppression_in, &
+                                                store_max_zs_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      real*8,  value :: t
+      real*4,  value :: factime
+      integer, value :: npn_in
+      integer, value :: subgrid_nlevels_in
+      real*4,  value :: dx_in
+      real*4,  value :: dy_in
+      logical, value :: precip_in
+      logical, value :: use_qext_in
+      logical, value :: wavemaker_in
+      logical, value :: snapwave_in
+      logical, value :: use_quadtree_in
+      logical, value :: crsgeo_in
+      logical, value :: use_storage_volume_in
+      logical, value :: wiggle_suppression_in
+      logical, value :: store_max_zs_in
+      !
+      integer :: nm
+      integer :: nmu
+      integer :: nmd
+      integer :: num
+      integer :: ndm
+      integer :: iwm
+      integer :: iuv
+      real*4  :: dvol
+      real*4  :: dzsdt
+      real*4  :: a
+      real*4  :: dv
+      real*4  :: dzvol
+      real*4  :: facint
+      real*4  :: zs00
+      real*4  :: zs11
+      real*4  :: qnmu
+      real*4  :: qnmd
+      real*4  :: qnum
+      real*4  :: qndm
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      dvol = 0.0
+      !
+      if (kcs(nm) == 1) then
+         !
+         nmd = z_index_uv_md(nm)
+         nmu = z_index_uv_mu(nm)
+         ndm = z_index_uv_nd(nm)
+         num = z_index_uv_nu(nm)
+         !
+         if (crsgeo_in) then
+            dvol = dvol + ( (q(nmd) - q(nmu)) * dyrm(z_flags_iref(nm)) &
+                          + (q(ndm) - q(num)) * dxm(nm) ) * dt
+         else
+            if (use_quadtree_in) then
+               dvol = dvol + ( (q(nmd) - q(nmu)) * dyrm(z_flags_iref(nm)) &
+                             + (q(ndm) - q(num)) * dxrm(z_flags_iref(nm)) ) * dt
+            else
+               dvol = dvol + ( (q(nmd) - q(nmu)) * dy_in &
+                             + (q(ndm) - q(num)) * dx_in ) * dt
+            endif
+         endif
+      endif
+      !
+      if (wavemaker_in .and. kcs(nm) == 4) then
+         !
+         iwm = z_index_wavemaker(nm)
+         !
+         if (wavemaker_nmd(iwm) > 0) then
+            qnmd = wavemaker_uvmean(wavemaker_nmd(iwm))
+         else
+            qnmd = q(z_index_uv_md(nm))
+         endif
+         !
+         if (wavemaker_nmu(iwm) > 0) then
+            qnmu = wavemaker_uvmean(wavemaker_nmu(iwm))
+         else
+            qnmu = q(z_index_uv_mu(nm))
+         endif
+         !
+         if (wavemaker_ndm(iwm) > 0) then
+            qndm = wavemaker_uvmean(wavemaker_ndm(iwm))
+         else
+            qndm = q(z_index_uv_nd(nm))
+         endif
+         !
+         if (wavemaker_num(iwm) > 0) then
+            qnum = wavemaker_uvmean(wavemaker_num(iwm))
+         else
+            qnum = q(z_index_uv_nu(nm))
+         endif
+         !
+         if (use_quadtree_in) then
+            dvol = dvol + ( (qnmd - qnmu) * dyrm(z_flags_iref(nm)) &
+                          + (qndm - qnum) * dxrm(z_flags_iref(nm)) ) * dt
+         else
+            dvol = dvol + ( (qnmd - qnmu) * dy_in &
+                          + (qndm - qnum) * dx_in ) * dt
+         endif
+         !
+      endif
+      !
+      if (kcs(nm) == 1 .or. kcs(nm) == 4) then
+         !
+         if (crsgeo_in) then
+            a = cell_area_m2(nm)
+         else
+            a = cell_area(z_flags_iref(nm))
+         endif
+         !
+         if (precip_in .or. use_qext_in) then
+            !
+            dzsdt = 0.0
+            if (precip_in)   dzsdt = dzsdt + netprcp(nm)
+            if (use_qext_in) dzsdt = dzsdt + qext(nm)
+            !
+            dvol = dvol + dzsdt * a * dt
+            !
+         endif
+         !
+         if (use_storage_volume_in) then
+            if (storage_volume(nm) > 1.0e-6 .and. dvol > 0.0) then
+               dv = storage_volume(nm) - dvol
+               storage_volume(nm) = max(dv, 0.0)
+               if (dv < 0.0) then
+                  dvol = - dv
+               else
+                  dvol = 0.0
+               endif
+            endif
+         endif
+         !
+         z_volume(nm) = z_volume(nm) + dvol
+         !
+         if (wiggle_suppression_in) then
+            zs00    = zs0(nm)
+            zs11    = real(zs(nm), kind=4)
+            zs0(nm) = zs11
+         endif
+         !
+         if (z_volume(nm) >= subgrid_z_volmax(nm) * 0.999) then
+            zs(nm) = max(subgrid_z_zmax(nm), -20.0) &
+                    + (z_volume(nm) - subgrid_z_volmax(nm)) / a
+         elseif (z_volume(nm) <= 1.0e-6) then
+            zs(nm) = max(subgrid_z_zmin(nm), -20.0)
+         else
+            dzvol  = subgrid_z_volmax(nm) / (subgrid_nlevels_in - 1)
+            iuv    = int(z_volume(nm) / dzvol) + 1
+            facint = (z_volume(nm) - (iuv - 1) * dzvol) / dzvol
+            zs(nm) = subgrid_z_dep(iuv, nm) &
+                    + (subgrid_z_dep(iuv + 1, nm) - subgrid_z_dep(iuv, nm)) * facint
+         endif
+         !
+         if (wiggle_suppression_in) then
+            zsderv(nm) = real(zs(nm), kind=4) - 2.0 * zs11 + zs00
+         endif
+         !
+      endif
+      !
+      if (snapwave_in) then
+         zsm(nm) = factime * real(zs(nm), kind=4) + (1.0 - factime) * zsm(nm)
+         if (store_max_zs_in) then
+            maxzsm(nm) = max(maxzsm(nm), zsm(nm))
+         endif
+      endif
+      !
+      if (store_max_zs_in) then
+         zsmax(nm) = max(zsmax(nm), real(zs(nm), kind=4))
+      endif
+      !
+   end subroutine k_subgrid_main
+   !
+   ! Per-cell store-variables kernel.
+   !
+   attributes(global) subroutine k_store_variables(dt, npn_in, subgrid_in, &
+                                                   store_vmax_in, store_qmax_in, &
+                                                   store_twet_in, twet_threshold_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: npn_in
+      logical, value :: subgrid_in
+      logical, value :: store_vmax_in
+      logical, value :: store_qmax_in
+      logical, value :: store_twet_in
+      real*4,  value :: twet_threshold_in
+      !
+      integer :: nm
+      integer :: nmu
+      integer :: nmd
+      integer :: num
+      integer :: ndm
+      real*4  :: quz
+      real*4  :: qvz
+      real*4  :: qz
+      real*4  :: uvz
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      qz  = 0.0
+      uvz = 0.0
+      !
+      if (kcs(nm) == 1 .or. kcs(nm) == 4) then
+         !
+         nmd = z_index_uv_md(nm)
+         nmu = z_index_uv_mu(nm)
+         ndm = z_index_uv_nd(nm)
+         num = z_index_uv_nu(nm)
+         !
+         if (store_vmax_in) then
+            quz = (uv(nmd) + uv(nmu)) / 2
+            qvz = (uv(ndm) + uv(num)) / 2
+            uvz = sqrt(quz**2 + qvz**2)
+            vmax(nm) = max(vmax(nm), uvz)
+         endif
+         !
+         if (store_qmax_in) then
+            quz = (q(nmd) + q(nmu)) / 2
+            qvz = (q(ndm) + q(num)) / 2
+            qz  = sqrt(quz**2 + qvz**2)
+            qmax(nm) = max(qmax(nm), qz)
+         endif
+         !
+         if (store_twet_in) then
+            if (subgrid_in) then
+               if ((real(zs(nm), kind=4) - subgrid_z_zmin(nm)) > twet_threshold_in) then
+                  twet(nm) = twet(nm) + dt
+               endif
+            else
+               if ((real(zs(nm), kind=4) - zb(nm)) > twet_threshold_in) then
+                  twet(nm) = twet(nm) + dt
+               endif
+            endif
+         endif
+         !
+      endif
+      !
+   end subroutine k_store_variables
+   !
+end module sfincs_continuity
