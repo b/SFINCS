@@ -66,7 +66,7 @@ libsfincs_la_SOURCES += \
 	sfincs_wave_enhanced_roughness.f90 \
 	sfincs_snapwave_io.f90 \
 	sfincs_snapwave_init.f90 \
-	sfincs_snapwave.f90 \
+	sfincs_snapwave_gpu.cuf \
 	../third_party_open/utils/deg2utm.f90 \
 	sfincs_meteo_io.f90 \
 	sfincs_meteo_gpu.cuf \
