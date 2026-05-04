@@ -55,6 +55,7 @@ libsfincs_la_SOURCES += \
 	sfincs_discharges.f90 \
 	sfincs_subgrid.F90 \
 	sfincs_timestep_analysis.f90 \
+	sfincs_infiltration_io.f90 \
 	sfincs_infiltration.f90 \
 	sfincs_domain.f90 \
 	sfincs_structures.f90 \
@@ -105,6 +106,7 @@ libsfincs_la_SOURCES += \
 	sfincs_discharges.f90 \
 	sfincs_subgrid.F90 \
 	sfincs_timestep_analysis.f90 \
+	sfincs_infiltration_io.f90 \
 	sfincs_infiltration.f90 \
 	sfincs_domain.f90 \
 	sfincs_structures.f90 \
