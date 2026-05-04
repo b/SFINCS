@@ -60,7 +60,7 @@ libsfincs_la_SOURCES += \
 	sfincs_infiltration_gpu.cuf \
 	sfincs_domain.f90 \
 	sfincs_structures_io.f90 \
-	sfincs_structures.f90 \
+	sfincs_structures_gpu.cuf \
 	sfincs_obspoints.f90 \
 	sfincs_runup_gauges.f90 \
 	sfincs_wave_enhanced_roughness.f90 \
