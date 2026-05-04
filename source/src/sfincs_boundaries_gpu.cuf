@@ -1,0 +1,697 @@
+module sfincs_boundaries
+   !
+   ! GPU sibling of source/src/sfincs_boundaries.f90.
+   !
+   ! Shadows the CPU module's public surface. Orchestrator-called entry points
+   ! (read_boundary_data, find_boundary_indices, update_boundaries) are public;
+   ! the per-step internals and IO helpers are private.
+   !
+   ! IO surface (read_boundary_data, find_boundary_indices, find_sfincs_cell,
+   ! clean_line) trampolines into sfincs_boundaries_io. The two host-side
+   ! per-step helpers (update_boundary_points, update_boundary_conditions) and
+   ! weighted_average run on the host: time-series interpolation belongs on the
+   ! rank that owns each boundary cell, which in single-rank is local. Only
+   ! update_boundary_fluxes is ported to a CUDA Fortran kernel.
+   !
+   ! Bridge convention (gpu-foundation): host-side `use sfincs_data` arrays are
+   ! suffixed _h via USE-rename; device-side `use sfincs_data_device` arrays
+   ! are suffixed _d. CUDA Fortran translates `<dev> = <host>` and vice-versa
+   ! to cudaMemcpy at the assignment level.
+   !
+   use cudafor
+   use sfincs_data_device
+   use sfincs_log
+   use sfincs_error
+   use sfincs_boundaries_io, only: io_read_boundary_data    => read_boundary_data, &
+                                   io_find_boundary_indices => find_boundary_indices, &
+                                   io_find_sfincs_cell      => find_sfincs_cell, &
+                                   io_clean_line            => clean_line
+   !
+   implicit none
+   !
+   private
+   public :: read_boundary_data, find_boundary_indices, update_boundaries
+   !
+   integer, parameter :: TPB = 128   ! threads per block
+   !
+contains
+
+   subroutine read_boundary_data()
+   !
+   ! Trampoline to sfincs_boundaries_io::read_boundary_data
+   !
+   implicit none
+   !
+   call io_read_boundary_data()
+   !
+   end subroutine
+
+
+   subroutine find_boundary_indices()
+   !
+   ! Trampoline to sfincs_boundaries_io::find_boundary_indices
+   !
+   implicit none
+   !
+   call io_find_boundary_indices()
+   !
+   end subroutine
+
+
+   subroutine update_boundary_points(t)
+   !
+   ! Update values at boundary points (host).
+   !
+   use sfincs_data
+   !
+   implicit none
+   !
+   integer ib, itb, itb0, itb1, ic
+   !
+   real*8 t
+   !
+   real*4 zstb, tbfac, hs, tp, wd, tb
+   !
+   if (nbnd == 0) return ! no boundary points
+   !
+   ! Interpolate boundary conditions in time
+   !
+   if (t_bnd(1) > (t - 1.0e-3)) then  ! use first time in boundary conditions
+      !
+      itb0 = 1
+      itb1 = 1
+      tb   = t_bnd(itb0)
+      !
+   elseif (t_bnd(ntbnd) < (t + 1.0e-3)) then  ! use last time in boundary conditions
+      !
+      itb0 = ntbnd
+      itb1 = ntbnd
+      tb   = t_bnd(itb0)
+      !
+   else
+      !
+      do itb = itbndlast, ntbnd ! Loop in time
+         if (t_bnd(itb) > (t + 1.0e-6)) then
+            itb0 = itb - 1
+            itb1 = itb
+            tb   = t
+            itbndlast = itb - 1
+            exit
+         endif
+      enddo
+      !
+   endif
+   !
+   tbfac  = (tb - t_bnd(itb0)) / max(t_bnd(itb1) - t_bnd(itb0), 1.0e-6)
+   !
+   do ib = 1, nbnd ! Loop along boundary points
+      !
+      ! Tide and surge
+      !
+      zstb = zs_bnd(ib, itb0) + (zs_bnd(ib, itb1) - zs_bnd(ib, itb0))*tbfac
+      !
+      ! Add astronomical tides
+      !
+      if (nr_tidal_components > 0) then
+         !
+         do ic = 1, nr_tidal_components
+            !
+            zstb = zstb + tidal_component_data(1, ic, ib) * cos(tidal_component_frequency(ic) * t - tidal_component_data(2, ic, ib))
+            !
+         enddo
+         !
+      endif
+      !
+      zst_bnd(ib) = zstb
+      !
+      if (bzifile(1:4) /= 'none') then
+         !
+         ! Incoming infragravity waves
+         !
+         zsit_bnd(ib) = zsi_bnd(ib, itb0) + (zsi_bnd(ib, itb1) - zsi_bnd(ib, itb0))*tbfac
+         !
+      endif
+       !
+   enddo
+   !
+   end subroutine
+
+
+   subroutine update_boundary_conditions(t, dt)
+   !
+   ! Update water level at boundary grid points (host).
+   !
+   use sfincs_data
+   !
+   implicit none
+   !
+   integer ib, nmb, ibdr
+   !
+   real*8                            :: t
+   real                              :: dt
+   !
+   real*8 zst
+   real*4 zsetup
+   real*4 zig
+   real*4 zs0act
+   real*4 smfac
+   real*4 zs0smooth
+   logical :: has_bzi
+   !
+   has_bzi = (bzifile(1:4) /= 'none')
+   !
+   ! Set water level in all boundary points on grid
+   ! This loop is done on the host.
+   !
+   !$omp parallel private ( ib, nmb, zst, zsetup, zig, smfac, zs0act, ibdr, zs0smooth ) if(ngbnd > 10000)
+   !$omp do schedule(dynamic, 64)
+   do ib = 1, ngbnd
+      !
+      nmb = nmindbnd(ib)
+      !
+      ! kcs = 1 : regular point
+      ! kcs = 2 : water level boundary point
+      ! kcs = 3 : outflow boundary point (water levels were set at initialization, so no need to update them here)
+      ! kcs = 4 : wave maker point
+      ! kcs = 5 : river outflow point (dzs/dx = i)
+      ! kcs = 6 : lateral (coastal) boundary point (Neumann dzs/dx = 0.0)
+      !
+      if (kcs(nmb) == 2) then
+         !
+         ! Regular water level boundary point
+         !
+         ! Get water levels (surge + tide) from time series boundary conditions
+         !
+         if (nbnd > 1) then
+            !
+            ! Interpolation of nearby points
+            !
+            zst   = zst_bnd(ind1_bnd_gbp(ib)) * fac_bnd_gbp(ib) + zst_bnd(ind2_bnd_gbp(ib)) * (1.0 - fac_bnd_gbp(ib))
+            !
+         else
+            !
+            ! Just use the value of the one boundary point
+            !
+            zst   = zst_bnd(1)
+            !
+         endif
+         !
+         if (patmos .and. pavbnd>1.0) then
+            !
+            ! Barometric pressure correction
+            !
+            zst = zst + (pavbnd - patmb(ib)) / (rhow * 9.81)
+            !
+         endif
+         !
+         zsetup = 0.0
+         zig    = 0.0
+         !
+         ! Incoming IG waves from file (this will overrule IG signal computed before)
+         !
+         if (has_bzi) then
+            !
+            if (nbnd > 1) then
+               !
+               ! Interpolation of nearby points
+               !
+               zig = zsit_bnd(ind1_bnd_gbp(ib)) * fac_bnd_gbp(ib)  + zsit_bnd(ind2_bnd_gbp(ib)) * (1.0 - fac_bnd_gbp(ib))
+               !
+            else
+               !
+               ! Just use the value of the one boundary point
+               !
+               zig = zsit_bnd(1)
+               !
+            endif
+            !
+         endif
+         !
+         if (t < (tspinup - 1.0e-3)) then
+            !
+            smfac = 1.0 - (t - t0) / (tspinup - t0)
+            !
+            zs0act = zst + zsetup
+            call weighted_average(zini, zs0act, smfac, 1, zs0smooth)
+            zsb0(ib) = zs0smooth           ! Still water level at kcs=2 point
+            !
+            zs0act = zst + zsetup + zig
+            call weighted_average(zini, zs0act, smfac, 1, zs0smooth)
+            zsb(ib) = zs0smooth            ! Total water level at kcs=2 point
+            !
+         else
+            !
+            zsb0(ib) = zst + zsetup        ! Still water level at kcs=2 point
+            zsb(ib)  = zst + zsetup + zig  ! Total water level at kcs=2 point
+            !
+         endif
+         !
+         if (subgrid) then                  ! Check on waterlevels minimally equal to z_zmin
+            zsb0(ib) = max(zsb0(ib), subgrid_z_zmin(nmb))
+            zsb(ib)  = max(zsb(ib),  subgrid_z_zmin(nmb))
+         else                               ! Check on waterlevels minimally equal to zb
+            zsb0(ib) = max(zsb0(ib), zb(nmb))
+            zsb(ib)  = max(zsb(ib),  zb(nmb))
+         endif
+         !
+      elseif (kcs(nmb) == 5) then
+         !
+         ! Downstream river point
+         !
+         ! Get water levels from inside model, and adjust for slope.
+         !
+         ibdr = index_bdr_gbp(ib) ! index of the downstream boundary point that forces this grid boundary point ib
+         !
+         zst = zs(index_zsi_bdr(ibdr)) + dzs_bdr(ibdr) ! internal water level minus slope * distance
+         !
+         ! Make sure water level is not below bed level
+         !
+         if (subgrid) then
+            !
+            zst = max(zst, subgrid_z_zmin(nmb))
+            !
+         else
+            !
+            zst = max(zst, zb(nmb))
+            !
+         endif
+         !
+         zsb(ib) = zst
+         zsb0(ib) = zst
+         !
+      elseif (kcs(nmb) == 6) then
+         !
+         ! Lateral coastal (Neumann) boundary
+         !
+         ! Set water level at boundary point equal to water level inside model.
+         !
+         zs(nmb) = zs(nmi_gbp(ib))
+         !
+      endif
+      !
+   enddo
+   !$omp end do
+   !$omp end parallel
+   !
+   end subroutine
+
+
+   subroutine update_boundary_fluxes(dt, t)
+   !
+   ! Update fluxes qx and qy at boundary points (device kernel).
+   !
+   use sfincs_data, only: &
+      nkcuv2_h => nkcuv2, bndtype_h => bndtype, &
+      btfilter_h => btfilter, btrelax_h => btrelax, &
+      huthresh_h => huthresh, g_h => g, &
+      subgrid_nlevels_h => subgrid_nlevels, subgrid_h => subgrid, &
+      store_maximum_waterlevel_h => store_maximum_waterlevel, &
+      store_t_zsmax_h => store_t_zsmax, t_zsmax_h => t_zsmax, &
+      kcs_h => kcs, kcuv_h => kcuv, &
+      zs_h => zs, q_h => q, uv_h => uv, &
+      uvmean_h => uvmean, zsmax_h => zsmax, &
+      zb_h => zb, zbuv_h => zbuv, z_volume_h => z_volume, &
+      zsb_h => zsb, zsb0_h => zsb0, ibuvdir_h => ibuvdir, &
+      index_kcuv2_h => index_kcuv2, nmikcuv2_h => nmikcuv2, &
+      nmbkcuv2_h => nmbkcuv2, ibkcuv2_h => ibkcuv2, &
+      subgrid_uv_zmin_h => subgrid_uv_zmin, &
+      subgrid_uv_zmax_h => subgrid_uv_zmax, &
+      subgrid_uv_havg_h => subgrid_uv_havg, &
+      subgrid_uv_havg_zmax_h => subgrid_uv_havg_zmax, &
+      subgrid_z_zmin_h => subgrid_z_zmin
+   !
+   implicit none
+   !
+   real*4           :: dt
+   real*8           :: t
+   !
+   integer :: blocks
+   integer :: istat
+   integer :: ib
+   integer :: nmb
+   real*4  :: factime
+   real*4  :: one_minus_factime
+   real*4  :: facrel
+   !
+   if (nkcuv2_h <= 0) return
+   !
+   factime           = min(dt / btfilter_h, 1.0)
+   one_minus_factime = 1.0 - factime
+   facrel            = 1.0 - min(dt / btrelax_h, 1.0)
+   !
+   ! ------ Copy-IN: host -> device for kernel READ set ------------------
+   ! Mirrors the !$acc parallel present(...) list of the original CPU
+   ! sibling (lines 941-950 of pre-extraction sfincs_boundaries.f90).
+   ! Bridge contract: refresh device shadows so unported per-step modules
+   ! that wrote only host arrays in the prior step do not stale-read here.
+   !
+   index_kcuv2          = index_kcuv2_h
+   nmikcuv2             = nmikcuv2_h
+   nmbkcuv2             = nmbkcuv2_h
+   ibkcuv2              = ibkcuv2_h
+   kcuv                 = kcuv_h
+   kcs                  = kcs_h
+   zs                   = zs_h
+   q                    = q_h
+   uv                   = uv_h
+   uvmean               = uvmean_h
+   zb                   = zb_h
+   zbuv                 = zbuv_h
+   zsb                  = zsb_h
+   zsb0                 = zsb0_h
+   ibuvdir              = ibuvdir_h
+   !
+   if (allocated(z_volume_h)) z_volume = z_volume_h
+   !
+   if (subgrid_h) then
+      subgrid_uv_zmin      = subgrid_uv_zmin_h
+      subgrid_uv_zmax      = subgrid_uv_zmax_h
+      subgrid_uv_havg      = subgrid_uv_havg_h
+      subgrid_uv_havg_zmax = subgrid_uv_havg_zmax_h
+      subgrid_z_zmin       = subgrid_z_zmin_h
+   endif
+   !
+   if (store_maximum_waterlevel_h) zsmax = zsmax_h
+   !
+   ! ------ Main per-boundary-point kernel -------------------------------
+   !
+   blocks = (nkcuv2_h + TPB - 1) / TPB
+   !
+   call k_update_boundary_fluxes<<<blocks, TPB>>>( &
+      dt, factime, one_minus_factime, facrel, btfilter_h, &
+      nkcuv2_h, bndtype_h, subgrid_h, &
+      subgrid_nlevels_h, huthresh_h, g_h, &
+      store_maximum_waterlevel_h, real(t, kind=8))
+   !
+   istat = cudaDeviceSynchronize()
+   !
+   ! ------ Copy-OUT: device -> host for WRITE set -----------------------
+   ! Per architect's bridge contract: zsb/zsb0 are republished as well
+   ! (host-mutated by update_boundary_conditions; identity copy here, but
+   ! kept to keep the host view canonical and so future device-side
+   ! mutations stay correct without further changes).
+   !
+   zs_h     = zs
+   q_h      = q
+   uv_h     = uv
+   uvmean_h = uvmean
+   zsb_h    = zsb
+   zsb0_h   = zsb0
+   !
+   if (store_maximum_waterlevel_h) then
+      !
+      ! Host-side t_zsmax (not in foundation catalog): predicate uses the
+      ! new zs_h (post-kernel, just copied above) against the old zsmax_h
+      ! (pre-kernel; zsmax_h was never written on host between copy-in and
+      ! copy-out, so it still holds the pre-kernel snapshot).
+      !
+      if (store_t_zsmax_h) then
+         do ib = 1, nkcuv2_h
+            nmb = nmbkcuv2_h(ib)
+            if (kcs_h(nmb) == 2) then
+               if (real(zs_h(nmb), kind=4) > zsmax_h(nmb)) then
+                  t_zsmax_h(nmb) = t
+               endif
+            endif
+         enddo
+      endif
+      !
+      zsmax_h = zsmax
+      !
+   endif
+   !
+   end subroutine
+
+
+   subroutine update_boundaries(t, dt, tloop)
+   !
+   ! Update all boundary conditions.
+   !
+   use sfincs_data, only: nbnd, boundaries_in_mask, bathtub
+   !
+   implicit none
+   !
+   integer  :: count0
+   integer  :: count1
+   integer  :: count_rate
+   integer  :: count_max
+   real     :: tloop
+   !
+   real*8           :: t
+   real*4           :: dt
+   !
+   call system_clock(count0, count_rate, count_max)
+   !
+   if (boundaries_in_mask) then
+      !
+      if (nbnd > 0) then
+         !
+         call update_boundary_points(t)
+         !
+      endif
+      !
+      if (.not. bathtub) then
+         !
+         call update_boundary_conditions(t, dt)
+         !
+         call update_boundary_fluxes(dt, t)
+         !
+      endif
+      !
+   endif
+   !
+   call system_clock(count1, count_rate, count_max)
+   tloop = tloop + 1.0 * (count1 - count0) / count_rate
+   !
+   end subroutine
+
+
+   subroutine weighted_average(val1, val2, fac, iopt, val3)
+   !
+   ! Host-callable; matches the CPU sibling's weighted_average exactly.
+   !
+   implicit none
+   !
+   integer, intent(in)    :: iopt
+   real*4,  intent(in)    :: val1
+   real*4,  intent(in)    :: val2
+   real*4,  intent(in)    :: fac
+   real*4,  intent(out)   :: val3
+   !
+   real*4                 :: u1
+   real*4                 :: v1
+   real*4                 :: u2
+   real*4                 :: v2
+   real*4                 :: u
+   real*4                 :: v
+   !
+   if (iopt == 1) then
+      val3 = val1*fac + val2*(1.0 - fac)
+   else
+      u1 = cos(val1)
+      v1 = sin(val1)
+      u2 = cos(val2)
+      v2 = sin(val2)
+      u = u1*fac + u2*(1.0 - fac)
+      v = v1*fac + v2*(1.0 - fac)
+      val3 = atan2(v, u)
+   endif
+   !
+   end subroutine
+
+
+   function find_sfincs_cell(n, m, iref) result (nm)
+   !
+   ! Trampoline to sfincs_boundaries_io::find_sfincs_cell
+   !
+   implicit none
+   !
+   integer, intent(in)  :: n
+   integer, intent(in)  :: m
+   integer, intent(in)  :: iref
+   integer              :: nm
+   !
+   nm = io_find_sfincs_cell(n, m, iref)
+   !
+   end function
+
+
+   function clean_line(s) result(out)
+   !
+   ! Trampoline to sfincs_boundaries_io::clean_line
+   !
+   character(len=*), intent(in) :: s
+   character(len=len(s)) :: out
+   !
+   out = io_clean_line(s)
+   !
+   end function
+
+   ! ===================================================================
+   !                              KERNELS
+   ! ===================================================================
+   !
+   ! Per-boundary-uv-point kernel. Mirrors the OpenACC-decorated loop in
+   ! the original CPU sibling (pre-extraction lines ~951-1118): one thread
+   ! per boundary u/v index ib in [1, nkcuv2_in].
+   !
+   attributes(global) subroutine k_update_boundary_fluxes( &
+         dt, factime, one_minus_factime, facrel, btfilter_in, &
+         nkcuv2_in, bndtype_in, subgrid_in, &
+         subgrid_nlevels_in, huthresh_in, g_in, &
+         store_max_zs_in, t_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      real*4,  value :: factime
+      real*4,  value :: one_minus_factime
+      real*4,  value :: facrel
+      real*4,  value :: btfilter_in
+      integer, value :: nkcuv2_in
+      integer, value :: bndtype_in
+      logical, value :: subgrid_in
+      integer, value :: subgrid_nlevels_in
+      real*4,  value :: huthresh_in
+      real*4,  value :: g_in
+      logical, value :: store_max_zs_in
+      real*8,  value :: t_in
+      !
+      integer :: ib
+      integer :: indb
+      integer :: nmb
+      integer :: nmi
+      integer :: ip
+      integer :: iuv
+      real*4  :: zsnmi
+      real*4  :: zsnmb
+      real*4  :: zs0nmb
+      real*4  :: zsuv
+      real*4  :: depthuv
+      real*4  :: dzuv
+      real*4  :: facint
+      real*4  :: hnmb
+      real*4  :: ui
+      real*4  :: ub
+      !
+      ib = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (ib > nkcuv2_in) return
+      !
+      indb = ibkcuv2(ib)
+      nmb  = nmbkcuv2(ib)     ! nm index of kcs=2/3/5/6 boundary point
+      !
+      if (kcs(nmb) == 6) return  ! Lateral boundary: fluxes solved in sfincs_momentum.
+      !
+      nmi = nmikcuv2(ib)         ! Index of kcs=1 point
+      ip  = index_kcuv2(ib)      ! Index in uv array of kcuv=2 velocity point
+      !
+      zsnmi  = real(zs(nmi), kind=4)
+      zsnmb  = zsb(indb)
+      zs0nmb = zsb0(indb)
+      !
+      if (bndtype_in == 1) then
+         !
+         ! Weakly reflective boundary (default)
+         !
+         if (subgrid_in) then
+            !
+            zsuv = max(zsnmb, zsnmi)
+            !
+            if (zsuv >= subgrid_uv_zmax(ip) - 1.0e-4) then
+               depthuv = subgrid_uv_havg_zmax(ip) + zsuv
+            elseif (zsuv > subgrid_uv_zmin(ip)) then
+               dzuv    = (subgrid_uv_zmax(ip) - subgrid_uv_zmin(ip)) / (subgrid_nlevels_in - 1)
+               iuv     = int((zsuv - subgrid_uv_zmin(ip)) / dzuv) + 1
+               facint  = (zsuv - (subgrid_uv_zmin(ip) + (iuv - 1) * dzuv)) / dzuv
+               depthuv = subgrid_uv_havg(iuv, ip) + (subgrid_uv_havg(iuv + 1, ip) - subgrid_uv_havg(iuv, ip)) * facint
+            else
+               depthuv = 0.0
+            endif
+            !
+            hnmb   = max(depthuv, huthresh_in)
+            zsnmb  = max(zsnmb,  subgrid_z_zmin(nmb))
+            zs0nmb = max(zs0nmb, subgrid_z_zmin(nmb))
+            !
+         else
+            !
+            hnmb   = max(0.5 * (zsnmb + zsnmi) - zbuv(ip), huthresh_in)
+            zsnmb  = max(zsnmb,  zb(nmb))
+            zs0nmb = max(zs0nmb, zb(nmb))
+            !
+         endif
+         !
+         if (hnmb < huthresh_in + 1.0e-6 .or. kcuv(ip) == 3) then
+            !
+            ! Very shallow or also a structure point.
+            !
+            q(ip)      = 0.0
+            uv(ip)     = 0.0
+            uvmean(ib) = 0.0
+            !
+         else
+            !
+            ui = sqrt(g_in / hnmb) * (zsnmb - zs0nmb)
+            ub = ibuvdir(ib) * (2 * ui - sqrt(g_in / hnmb) * (zsnmi - zs0nmb))
+            !
+            q(ip) = ub * hnmb + uvmean(ib)
+            !
+            if (subgrid_in) then
+               !
+               if (z_volume(nmi) <= 0.0) then
+                  if (ibuvdir(ib) == 1) then
+                     q(ip) = max(q(ip), 0.0)
+                  else
+                     q(ip) = min(q(ip), 0.0)
+                  endif
+               endif
+               !
+               if (zsnmb - subgrid_z_zmin(nmb) < huthresh_in) then
+                  if (ibuvdir(ib) == 1) then
+                     q(ip) = min(q(ip), 0.0)
+                  else
+                     q(ip) = max(q(ip), 0.0)
+                  endif
+               endif
+               !
+            else
+               !
+               if (zsnmi - zb(nmi) <= huthresh_in) then
+                  if (ibuvdir(ib) == 1) then
+                     q(ip) = max(q(ip), 0.0)
+                  else
+                     q(ip) = min(q(ip), 0.0)
+                  endif
+               endif
+               !
+               if (zsnmb - zb(nmb) < huthresh_in) then
+                  if (ibuvdir(ib) == 1) then
+                     q(ip) = min(q(ip), 0.0)
+                  else
+                     q(ip) = max(q(ip), 0.0)
+                  endif
+               endif
+            endif
+            !
+            uv(ip) = max(min(q(ip) / hnmb, 4.0), -4.0)
+            !
+         endif
+         !
+         if (btfilter_in >= -1.0e-6) then
+            uvmean(ib) = factime * q(ip) + facrel * one_minus_factime * uvmean(ib)
+         else
+            uvmean(ib) = 0.0
+         endif
+         !
+         ! Set value on kcs=2 point to boundary condition
+         !
+         zs(nmb) = zsb(indb)
+         !
+         if (store_max_zs_in) then
+            zsmax(nmb) = max(zsmax(nmb), real(zs(nmb), kind=4))
+         endif
+         !
+      endif
+      !
+   end subroutine k_update_boundary_fluxes
+
+end module
