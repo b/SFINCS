@@ -19,10 +19,12 @@ module sfincs_discharges
    ! The kernel performs full bidirectional bridging every step, per the
    ! staging-period contract: device shadows of the read set
    ! (zs, zb, z_volume, nmindsrc, qtsrc, drainage_type, drainage_params) are
-   ! refreshed from host before launch; the write set (qtsrc, qext) is
+   ! refreshed from host before launch; the write set (qtsrc only) is
    ! published back to host after sync so unported per-step modules read fresh
-   ! data. The bandwidth waste is intentional and disappears once every
-   ! per-step module is GPU-resident.
+   ! data. qext is intentionally NOT in the write set: this kernel does not
+   ! write qext, and clobbering host qext would lose xmipy's BMI input
+   ! (sfincs_continuity_gpu owns the qext bridge). The bandwidth waste is
+   ! intentional and disappears once every per-step module is GPU-resident.
    !
    ! Auxiliary arrays needed only by drainage gates (drainage_status,
    ! drainage_distance, drainage_fraction_open) and by the source time-series
@@ -71,7 +73,7 @@ contains
          itsrclast_h => itsrclast, &
          tsrc_h => tsrc, qsrc_h => qsrc, &
          subgrid_h => subgrid, structure_relax_h => structure_relax, g_h => g, &
-         qtsrc_h => qtsrc, qext_h => qext, &
+         qtsrc_h => qtsrc, &
          z_volume_h => z_volume, zs_h => zs, zb_h => zb, &
          nmindsrc_h => nmindsrc, &
          drainage_type_h => drainage_type, drainage_params_h => drainage_params, &
@@ -190,15 +192,13 @@ contains
       endif
       !
       ! ----------------------------------------------------------------
-      ! Bridge-OUT write set (qtsrc, qext) per the staging contract.
-      ! qext is published even though this kernel does not currently
-      ! write it: the criterion lists qext in the WRITE set so that any
-      ! future per-discharge-cell qext writes (e.g., for use_qext
-      ! coupling) flow to host without a contract change.
+      ! Bridge-OUT write set (qtsrc only). The kernel does not write to
+      ! qext; publishing it here would clobber xmipy's BMI input written
+      ! between steps via c_loc(qext) in sfincs_bmi.f90, since
+      ! sfincs_continuity_gpu (PR #11) bridges qext IN itself.
       ! ----------------------------------------------------------------
       if (src_active .or. drn_active) then
          qtsrc_h = qtsrc
-         if (allocated(qext_h)) qext_h = qext
       endif
       !
       call system_clock(count1, count_rate, count_max)
