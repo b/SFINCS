@@ -5,6 +5,11 @@ module sfincs_snapwave_io
    !
    implicit none
    !
+   integer                                   :: snapwave_no_nodes
+   integer*4, dimension(:),   allocatable    :: index_snapwave_in_sfincs
+   integer*4, dimension(:),   allocatable    :: index_sfincs_in_snapwave
+   integer*4, dimension(:),   allocatable    :: index_sw_in_qt ! used in sfincs_ncoutput (copy of index_snapwave_in_quadtree from snapwave_data)
+   !
 contains
    !
    subroutine read_snapwave_input()
@@ -436,5 +441,121 @@ contains
    return
    !
    end subroutine notabs
+
+
+   subroutine find_matching_cells(index_quadtree_in_snapwave, index_snapwave_in_quadtree)
+   !
+   use sfincs_data
+   use quadtree
+   !
+   implicit none
+   !
+   integer, dimension(snapwave_no_nodes),  intent(in) :: index_quadtree_in_snapwave
+   integer, dimension(quadtree_nr_points), intent(in) :: index_snapwave_in_quadtree
+   !
+   integer :: ipsw, ipsf, iq, ip, counter
+   !
+   real*4  :: xsw, ysw, dstmin, dst, min_distance
+   !
+   real*4 :: distances(np)
+   integer :: closest_index(1)
+   !
+   logical :: nearest_warning
+   !
+   allocate(index_sfincs_in_snapwave(snapwave_no_nodes))
+   allocate(index_snapwave_in_sfincs(np))
+   allocate(index_sw_in_qt(quadtree_nr_points))
+   !
+   nearest_warning = .false.
+   !
+   index_sfincs_in_snapwave = 0
+   index_snapwave_in_sfincs = 0
+   index_sw_in_qt = 0
+   counter = 0
+   distances = 0.0
+   min_distance = 0.0
+   !
+   ! Loop through SnapWave points
+   !
+   do ipsw = 1, snapwave_no_nodes
+      !
+      iq   = index_quadtree_in_snapwave(ipsw)
+      ipsf = index_sfincs_in_quadtree(iq)
+      !
+      if (ipsf == 0 ) then
+         !
+         ! SFINCS not active at this SnapWave node, so find the nearest SFINCS point
+         !
+         counter = counter + 1
+         !
+         nearest_warning = .true. ! to print warning to screen that 'extrapolation' is performed
+         !
+         if (snapwave_use_nearest) then
+             !
+             xsw = quadtree_xz(iq)
+             ysw = quadtree_yz(iq)
+             !
+             dstmin = 1.0e6
+             !
+             ! Calculate the distance for each coordinate
+             !$omp parallel &
+             !$omp private ( ip, dst )
+             !$omp do
+             do ip = 1, np
+                 !
+                 dst = sqrt((z_xz(ip) - xsw)**2 + (z_yz(ip) - ysw)**2)
+                 !
+                 distances(ip) = dst
+                 !
+             enddo
+             !$omp end do
+             !$omp end parallel
+             !
+             ! Find the minimum distance
+             min_distance = minval(distances)
+             !
+             if (min_distance < dstmin) then
+                 !
+                 ! Find the index of the minimum distance
+                 closest_index = minloc(distances)
+                 !
+                 ! To conform shapes
+                 ipsf = closest_index(1)
+                 !
+             endif
+             !
+         endif
+      endif
+      !
+      index_sfincs_in_snapwave(ipsw) = ipsf
+      !
+      index_sw_in_qt(iq) = ipsw
+      !
+   enddo
+   !
+   ! Loop through SFINCS points
+   !
+   do ipsf = 1, np
+      !
+      iq   = index_quadtree_in_sfincs(ipsf)
+      ipsw = index_snapwave_in_quadtree(iq)
+      index_snapwave_in_sfincs(ipsf) = ipsw
+      !
+   enddo
+   !
+   ! Print warning message
+   !
+   if (nearest_warning) then
+      if (snapwave_use_nearest) then
+          write(logstr,'(a,i0,a)')'SnapWave: Info   : ',counter,' SnapWave node(s) do not have a matching SFINCS point, so water depth and wind conditions from the nearest SFINCS point within 1000 km are used for SnapWave calculation '
+      else
+          write(logstr,'(a,i0,a)')'SnapWave: Info   : ',counter,' SnapWave node(s) do not have a matching SFINCS point, water level at these points is set to 0.0 '
+      endif
+      !
+      call write_log(logstr, 0)
+      !
+   endif
+   !
+   end subroutine
 
 end module
