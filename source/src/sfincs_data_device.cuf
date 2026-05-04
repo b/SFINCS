@@ -15,210 +15,210 @@ module sfincs_data_device
    !
    ! Mask / flag arrays
    !
-   integer*1, attributes(device), dimension(:), allocatable :: kcs
-   integer*1, attributes(device), dimension(:), allocatable :: kfuv
-   integer*1, attributes(device), dimension(:), allocatable :: kcuv
+   integer*1, device, dimension(:), allocatable :: kcs
+   integer*1, device, dimension(:), allocatable :: kfuv
+   integer*1, device, dimension(:), allocatable :: kcuv
    !
    ! Hydrodynamic state
    !
-   real*8,    attributes(device), dimension(:), allocatable :: zs
-   real*4,    attributes(device), dimension(:), allocatable :: zs0
-   real*4,    attributes(device), dimension(:), allocatable :: zsderv
-   real*4,    attributes(device), dimension(:), allocatable :: q
-   real*4,    attributes(device), dimension(:), allocatable :: q0
-   real*4,    attributes(device), dimension(:), allocatable :: uv
-   real*4,    attributes(device), dimension(:), allocatable :: uv0
-   real*4,    attributes(device), dimension(:), allocatable :: zb
-   real*4,    attributes(device), dimension(:), allocatable :: zbuv
-   real*4,    attributes(device), dimension(:), allocatable :: zbuvmx
-   real*4,    attributes(device), dimension(:), allocatable :: zsmax
-   real*4,    attributes(device), dimension(:), allocatable :: maxzsm
-   real*4,    attributes(device), dimension(:), allocatable :: qmax
-   real*4,    attributes(device), dimension(:), allocatable :: vmax
-   real*4,    attributes(device), dimension(:), allocatable :: twet
-   real*4,    attributes(device), dimension(:), allocatable :: zsm
-   real*8,    attributes(device), dimension(:), allocatable :: z_volume
+   real*8,    device, dimension(:), allocatable :: zs
+   real*4,    device, dimension(:), allocatable :: zs0
+   real*4,    device, dimension(:), allocatable :: zsderv
+   real*4,    device, dimension(:), allocatable :: q
+   real*4,    device, dimension(:), allocatable :: q0
+   real*4,    device, dimension(:), allocatable :: uv
+   real*4,    device, dimension(:), allocatable :: uv0
+   real*4,    device, dimension(:), allocatable :: zb
+   real*4,    device, dimension(:), allocatable :: zbuv
+   real*4,    device, dimension(:), allocatable :: zbuvmx
+   real*4,    device, dimension(:), allocatable :: zsmax
+   real*4,    device, dimension(:), allocatable :: maxzsm
+   real*4,    device, dimension(:), allocatable :: qmax
+   real*4,    device, dimension(:), allocatable :: vmax
+   real*4,    device, dimension(:), allocatable :: twet
+   real*4,    device, dimension(:), allocatable :: zsm
+   real*8,    device, dimension(:), allocatable :: z_volume
    !
    ! Topology flags
    !
-   integer*1, attributes(device), dimension(:), allocatable :: z_flags_iref
-   integer*1, attributes(device), dimension(:), allocatable :: uv_flags_iref
-   integer*1, attributes(device), dimension(:), allocatable :: uv_flags_type
-   integer*1, attributes(device), dimension(:), allocatable :: uv_flags_dir
-   integer*1, attributes(device), dimension(:), allocatable :: mask_adv
+   integer*1, device, dimension(:), allocatable :: z_flags_iref
+   integer*1, device, dimension(:), allocatable :: uv_flags_iref
+   integer*1, device, dimension(:), allocatable :: uv_flags_type
+   integer*1, device, dimension(:), allocatable :: uv_flags_dir
+   integer*1, device, dimension(:), allocatable :: mask_adv
    !
    ! Boundary indexing
    !
-   integer*4, attributes(device), dimension(:), allocatable :: index_kcuv2
-   integer*4, attributes(device), dimension(:), allocatable :: nmikcuv2
-   integer*4, attributes(device), dimension(:), allocatable :: nmbkcuv2
-   integer*4, attributes(device), dimension(:), allocatable :: ibkcuv2
-   real*4,    attributes(device), dimension(:), allocatable :: zsb
-   real*4,    attributes(device), dimension(:), allocatable :: zsb0
-   integer*1, attributes(device), dimension(:), allocatable :: ibuvdir
-   real*4,    attributes(device), dimension(:), allocatable :: uvmean
+   integer*4, device, dimension(:), allocatable :: index_kcuv2
+   integer*4, device, dimension(:), allocatable :: nmikcuv2
+   integer*4, device, dimension(:), allocatable :: nmbkcuv2
+   integer*4, device, dimension(:), allocatable :: ibkcuv2
+   real*4,    device, dimension(:), allocatable :: zsb
+   real*4,    device, dimension(:), allocatable :: zsb0
+   integer*1, device, dimension(:), allocatable :: ibuvdir
+   real*4,    device, dimension(:), allocatable :: uvmean
    !
    ! Subgrid UV tables
    !
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_uv_zmin
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_uv_zmax
-   real*4,    attributes(device), dimension(:,:), allocatable :: subgrid_uv_havg
-   real*4,    attributes(device), dimension(:,:), allocatable :: subgrid_uv_nrep
-   real*4,    attributes(device), dimension(:,:), allocatable :: subgrid_uv_pwet
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_uv_havg_zmax
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_uv_nrep_zmax
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_uv_fnfit
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_uv_navg_w
+   real*4,    device, dimension(:),   allocatable :: subgrid_uv_zmin
+   real*4,    device, dimension(:),   allocatable :: subgrid_uv_zmax
+   real*4,    device, dimension(:,:), allocatable :: subgrid_uv_havg
+   real*4,    device, dimension(:,:), allocatable :: subgrid_uv_nrep
+   real*4,    device, dimension(:,:), allocatable :: subgrid_uv_pwet
+   real*4,    device, dimension(:),   allocatable :: subgrid_uv_havg_zmax
+   real*4,    device, dimension(:),   allocatable :: subgrid_uv_nrep_zmax
+   real*4,    device, dimension(:),   allocatable :: subgrid_uv_fnfit
+   real*4,    device, dimension(:),   allocatable :: subgrid_uv_navg_w
    !
    ! Subgrid Z tables
    !
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_z_zmin
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_z_zmax
-   real*4,    attributes(device), dimension(:,:), allocatable :: subgrid_z_dep
-   real*4,    attributes(device), dimension(:),   allocatable :: subgrid_z_volmax
+   real*4,    device, dimension(:),   allocatable :: subgrid_z_zmin
+   real*4,    device, dimension(:),   allocatable :: subgrid_z_zmax
+   real*4,    device, dimension(:,:), allocatable :: subgrid_z_dep
+   real*4,    device, dimension(:),   allocatable :: subgrid_z_volmax
    !
    ! Z <-> UV neighbour indices
    !
-   integer*4, attributes(device), dimension(:), allocatable :: z_index_uv_md
-   integer*4, attributes(device), dimension(:), allocatable :: z_index_uv_nd
-   integer*4, attributes(device), dimension(:), allocatable :: z_index_uv_mu
-   integer*4, attributes(device), dimension(:), allocatable :: z_index_uv_nu
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_z_nm
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_z_nmu
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_u_nmd
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_u_nmu
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_u_ndm
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_u_num
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_v_ndm
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_v_ndmu
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_v_nm
-   integer*4, attributes(device), dimension(:), allocatable :: uv_index_v_nmu
+   integer*4, device, dimension(:), allocatable :: z_index_uv_md
+   integer*4, device, dimension(:), allocatable :: z_index_uv_nd
+   integer*4, device, dimension(:), allocatable :: z_index_uv_mu
+   integer*4, device, dimension(:), allocatable :: z_index_uv_nu
+   integer*4, device, dimension(:), allocatable :: uv_index_z_nm
+   integer*4, device, dimension(:), allocatable :: uv_index_z_nmu
+   integer*4, device, dimension(:), allocatable :: uv_index_u_nmd
+   integer*4, device, dimension(:), allocatable :: uv_index_u_nmu
+   integer*4, device, dimension(:), allocatable :: uv_index_u_ndm
+   integer*4, device, dimension(:), allocatable :: uv_index_u_num
+   integer*4, device, dimension(:), allocatable :: uv_index_v_ndm
+   integer*4, device, dimension(:), allocatable :: uv_index_v_ndmu
+   integer*4, device, dimension(:), allocatable :: uv_index_v_nm
+   integer*4, device, dimension(:), allocatable :: uv_index_v_nmu
    !
    ! Discharges & drainage
    !
-   integer*4, attributes(device), dimension(:),   allocatable :: nmindsrc
-   real*4,    attributes(device), dimension(:),   allocatable :: qtsrc
-   integer*1, attributes(device), dimension(:),   allocatable :: drainage_type
-   real*4,    attributes(device), dimension(:,:), allocatable :: drainage_params
+   integer*4, device, dimension(:),   allocatable :: nmindsrc
+   real*4,    device, dimension(:),   allocatable :: qtsrc
+   integer*1, device, dimension(:),   allocatable :: drainage_type
+   real*4,    device, dimension(:,:), allocatable :: drainage_params
    !
    ! Wavemaker
    !
-   integer*4, attributes(device), dimension(:), allocatable :: z_index_wavemaker
-   real*4,    attributes(device), dimension(:), allocatable :: wavemaker_uvmean
-   integer*4, attributes(device), dimension(:), allocatable :: wavemaker_nmd
-   integer*4, attributes(device), dimension(:), allocatable :: wavemaker_nmu
-   integer*4, attributes(device), dimension(:), allocatable :: wavemaker_ndm
-   integer*4, attributes(device), dimension(:), allocatable :: wavemaker_num
+   integer*4, device, dimension(:), allocatable :: z_index_wavemaker
+   real*4,    device, dimension(:), allocatable :: wavemaker_uvmean
+   integer*4, device, dimension(:), allocatable :: wavemaker_nmd
+   integer*4, device, dimension(:), allocatable :: wavemaker_nmu
+   integer*4, device, dimension(:), allocatable :: wavemaker_ndm
+   integer*4, device, dimension(:), allocatable :: wavemaker_num
    !
    ! Structures
    !
-   integer,   attributes(device), dimension(:),   allocatable :: structure_uv_index
-   real*4,    attributes(device), dimension(:,:), allocatable :: structure_parameters
-   integer*1, attributes(device), dimension(:),   allocatable :: structure_type
-   real*4,    attributes(device), dimension(:),   allocatable :: structure_length
+   integer,   device, dimension(:),   allocatable :: structure_uv_index
+   real*4,    device, dimension(:,:), allocatable :: structure_parameters
+   integer*1, device, dimension(:),   allocatable :: structure_type
+   real*4,    device, dimension(:),   allocatable :: structure_length
    !
    ! Wave forcing
    !
-   real*4,    attributes(device), dimension(:), allocatable :: fwuv
+   real*4,    device, dimension(:), allocatable :: fwuv
    !
    ! Wind stress
    !
-   real*4,    attributes(device), dimension(:), allocatable :: tauwu
-   real*4,    attributes(device), dimension(:), allocatable :: tauwv
-   real*4,    attributes(device), dimension(:), allocatable :: tauwu0
-   real*4,    attributes(device), dimension(:), allocatable :: tauwv0
-   real*4,    attributes(device), dimension(:), allocatable :: tauwu1
-   real*4,    attributes(device), dimension(:), allocatable :: tauwv1
+   real*4,    device, dimension(:), allocatable :: tauwu
+   real*4,    device, dimension(:), allocatable :: tauwv
+   real*4,    device, dimension(:), allocatable :: tauwu0
+   real*4,    device, dimension(:), allocatable :: tauwv0
+   real*4,    device, dimension(:), allocatable :: tauwu1
+   real*4,    device, dimension(:), allocatable :: tauwv1
    !
    ! Wind components
    !
-   real*4,    attributes(device), dimension(:), allocatable :: windu
-   real*4,    attributes(device), dimension(:), allocatable :: windv
-   real*4,    attributes(device), dimension(:), allocatable :: windu0
-   real*4,    attributes(device), dimension(:), allocatable :: windv0
-   real*4,    attributes(device), dimension(:), allocatable :: windu1
-   real*4,    attributes(device), dimension(:), allocatable :: windv1
-   real*4,    attributes(device), dimension(:), allocatable :: windmax
+   real*4,    device, dimension(:), allocatable :: windu
+   real*4,    device, dimension(:), allocatable :: windv
+   real*4,    device, dimension(:), allocatable :: windu0
+   real*4,    device, dimension(:), allocatable :: windv0
+   real*4,    device, dimension(:), allocatable :: windu1
+   real*4,    device, dimension(:), allocatable :: windv1
+   real*4,    device, dimension(:), allocatable :: windmax
    !
    ! Atmospheric pressure
    !
-   real*4,    attributes(device), dimension(:), allocatable :: patm
-   real*4,    attributes(device), dimension(:), allocatable :: patm0
-   real*4,    attributes(device), dimension(:), allocatable :: patm1
-   real*4,    attributes(device), dimension(:), allocatable :: patmb
-   integer*4, attributes(device), dimension(:), allocatable :: nmindbnd
+   real*4,    device, dimension(:), allocatable :: patm
+   real*4,    device, dimension(:), allocatable :: patm0
+   real*4,    device, dimension(:), allocatable :: patm1
+   real*4,    device, dimension(:), allocatable :: patmb
+   integer*4, device, dimension(:), allocatable :: nmindbnd
    !
    ! Precipitation & external flux
    !
-   real*4,    attributes(device), dimension(:), allocatable :: prcp
-   real*4,    attributes(device), dimension(:), allocatable :: prcp0
-   real*4,    attributes(device), dimension(:), allocatable :: prcp1
-   real*4,    attributes(device), dimension(:), allocatable :: cumprcp
-   real*4,    attributes(device), dimension(:), allocatable :: netprcp
-   real*4,    attributes(device), dimension(:), allocatable :: qext
+   real*4,    device, dimension(:), allocatable :: prcp
+   real*4,    device, dimension(:), allocatable :: prcp0
+   real*4,    device, dimension(:), allocatable :: prcp1
+   real*4,    device, dimension(:), allocatable :: cumprcp
+   real*4,    device, dimension(:), allocatable :: netprcp
+   real*4,    device, dimension(:), allocatable :: qext
    !
    ! Geometry / metric arrays
    !
-   real*4,    attributes(device), dimension(:), allocatable :: dxminv
-   real*4,    attributes(device), dimension(:), allocatable :: dxrinv
-   real*4,    attributes(device), dimension(:), allocatable :: dyrinv
-   real*4,    attributes(device), dimension(:), allocatable :: dxm2inv
-   real*4,    attributes(device), dimension(:), allocatable :: dxr2inv
-   real*4,    attributes(device), dimension(:), allocatable :: dyr2inv
-   real*4,    attributes(device), dimension(:), allocatable :: dxrinvc
-   real*4,    attributes(device), dimension(:), allocatable :: dyrinvc
-   real*4,    attributes(device), dimension(:), allocatable :: dxm
-   real*4,    attributes(device), dimension(:), allocatable :: dxrm
-   real*4,    attributes(device), dimension(:), allocatable :: dyrm
-   real*4,    attributes(device), dimension(:), allocatable :: cell_area_m2
-   real*4,    attributes(device), dimension(:), allocatable :: cell_area
+   real*4,    device, dimension(:), allocatable :: dxminv
+   real*4,    device, dimension(:), allocatable :: dxrinv
+   real*4,    device, dimension(:), allocatable :: dyrinv
+   real*4,    device, dimension(:), allocatable :: dxm2inv
+   real*4,    device, dimension(:), allocatable :: dxr2inv
+   real*4,    device, dimension(:), allocatable :: dyr2inv
+   real*4,    device, dimension(:), allocatable :: dxrinvc
+   real*4,    device, dimension(:), allocatable :: dyrinvc
+   real*4,    device, dimension(:), allocatable :: dxm
+   real*4,    device, dimension(:), allocatable :: dxrm
+   real*4,    device, dimension(:), allocatable :: dyrm
+   real*4,    device, dimension(:), allocatable :: cell_area_m2
+   real*4,    device, dimension(:), allocatable :: cell_area
    !
    ! Friction / Coriolis / storage / viscosity
    !
-   real*4,    attributes(device), dimension(:), allocatable :: gn2uv
-   real*4,    attributes(device), dimension(:), allocatable :: fcorio2d
-   real*4,    attributes(device), dimension(:), allocatable :: storage_volume
-   real*4,    attributes(device), dimension(:), allocatable :: nuvisc
+   real*4,    device, dimension(:), allocatable :: gn2uv
+   real*4,    device, dimension(:), allocatable :: fcorio2d
+   real*4,    device, dimension(:), allocatable :: storage_volume
+   real*4,    device, dimension(:), allocatable :: nuvisc
    !
    ! Combined UV indexing
    !
-   integer*4, attributes(device), dimension(:), allocatable :: cuv_index_uv
-   integer*4, attributes(device), dimension(:), allocatable :: cuv_index_uv1
-   integer*4, attributes(device), dimension(:), allocatable :: cuv_index_uv2
+   integer*4, device, dimension(:), allocatable :: cuv_index_uv
+   integer*4, device, dimension(:), allocatable :: cuv_index_uv1
+   integer*4, device, dimension(:), allocatable :: cuv_index_uv2
    !
    ! Misc
    !
-   real*4,    attributes(device), dimension(:,:), allocatable :: x73
-   real*4,    attributes(device), dimension(:),   allocatable :: gnapp2
+   real*4,    device, dimension(:,:), allocatable :: x73
+   real*4,    device, dimension(:),   allocatable :: gnapp2
    !
    ! Timestep analysis
    !
-   real*4,    attributes(device), dimension(:), allocatable :: timestep_analysis_required_timestep
-   real*4,    attributes(device), dimension(:), allocatable :: timestep_analysis_average_required_timestep
-   integer*4, attributes(device), dimension(:), allocatable :: timestep_analysis_times_wet
-   integer*4, attributes(device), dimension(:), allocatable :: timestep_analysis_times_limiting
+   real*4,    device, dimension(:), allocatable :: timestep_analysis_required_timestep
+   real*4,    device, dimension(:), allocatable :: timestep_analysis_average_required_timestep
+   integer*4, device, dimension(:), allocatable :: timestep_analysis_times_wet
+   integer*4, device, dimension(:), allocatable :: timestep_analysis_times_limiting
    !
    ! Infiltration (general / SCS / Green-Ampt / Horton)
    !
-   real*4,    attributes(device), dimension(:), allocatable :: qinffield
-   real*4,    attributes(device), dimension(:), allocatable :: qinfmap
-   real*4,    attributes(device), dimension(:), allocatable :: cuminf
-   integer*1, attributes(device), dimension(:), allocatable :: scs_rain
-   real*4,    attributes(device), dimension(:), allocatable :: scs_Se
-   real*4,    attributes(device), dimension(:), allocatable :: scs_P1
-   real*4,    attributes(device), dimension(:), allocatable :: scs_F1
-   real*4,    attributes(device), dimension(:), allocatable :: scs_S1
-   real*4,    attributes(device), dimension(:), allocatable :: rain_T1
-   real*4,    attributes(device), dimension(:), allocatable :: ksfield
-   real*4,    attributes(device), dimension(:), allocatable :: GA_head
-   real*4,    attributes(device), dimension(:), allocatable :: GA_sigma
-   real*4,    attributes(device), dimension(:), allocatable :: GA_sigma_max
-   real*4,    attributes(device), dimension(:), allocatable :: GA_F
-   real*4,    attributes(device), dimension(:), allocatable :: GA_Lu
-   real*4,    attributes(device), dimension(:), allocatable :: inf_kr
-   real*4,    attributes(device), dimension(:), allocatable :: horton_kd
-   real*4,    attributes(device), dimension(:), allocatable :: horton_fc
-   real*4,    attributes(device), dimension(:), allocatable :: horton_f0
+   real*4,    device, dimension(:), allocatable :: qinffield
+   real*4,    device, dimension(:), allocatable :: qinfmap
+   real*4,    device, dimension(:), allocatable :: cuminf
+   integer*1, device, dimension(:), allocatable :: scs_rain
+   real*4,    device, dimension(:), allocatable :: scs_Se
+   real*4,    device, dimension(:), allocatable :: scs_P1
+   real*4,    device, dimension(:), allocatable :: scs_F1
+   real*4,    device, dimension(:), allocatable :: scs_S1
+   real*4,    device, dimension(:), allocatable :: rain_T1
+   real*4,    device, dimension(:), allocatable :: ksfield
+   real*4,    device, dimension(:), allocatable :: GA_head
+   real*4,    device, dimension(:), allocatable :: GA_sigma
+   real*4,    device, dimension(:), allocatable :: GA_sigma_max
+   real*4,    device, dimension(:), allocatable :: GA_F
+   real*4,    device, dimension(:), allocatable :: GA_Lu
+   real*4,    device, dimension(:), allocatable :: inf_kr
+   real*4,    device, dimension(:), allocatable :: horton_kd
+   real*4,    device, dimension(:), allocatable :: horton_fc
+   real*4,    device, dimension(:), allocatable :: horton_f0
    !
    ! MPI / partition scalars
    !

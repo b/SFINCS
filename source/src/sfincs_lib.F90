@@ -151,10 +151,16 @@ module sfincs_lib
    !
    call system_clock(count0, count_rate, count_max)
    !
+#ifdef USE_CUDA
+   ! Bind the rank to its device and trigger the deferred-multi-rank guard
+   ! before any input is read, so a 2+ rank invocation aborts deterministically.
+   call partition_and_localize()
+#endif
+   !
    call write_log('------ Preparing model simulation --------', 1)
    call write_log('', 1)
    !
-   call write_log('Reading input file ...', 0) 
+   call write_log('Reading input file ...', 0)
    call read_sfincs_input()     ! Reads sfincs.inp
    !
    if (.not. bathtub) then

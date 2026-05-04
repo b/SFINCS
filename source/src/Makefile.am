@@ -13,10 +13,66 @@ lib_LTLIBRARIES = libsfincs.la
 
 #-------------------------------------------------------------------------------
 
+# automake does not know the .cuf extension; teach it so .cuf files in
+# libsfincs_la_SOURCES get distributed and the pattern rule below applies.
+SUFFIXES = .cuf
+
+.cuf.o:
+	$(AM_V_FC)$(FCCOMPILE) -c -o $@ $<
+
+.cuf.lo:
+	$(AM_V_FC)$(LTFCCOMPILE) -c -o $@ $<
+
 #all sources for sfincs that go into the library (all but the program)
 libsfincs_la_SOURCES =
 if USE_CUDA
-# populated by sub-epic 2 (gpu-dispatcher-scaffolding)
+libsfincs_la_SOURCES += \
+	sfincs_log.f90 \
+	sfincs_date.f90 \
+	sfincs_spiderweb.f90 \
+	sfincs_data.f90 \
+	sfincs_data_device.cuf \
+    ../third_party_open/Delft3D/astro.f90 \
+	../third_party_open/utils/geometry.f90 \
+	sfincs_error.f90 \
+	sfincs_quadtree.f90 \
+	snapwave/interp.F90 \
+	snapwave/snapwave_data.f90 \
+	snapwave/snapwave_ncinput.F90 \
+	snapwave/snapwave_infragravity.f90 \
+	snapwave/snapwave_boundaries.f90 \
+	snapwave/snapwave_date.f90 \
+	snapwave/snapwave_domain.f90 \
+	snapwave/snapwave_windsource.f90 \
+	snapwave/snapwave_solver.f90 \
+	sfincs_input.f90 \
+	sfincs_ncinput.F90 \
+	sfincs_initial_conditions.f90 \
+	sfincs_boundaries.f90 \
+	sfincs_continuity.f90 \
+	sfincs_crosssections.f90 \
+	sfincs_discharges.f90 \
+	sfincs_subgrid.F90 \
+	sfincs_timestep_analysis.f90 \
+	sfincs_infiltration.f90 \
+	sfincs_domain.f90 \
+	sfincs_structures.f90 \
+	sfincs_obspoints.f90 \
+	sfincs_runup_gauges.f90 \
+	sfincs_wave_enhanced_roughness.f90 \
+	sfincs_snapwave.f90 \
+	../third_party_open/utils/deg2utm.f90 \
+	sfincs_meteo.f90 \
+    ../third_party_open/bicgstab/bicgstab_solver_ilu.f90 \
+	sfincs_nonhydrostatic.f90 \
+	sfincs_ncoutput.F90 \
+	sfincs_output.f90 \
+	sfincs_momentum.f90 \
+	sfincs_wavemaker.f90 \
+	sfincs_bathtub.f90 \
+	sfincs_partition.cuf \
+	sfincs_lib.F90 \
+	sfincs_bmi.f90
 else
 libsfincs_la_SOURCES += \
 	sfincs_log.f90 \
@@ -93,7 +149,9 @@ AM_FCFLAGS=${NETCDF_CFLAGS} ${NETCDF_FORTRAN_CFLAGS} -I$(top_builddir)/third_par
 AM_FCFLAGS+=${OPENMP_FCFLAGS}
 AM_FCFLAGS+=${OPENACC_CFLAGS}
 AM_FCFLAGS+=${-O3}
+AM_FCFLAGS+=$(MPI_FCFLAGS)
 
 
 # Manualy add the netcdff (fortran dll), bug in pkg-config file is not fixed until in NetCDF 4.4 HEAD
 LIBS+=${NETCDF_LIBS} ${NETCDF_FORTRAN_LIBS}
+LIBS+=$(MPI_LIBS)

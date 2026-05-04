@@ -62,6 +62,11 @@ AS_IF([test "x$enable_cuda" = "xyes"], [
       [AC_MSG_ERROR([mpifort required for --enable-cuda; install NVHPC HPC-X or set PATH])])
    MPI_FCFLAGS=`$MPIFORT --showme:compile 2>/dev/null`
    MPI_LIBS=`$MPIFORT --showme:link 2>/dev/null`
+   dnl libtool unwraps -Wl,FOO to bare FOO before passing to FC; nvfortran
+   dnl then rejects flags it does not recognise (e.g. --enable-new-dtags).
+   dnl Strip linker-only -Wl,FOO directives so libtool's own rpath handling
+   dnl drives the link step.
+   MPI_LIBS=`echo " $MPI_LIBS " | sed 's/ -Wl,[[^ ]]*//g'`
    AS_IF([test -z "$MPI_FCFLAGS" -o -z "$MPI_LIBS"],
       [AC_MSG_ERROR([mpifort --showme:compile/--showme:link failed; HPC-X / OpenMPI required (MPICH -compile_info syntax not supported)])])
    AC_MSG_NOTICE([MPI_FCFLAGS=$MPI_FCFLAGS])
