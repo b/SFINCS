@@ -49,22 +49,27 @@ libsfincs_la_SOURCES += \
 	sfincs_ncinput.F90 \
 	sfincs_initial_conditions.f90 \
 	sfincs_boundaries_io.f90 \
-	sfincs_boundaries.f90 \
+	sfincs_boundaries_gpu.cuf \
 	sfincs_continuity_gpu.cuf \
 	sfincs_crosssections.f90 \
-	sfincs_discharges.f90 \
+	sfincs_discharges_io.f90 \
+	sfincs_discharges_gpu.cuf \
 	sfincs_subgrid.F90 \
 	sfincs_timestep_analysis.f90 \
-	sfincs_infiltration.f90 \
+	sfincs_infiltration_io.f90 \
+	sfincs_infiltration_gpu.cuf \
 	sfincs_domain.f90 \
+	sfincs_structures_io.f90 \
 	sfincs_structures.f90 \
 	sfincs_obspoints.f90 \
 	sfincs_runup_gauges.f90 \
 	sfincs_wave_enhanced_roughness.f90 \
+	sfincs_snapwave_io.f90 \
+	sfincs_snapwave_init.f90 \
 	sfincs_snapwave.f90 \
 	../third_party_open/utils/deg2utm.f90 \
 	sfincs_meteo_io.f90 \
-	sfincs_meteo.f90 \
+	sfincs_meteo_gpu.cuf \
     ../third_party_open/bicgstab/bicgstab_solver_ilu.f90 \
 	sfincs_nonhydrostatic.f90 \
 	sfincs_ncoutput.F90 \
@@ -102,15 +107,20 @@ libsfincs_la_SOURCES += \
 	sfincs_boundaries.f90 \
 	sfincs_continuity.f90 \
 	sfincs_crosssections.f90 \
+	sfincs_discharges_io.f90 \
 	sfincs_discharges.f90 \
 	sfincs_subgrid.F90 \
 	sfincs_timestep_analysis.f90 \
+	sfincs_infiltration_io.f90 \
 	sfincs_infiltration.f90 \
 	sfincs_domain.f90 \
+	sfincs_structures_io.f90 \
 	sfincs_structures.f90 \
 	sfincs_obspoints.f90 \
 	sfincs_runup_gauges.f90 \
 	sfincs_wave_enhanced_roughness.f90 \
+	sfincs_snapwave_io.f90 \
+	sfincs_snapwave_init.f90 \
 	sfincs_snapwave.f90 \
 	../third_party_open/utils/deg2utm.f90 \
 	sfincs_meteo_io.f90 \
