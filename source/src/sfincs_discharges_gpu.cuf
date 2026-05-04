@@ -1,0 +1,424 @@
+module sfincs_discharges
+   !
+   ! GPU sibling of source/src/sfincs_discharges.f90.
+   !
+   ! Shadows the CPU module's public surface (read_discharges, update_discharges)
+   ! using native CUDA Fortran kernels operating on the device-resident catalog
+   ! declared by sfincs_data_device.
+   !
+   ! read_discharges is a trampoline to sfincs_discharges_io::read_discharges.
+   ! update_discharges performs source-time interpolation and per-drainage flow
+   ! computation as two single-block kernels (nsrc and ndrn are typically tens,
+   ! so few-thread kernels are acceptable per the architect's mandate).
+   !
+   ! Bridge convention (gpu-foundation): host-side `use sfincs_data` arrays are
+   ! suffixed _h via USE-rename; device-side `use sfincs_data_device` arrays
+   ! are imported bare. CUDA Fortran translates `<dev> = <host>` (and the
+   ! reverse) into cudaMemcpy at the assignment level.
+   !
+   ! The kernel performs full bidirectional bridging every step, per the
+   ! staging-period contract: device shadows of the read set
+   ! (zs, zb, z_volume, nmindsrc, qtsrc, drainage_type, drainage_params) are
+   ! refreshed from host before launch; the write set (qtsrc, qext) is
+   ! published back to host after sync so unported per-step modules read fresh
+   ! data. The bandwidth waste is intentional and disappears once every
+   ! per-step module is GPU-resident.
+   !
+   ! Auxiliary arrays needed only by drainage gates (drainage_status,
+   ! drainage_distance, drainage_fraction_open) and by the source time-series
+   ! interpolation (tsrc, qsrc) are declared as module-private device shadows.
+   ! They are NOT added to the sfincs_data_device catalog per C3.
+   !
+   use cudafor
+   use sfincs_data_device
+   use sfincs_discharges_io, only: io_read_discharges => read_discharges
+   !
+   implicit none
+   !
+   private
+   public :: read_discharges, update_discharges
+   !
+   ! Module-private device shadows. Lazily allocated on the first update call
+   ! once nsrc/ndrn are known. tsrc/qsrc are static after read_discharges so
+   ! we copy them in only once; drainage_* are bridged every step.
+   !
+   real*4,    device, allocatable :: tsrc_d(:)
+   real*4,    device, allocatable :: qsrc_d(:,:)
+   integer*1, device, allocatable :: drainage_status_d(:)
+   real*4,    device, allocatable :: drainage_distance_d(:)
+   real*4,    device, allocatable :: drainage_fraction_open_d(:)
+   !
+contains
+   !
+   subroutine read_discharges()
+      !
+      ! Trampoline to sfincs_discharges_io::read_discharges
+      !
+      implicit none
+      !
+      call io_read_discharges()
+      !
+   end subroutine read_discharges
+   !
+   subroutine update_discharges(t, dt, tloop)
+      !
+      ! GPU port of the CPU update_discharges. Mirrors:
+      !   - source-time interpolation (CPU sibling lines 49-61)
+      !   - per-drainage flow compute (CPU sibling lines 63-345)
+      !
+      use sfincs_data, only: &
+         nsrc_h => nsrc, ndrn_h => ndrn, ntsrc_h => ntsrc, &
+         itsrclast_h => itsrclast, &
+         tsrc_h => tsrc, qsrc_h => qsrc, &
+         subgrid_h => subgrid, structure_relax_h => structure_relax, g_h => g, &
+         qtsrc_h => qtsrc, qext_h => qext, &
+         z_volume_h => z_volume, zs_h => zs, zb_h => zb, &
+         nmindsrc_h => nmindsrc, &
+         drainage_type_h => drainage_type, drainage_params_h => drainage_params, &
+         drainage_status_h => drainage_status, &
+         drainage_distance_h => drainage_distance, &
+         drainage_fraction_open_h => drainage_fraction_open
+      !
+      implicit none
+      !
+      real*8           :: t
+      real*4           :: dt
+      real             :: tloop
+      !
+      integer :: count0, count1, count_rate, count_max
+      integer :: itsrc
+      integer :: istat
+      logical :: src_active
+      logical :: drn_active
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      src_active = (nsrc_h > 0)
+      drn_active = (ndrn_h > 0)
+      !
+      ! ----------------------------------------------------------------
+      ! Bridge-IN qtsrc once for both kernels (drainage reads qtsrc(jin)
+      ! produced by the previous step; source interp writes qtsrc(1:nsrc)).
+      ! ----------------------------------------------------------------
+      if (src_active .or. drn_active) then
+         qtsrc = qtsrc_h
+      endif
+      !
+      ! ----------------------------------------------------------------
+      ! Section 1: source-time interpolation.
+      ! Mirrors CPU sibling lines 49-61. The time-bracket search is a
+      ! sequential scan; cheapest on the host. Per-source interpolation
+      ! runs on the GPU via k_source_interp.
+      ! ----------------------------------------------------------------
+      if (src_active) then
+         !
+         if (.not. allocated(tsrc_d)) then
+            allocate(tsrc_d, mold=tsrc_h)
+            tsrc_d = tsrc_h
+         endif
+         if (.not. allocated(qsrc_d)) then
+            allocate(qsrc_d, mold=qsrc_h)
+            qsrc_d = qsrc_h
+         endif
+         !
+         do itsrc = itsrclast_h, ntsrc_h
+            if (tsrc_h(itsrc) > t) then
+               !
+               call k_source_interp<<<1, nsrc_h>>>( &
+                  nsrc_h, itsrc, real(t, kind=4))
+               !
+               istat = cudaDeviceSynchronize()
+               !
+               itsrclast_h = itsrc - 1
+               !
+               exit
+               !
+            endif
+         enddo
+         !
+      endif
+      !
+      ! ----------------------------------------------------------------
+      ! Section 2: drainage flow compute.
+      ! Mirrors CPU sibling lines 63-345. One single-block kernel with
+      ! ndrn threads (per the architect's mandate: small ndrn,
+      ! few-thread kernel is acceptable).
+      ! ----------------------------------------------------------------
+      if (drn_active) then
+         !
+         if (.not. allocated(drainage_status_d)) then
+            allocate(drainage_status_d, mold=drainage_status_h)
+         endif
+         if (.not. allocated(drainage_distance_d)) then
+            allocate(drainage_distance_d, mold=drainage_distance_h)
+         endif
+         if (.not. allocated(drainage_fraction_open_d)) then
+            allocate(drainage_fraction_open_d, mold=drainage_fraction_open_h)
+         endif
+         !
+         ! ------ Bridge-IN read set (canonical from the pre-port acc
+         ! present(...) directive: z_volume, zs, zb, nmindsrc, qtsrc,
+         ! drainage_type, drainage_params; plus drainage state
+         ! shadows used by gate types 4 and 5) ----------------------
+         !
+         zs              = zs_h
+         zb              = zb_h
+         if (subgrid_h) then
+            z_volume = z_volume_h
+         endif
+         nmindsrc        = nmindsrc_h
+         drainage_type   = drainage_type_h
+         drainage_params = drainage_params_h
+         !
+         drainage_status_d        = drainage_status_h
+         drainage_distance_d      = drainage_distance_h
+         drainage_fraction_open_d = drainage_fraction_open_h
+         !
+         ! ------ Kernel launch ------------------------------------
+         !
+         call k_drainage<<<1, ndrn_h>>>( &
+            ndrn_h, nsrc_h, real(t, kind=4), dt, &
+            subgrid_h, structure_relax_h, g_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         ! ------ Bridge-OUT drainage gate state -------------------
+         !
+         drainage_status_h        = drainage_status_d
+         drainage_fraction_open_h = drainage_fraction_open_d
+         !
+      endif
+      !
+      ! ----------------------------------------------------------------
+      ! Bridge-OUT write set (qtsrc, qext) per the staging contract.
+      ! qext is published even though this kernel does not currently
+      ! write it: the criterion lists qext in the WRITE set so that any
+      ! future per-discharge-cell qext writes (e.g., for use_qext
+      ! coupling) flow to host without a contract change.
+      ! ----------------------------------------------------------------
+      if (src_active .or. drn_active) then
+         qtsrc_h = qtsrc
+         if (allocated(qext_h)) qext_h = qext
+      endif
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0 * (count1 - count0) / count_rate
+      !
+   end subroutine update_discharges
+   !
+   ! ===================================================================
+   !                              KERNELS
+   ! ===================================================================
+   !
+   ! Per-source time-interpolation kernel. Mirrors CPU sibling lines 53-55.
+   !
+   attributes(global) subroutine k_source_interp(nsrc_in, itsrc_in, t_in)
+      !
+      implicit none
+      !
+      integer, value :: nsrc_in
+      integer, value :: itsrc_in
+      real*4,  value :: t_in
+      !
+      integer :: isrc
+      real*4  :: w
+      !
+      isrc = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (isrc > nsrc_in) return
+      !
+      w = (t_in - tsrc_d(itsrc_in - 1)) / (tsrc_d(itsrc_in) - tsrc_d(itsrc_in - 1))
+      qtsrc(isrc) = qsrc_d(isrc, itsrc_in - 1) + &
+                    (qsrc_d(isrc, itsrc_in) - qsrc_d(isrc, itsrc_in - 1)) * w
+      !
+   end subroutine k_source_interp
+   !
+   ! Per-drainage flow compute kernel. Mirrors CPU sibling lines 65-343.
+   ! One thread per drainage structure; each writes qtsrc(jin), qtsrc(jout).
+   !
+   attributes(global) subroutine k_drainage(ndrn_in, nsrc_in, t_in, dt, &
+                                            subgrid_in, structure_relax_in, g_in)
+      !
+      implicit none
+      !
+      integer, value :: ndrn_in
+      integer, value :: nsrc_in
+      real*4,  value :: t_in
+      real*4,  value :: dt
+      logical, value :: subgrid_in
+      real*4,  value :: structure_relax_in
+      real*4,  value :: g_in
+      !
+      integer :: idrn, jin, jout, nmin, nmout
+      real*4  :: qq, qq0
+      real*4  :: dzds, frac, wdt, zsill, zmin_p, zmax_p, mng, hgate, dfrac
+      real*4  :: tcls, topen, tclose
+      real*4  :: relax
+      !
+      idrn = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (idrn > ndrn_in) return
+      !
+      jin  = nsrc_in + idrn * 2 - 1
+      jout = nsrc_in + idrn * 2
+      !
+      nmin  = nmindsrc(jin)
+      nmout = nmindsrc(jout)
+      !
+      if (nmin <= 0 .or. nmout <= 0) return
+      !
+      qq = 0.0
+      !
+      select case(drainage_type(idrn))
+         !
+         case(1)
+            !
+            ! Pump
+            !
+            qq = drainage_params(idrn, 1)
+            !
+         case(2)
+            !
+            ! Culvert
+            !
+            if (zs(nmin) > zs(nmout)) then
+               qq =  drainage_params(idrn, 1) * sqrt(real(zs(nmin) - zs(nmout), kind=4))
+            else
+               qq = -drainage_params(idrn, 1) * sqrt(real(zs(nmout) - zs(nmin), kind=4))
+            endif
+            !
+         case(3)
+            !
+            ! Check valve (culvert that only flows from intake to outfall)
+            !
+            if (zs(nmin) > zs(nmout)) then
+               qq =  drainage_params(idrn, 1) * sqrt(real(zs(nmin) - zs(nmout), kind=4))
+            else
+               qq = -drainage_params(idrn, 1) * sqrt(real(zs(nmout) - zs(nmin), kind=4))
+            endif
+            qq = max(qq, 0.0)
+            !
+         case(4)
+            !
+            ! Controlled gate (open when zmin < zs(intake) < zmax)
+            !
+            wdt    = drainage_params(idrn, 1)
+            zsill  = drainage_params(idrn, 2)
+            mng    = drainage_params(idrn, 3)
+            zmin_p = drainage_params(idrn, 4)
+            zmax_p = drainage_params(idrn, 5)
+            tcls   = drainage_params(idrn, 6)
+            !
+            dzds  = real((zs(nmout) - zs(nmin)) / drainage_distance_d(idrn), kind=4)
+            frac  = drainage_fraction_open_d(idrn)
+            hgate = max(real(max(zs(nmin), zs(nmout)) - zsill, kind=4), 0.0)
+            dfrac = dt / tcls
+            !
+            qq0 = -qtsrc(jin) / (wdt * max(frac, 0.001))
+            !
+            if (drainage_status_d(idrn) == 0) then
+               if (zs(nmin) > zmin_p .and. zs(nmin) < zmax_p) then
+                  drainage_status_d(idrn) = 3
+               endif
+            elseif (drainage_status_d(idrn) == 1) then
+               if (zs(nmin) <= zmin_p .or. zs(nmin) >= zmax_p) then
+                  drainage_status_d(idrn) = 2
+               endif
+            endif
+            !
+            if (drainage_status_d(idrn) == 2) then
+               frac = frac - dfrac
+               if (frac < 0.0) then
+                  frac = 0.0
+                  drainage_status_d(idrn) = 0
+               endif
+            elseif (drainage_status_d(idrn) == 3) then
+               frac = frac + dfrac
+               if (frac > 1.0) then
+                  frac = 1.0
+                  drainage_status_d(idrn) = 1
+               endif
+            endif
+            !
+            drainage_fraction_open_d(idrn) = frac
+            !
+            qq = (qq0 - g_in * hgate * dzds * dt) / &
+                 (1.0 + g_in * mng**2 * dt * abs(qq0) / hgate**(7.0 / 3.0))
+            qq = qq * wdt * frac
+            !
+         case(5)
+            !
+            ! Controlled gate (opens/closes once at user-set times)
+            !
+            wdt    = drainage_params(idrn, 1)
+            zsill  = drainage_params(idrn, 2)
+            mng    = drainage_params(idrn, 3)
+            tclose = drainage_params(idrn, 4)
+            topen  = drainage_params(idrn, 5)
+            tcls   = drainage_params(idrn, 6)
+            !
+            dzds  = real((zs(nmout) - zs(nmin)) / drainage_distance_d(idrn), kind=4)
+            frac  = drainage_fraction_open_d(idrn)
+            hgate = max(real(max(zs(nmin), zs(nmout)) - zsill, kind=4), 0.0)
+            dfrac = dt / tcls
+            !
+            qq0 = -qtsrc(jin) / (wdt * max(frac, 0.001))
+            !
+            if (drainage_status_d(idrn) == 0) then
+               if (t_in >= topen) drainage_status_d(idrn) = 3
+            elseif (drainage_status_d(idrn) == 1) then
+               if (t_in >= tclose .and. t_in < topen) drainage_status_d(idrn) = 2
+            endif
+            !
+            if (drainage_status_d(idrn) == 2) then
+               frac = frac - dfrac
+               if (frac < 0.0) then
+                  frac = 0.0
+                  drainage_status_d(idrn) = 0
+               endif
+            elseif (drainage_status_d(idrn) == 3) then
+               frac = frac + dfrac
+               if (frac > 1.0) then
+                  frac = 1.0
+                  drainage_status_d(idrn) = 1
+               endif
+            endif
+            !
+            drainage_fraction_open_d(idrn) = frac
+            !
+            qq = (qq0 - g_in * hgate * dzds * dt) / &
+                 (1.0 + g_in * mng**2 * dt * abs(qq0) / hgate**(7.0 / 3.0))
+            qq = qq * wdt * frac
+            !
+         case default
+            return
+            !
+      end select
+      !
+      ! Relaxation: structure_relax (s) controls the new/old discharge ratio
+      !
+      relax = 1.0 / (structure_relax_in / dt)
+      qq = relax * qq + (1.0 - relax) * (-qtsrc(jin))
+      !
+      ! Limit discharge based on available volume in cell
+      !
+      if (subgrid_in) then
+         if (qq > 0.0) then
+            qq = min(qq, max(real(z_volume(nmin), kind=4), 0.0) / dt)
+         else
+            qq = max(qq, -max(real(z_volume(nmout), kind=4), 0.0) / dt)
+         endif
+      else
+         if (qq > 0.0) then
+            qq = min(qq, &
+                     max(real((zs(nmin) - zb(nmin)) * cell_area(z_flags_iref(nmin)), kind=4), 0.0) / dt)
+         else
+            qq = max(qq, &
+                     -max(real((zs(nmout) - zb(nmout)) * cell_area(z_flags_iref(nmout)), kind=4), 0.0) / dt)
+         endif
+      endif
+      !
+      qtsrc(jin)  = -qq
+      qtsrc(jout) =  qq
+      !
+   end subroutine k_drainage
+   !
+end module sfincs_discharges
