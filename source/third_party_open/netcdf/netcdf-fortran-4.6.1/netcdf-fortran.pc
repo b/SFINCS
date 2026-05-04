@@ -1,0 +1,16 @@
+prefix=/home/b/development/github/Deltares/SFINCS/.sorcerer/wizards/aa5bf908-0c84-4519-82fe-9b00a07f5303/issues/SOR-670/trees/b-SFINCS/source/install_cpu
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+fmoddir=${includedir}
+ccompiler=gcc
+fcompiler=gfortran
+
+Name: netcdf-fortran
+Description: NetCDF Client Library for Fortran
+URL: https://www.unidata.ucar.edu/netcdf
+Version: 4.6.2-development
+Requires.private: netcdf > 4.1.1
+Libs: -L${libdir} -lnetcdff
+Libs.private: -L${libdir} -lnetcdff -lnetcdf
+Cflags: -I${includedir} -I${fmoddir}

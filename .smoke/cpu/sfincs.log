@@ -1,0 +1,119 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Reading input file ...
+Warning : no EPSG code defined
+Info    : input grid interpreted as projected coordinates
+Info    : turning off Coriolis
+Info    : no Coriolis, as latitude is not specified in sfincs.inp
+Info    : running SFINCS with regular bathymetry
+Info    : storing maximum depth in subgrid cell for hmax output
+Info    : turning on advection
+Info    : advection scheme : first-order upwind
+Reading meteo data ...
+Preparing domain ...
+Info    : using regular mesh
+Info : reading ASCII input ...
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :        50
+Number of active u/v points    :        85
+Reading dep file : sfincs.dep
+Info    : initializing initial water level input
+Info    : reading binary initial conditions file sfincs.ini
+Info    : reading zsini file sfincs.ini
+Warning : binary ini files from SFINCS v2.1.1 and older are not compatible with SFINCS v2.1.2+, remake your inifile containing zs as real*8 double precision
+Info    : reading weir file
+Info    : 5 structure u/v points found
+Info    : reading observation points
+Info    : observation point 1 : "station_001" nm=28 n=3 m=6 iref=1 z=-2.000
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+Initializing output ...
+
+---------- Starting simulation -----------
+---- Using 128 of 128 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,     0.1 s remaining ...
+  11% complete,     0.1 s remaining ...
+  17% complete,     0.0 s remaining ...
+  22% complete,     0.0 s remaining ...
+  27% complete,     0.0 s remaining ...
+  33% complete,     0.0 s remaining ...
+  39% complete,     0.0 s remaining ...
+  45% complete,     0.0 s remaining ...
+  51% complete,     0.0 s remaining ...
+  57% complete,     0.0 s remaining ...
+  63% complete,     0.0 s remaining ...
+  69% complete,     0.0 s remaining ...
+  75% complete,     0.0 s remaining ...
+  81% complete,     0.0 s remaining ...
+  87% complete,     0.0 s remaining ...
+  93% complete,     0.0 s remaining ...
+  99% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :      0.021
+ Total simulation time  :      0.015
+ Time in input          :      0.006
+ Time in momentum       :      0.013 ( 83.9%)
+ Time in structures     :      0.000 (  0.0%)
+ Time in continuity     :      0.002 ( 12.9%)
+ Time in output         :      0.001 (  6.5%)
+
+ Average time step (s)  :      8.871
+
+----------- Closing off SFINCS -----------

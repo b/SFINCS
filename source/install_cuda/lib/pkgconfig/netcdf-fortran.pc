@@ -1,0 +1,16 @@
+prefix=/work/source/install_cuda
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+fmoddir=${includedir}
+ccompiler=gcc
+fcompiler=nvfortran
+
+Name: netcdf-fortran
+Description: NetCDF Client Library for Fortran
+URL: https://www.unidata.ucar.edu/netcdf
+Version: 4.6.2-development
+Requires.private: netcdf > 4.1.1
+Libs: -L${libdir} -lnetcdff
+Libs.private: -L${libdir} -lnetcdff -lnetcdf
+Cflags: -I${includedir} -I${fmoddir}

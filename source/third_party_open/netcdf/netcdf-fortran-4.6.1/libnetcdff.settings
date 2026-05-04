@@ -1,0 +1,37 @@
+# NetCDF Fortran Configuration Summary
+==============================
+
+# General
+-------
+Library Version:		4.6.2-development
+Configured On:		        Mon May  4 11:56:15 UTC 2026
+Host System:		        x86_64-pc-linux-gnu
+Build Directory: 	        /home/b/development/github/Deltares/SFINCS/.sorcerer/wizards/aa5bf908-0c84-4519-82fe-9b00a07f5303/issues/SOR-670/trees/b-SFINCS/source/third_party_open/netcdf/netcdf-fortran-4.6.1
+Install Prefix:                 /home/b/development/github/Deltares/SFINCS/.sorcerer/wizards/aa5bf908-0c84-4519-82fe-9b00a07f5303/issues/SOR-670/trees/b-SFINCS/source/install_cpu
+
+# Compiling Options
+-----------------
+Fortran Compiler:               /usr/bin/gfortran
+FFLAGS:                         -g -O2 -fallow-argument-mismatch
+LDFLAGS:		        
+C Compiler:                     gcc
+CPPFLAGS:                       
+CFLAGS:                         -g -O2 -DLONGLONG_IS_LONG
+Shared Library:		        no
+Static Library:		        yes
+Extra libraries:	        -lnetcdf -lm 
+
+# Features
+--------
+F03:                            yes
+Dap Support:                    yes
+Logging Support:                yes
+NetCDF-2 API:                   yes
+NetCDF-4 API:                   yes
+CDF5 Support:                   yes
+Parallel IO:                    no
+NetCDF4 Parallel IO:            no
+PnetCDF Parallel IO:            no
+SZIP Write Support:             yes
+Zstandard Support:              no 
+Quantize:  			yes
