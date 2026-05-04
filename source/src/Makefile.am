@@ -52,6 +52,7 @@ libsfincs_la_SOURCES += \
 	sfincs_boundaries.f90 \
 	sfincs_continuity_gpu.cuf \
 	sfincs_crosssections.f90 \
+	sfincs_discharges_io.f90 \
 	sfincs_discharges.f90 \
 	sfincs_subgrid.F90 \
 	sfincs_timestep_analysis.f90 \
@@ -103,6 +104,7 @@ libsfincs_la_SOURCES += \
 	sfincs_boundaries.f90 \
 	sfincs_continuity.f90 \
 	sfincs_crosssections.f90 \
+	sfincs_discharges_io.f90 \
 	sfincs_discharges.f90 \
 	sfincs_subgrid.F90 \
 	sfincs_timestep_analysis.f90 \
