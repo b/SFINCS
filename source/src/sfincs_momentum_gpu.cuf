@@ -1,0 +1,639 @@
+module sfincs_momentum
+   !
+   ! GPU sibling of source/src/sfincs_momentum.f90.
+   !
+   ! Implements compute_fluxes(dt, tloop) as a native CUDA Fortran kernel that
+   ! consumes the device-resident catalog declared by sfincs_data_device. The
+   ! per-rank min_dt reduction lands in the host scalar `min_dt` from
+   ! sfincs_data after one final D2H copy.
+   !
+   ! Bridge convention (gpu-foundation): host-side `use sfincs_data` arrays are
+   ! suffixed _h via USE-rename; device-side `use sfincs_data_device` arrays
+   ! keep their bare names. CUDA Fortran translates `<dev> = <host>` (and
+   ! vice versa) to cudaMemcpy at the assignment level. This bridge stays in
+   ! place until the surrounding modules (continuity, etc.) become GPU
+   ! resident, at which point the bandwidth waste becomes harmless.
+   !
+   use cudafor
+   use iso_fortran_env, only: int32
+   use sfincs_data_device
+   !
+   implicit none
+   !
+   private
+   public :: compute_fluxes
+   !
+   integer, parameter :: TPB = 128   ! threads per block
+   !
+   ! Allocator-free device scalar holding the running minimum dt encoded as
+   ! its IEEE 754 bit pattern. A non-allocatable `device` scalar lives in
+   ! global memory for the whole program; no scratch array, no finalize hook.
+   !
+   integer(int32), device :: min_dt_int_d
+   !
+contains
+   !
+   ! ===================================================================
+   ! Public dispatch.
+   ! ===================================================================
+   subroutine compute_fluxes(dt, tloop)
+      !
+      ! min_dt reduction (strategy a): per-thread atomicmin on the int32 IEEE
+      ! 754 bit pattern of min_dt_ip; positive floats order monotonically.
+      !
+      use sfincs_data, only: &
+         min_dt_h => min_dt, &
+         ncuv_h => ncuv, &
+         dtmax_h => dtmax, &
+         theta_h => theta, &
+         g_h => g, &
+         fcorio_h => fcorio, &
+         rhow_h => rhow, &
+         huthresh_h => huthresh, &
+         huvmin_h => huvmin, &
+         uvlim_h => uvlim, &
+         advlim_h => advlim, &
+         slopelim_h => slopelim, &
+         nuviscfac_h => nuviscfac, &
+         wiggle_factor_h => wiggle_factor, &
+         wiggle_threshold_h => wiggle_threshold, &
+         subgrid_nlevels_h => subgrid_nlevels, &
+         advection_scheme_h => advection_scheme, &
+         advection_h => advection, &
+         coriolis_h => coriolis, &
+         viscosity_h => viscosity, &
+         friction2d_h => friction2d, &
+         thetasmoothing_h => thetasmoothing, &
+         h73table_h => h73table, &
+         wave_enhanced_roughness_h => wave_enhanced_roughness, &
+         wiggle_suppression_h => wiggle_suppression, &
+         use_quadtree_h => use_quadtree, &
+         crsgeo_h => crsgeo, &
+         timestep_analysis_h => timestep_analysis, &
+         subgrid_h => subgrid, &
+         wind_h => wind, &
+         patmos_h => patmos, &
+         snapwave_h => snapwave, &
+         q_h => q, q0_h => q0, uv_h => uv, uv0_h => uv0, &
+         timestep_analysis_required_timestep_h => timestep_analysis_required_timestep
+      !
+      implicit none
+      !
+      real*4    :: dt
+      real      :: tloop
+      !
+      integer   :: count0, count1, count_rate, count_max
+      integer   :: blocks
+      integer   :: istat
+      integer(int32) :: min_dt_int_h
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      ! ------ Seed q0/uv0 from q/uv (covers full 1..npuv+ncuv range) -------
+      !
+      q0  = q
+      uv0 = uv
+      !
+      ! ------ Seed device-side min_dt accumulator with dtmax (host scalar) -
+      !
+      min_dt_int_d = transfer(dtmax_h, 0_int32)
+      !
+      ! ------ Main per-uv kernel ------------------------------------------
+      !
+      blocks = (npuv_local + TPB - 1) / TPB
+      !
+      call k_compute_fluxes<<<blocks, TPB>>>( &
+         dt, npuv_local, &
+         subgrid_h, advection_h, coriolis_h, viscosity_h, friction2d_h, &
+         thetasmoothing_h, advection_scheme_h, h73table_h, &
+         wave_enhanced_roughness_h, wiggle_suppression_h, &
+         use_quadtree_h, crsgeo_h, timestep_analysis_h, &
+         wind_h, patmos_h, snapwave_h, &
+         g_h, fcorio_h, rhow_h, dtmax_h, theta_h, &
+         slopelim_h, advlim_h, uvlim_h, huvmin_h, huthresh_h, &
+         nuviscfac_h, wiggle_factor_h, wiggle_threshold_h, &
+         subgrid_nlevels_h)
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      ! ------ Combined-uv averaging post-kernel ---------------------------
+      !
+      if (ncuv_h > 0) then
+         blocks = (ncuv_h + TPB - 1) / TPB
+         call k_combined_uv<<<blocks, TPB>>>(ncuv_h)
+         istat = cudaDeviceSynchronize()
+      endif
+      !
+      ! ------ Copy-OUT: device -> host for WRITE set ----------------------
+      !
+      q_h   = q
+      q0_h  = q0
+      uv_h  = uv
+      uv0_h = uv0
+      !
+      min_dt_int_h = min_dt_int_d
+      min_dt_h     = transfer(min_dt_int_h, 0.0_4)
+      !
+      if (timestep_analysis_h) then
+         timestep_analysis_required_timestep_h = timestep_analysis_required_timestep
+      endif
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0 * (count1 - count0) / count_rate
+      !
+   end subroutine compute_fluxes
+   !
+   ! ===================================================================
+   !                              KERNELS
+   ! ===================================================================
+   !
+   ! Per-uv kernel mirroring sfincs_momentum.f90:142-733.
+   !
+   attributes(global) subroutine k_compute_fluxes(dt, npuv_in, &
+         subgrid_in, advection_in, coriolis_in, viscosity_in, friction2d_in, &
+         thetasmoothing_in, advection_scheme_in, h73table_in, &
+         wave_enhanced_roughness_in, wiggle_suppression_in, &
+         use_quadtree_in, crsgeo_in, timestep_analysis_in, &
+         wind_in, patmos_in, snapwave_in, &
+         g_in, fcorio_in, rhow_in, dtmax_in, theta_in, &
+         slopelim_in, advlim_in, uvlim_in, huvmin_in, huthresh_in, &
+         nuviscfac_in, wiggle_factor_in, wiggle_threshold_in, &
+         subgrid_nlevels_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: npuv_in
+      logical, value :: subgrid_in
+      logical, value :: advection_in
+      logical, value :: coriolis_in
+      logical, value :: viscosity_in
+      logical, value :: friction2d_in
+      logical, value :: thetasmoothing_in
+      integer, value :: advection_scheme_in
+      logical, value :: h73table_in
+      logical, value :: wave_enhanced_roughness_in
+      logical, value :: wiggle_suppression_in
+      logical, value :: use_quadtree_in
+      logical, value :: crsgeo_in
+      logical, value :: timestep_analysis_in
+      logical, value :: wind_in
+      logical, value :: patmos_in
+      logical, value :: snapwave_in
+      real*4,  value :: g_in
+      real*4,  value :: fcorio_in
+      real*4,  value :: rhow_in
+      real*4,  value :: dtmax_in
+      real*4,  value :: theta_in
+      real*4,  value :: slopelim_in
+      real*4,  value :: advlim_in
+      real*4,  value :: uvlim_in
+      real*4,  value :: huvmin_in
+      real*4,  value :: huthresh_in
+      real*4,  value :: nuviscfac_in
+      real*4,  value :: wiggle_factor_in
+      real*4,  value :: wiggle_threshold_in
+      integer, value :: subgrid_nlevels_in
+      !
+      integer :: ip, nm, nmu
+      integer :: idir, iref, itype, iuv
+      integer :: istat
+      logical :: iok
+      !
+      real*4 :: hu, hwet, phi
+      real*4 :: dxuvinv, dyuvinv, dxuv2inv, dyuv2inv
+      real*4 :: fcoriouv
+      real*4 :: zsu, zmin, zmax, dzuv, facint
+      real*4 :: dzdx, frc, adv
+      real*4 :: dqxudx, dqyudy
+      real*4 :: qx_nm, qx_nmd, qx_nmu
+      real*4 :: qy_nm, qy_nmu, qy_ndm, qy_ndmu
+      real*4 :: uu_nm, uu_nmd, uu_nmu, uu_ndm, uu_num
+      real*4 :: vu, qy
+      real*4 :: qu, qd, uu, ud
+      real*4 :: gnavg2, qfr, qsm, hu73, fwmax
+      real*4 :: mdrv
+      real*4 :: min_dt_ip
+      !
+      real*4, parameter :: expo = 1.0 / 3.0
+      !
+      ip = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (ip > npuv_in) return
+      !
+      ! Reset per-cell timestep slot; dry cells retain dtmax_in.
+      !
+      if (timestep_analysis_in) then
+         timestep_analysis_required_timestep(ip) = dtmax_in
+      endif
+      !
+      if (.not. (kcuv(ip) == 1 .or. kcuv(ip) == 6)) return
+      !
+      ! Indices of surrounding water level points.
+      !
+      nm  = uv_index_z_nm(ip)
+      nmu = uv_index_z_nmu(ip)
+      !
+      iok = .false.
+      zsu = max(real(zs(nm), kind=4), real(zs(nmu), kind=4))
+      !
+      if (subgrid_in) then
+         zmin = subgrid_uv_zmin(ip)
+         zmax = subgrid_uv_zmax(ip)
+         if (zsu > zmin + huthresh_in) iok = .true.
+      else
+         if (zsu > zbuvmx(ip)) iok = .true.
+      endif
+      !
+      if (.not. iok) then
+         q(ip)    = 0.0
+         uv(ip)   = 0.0
+         kfuv(ip) = 0
+         return
+      endif
+      !
+      ! UV point is wet.
+      !
+      if (use_quadtree_in) then
+         iref  = uv_flags_iref(ip)
+         itype = uv_flags_type(ip)
+      else
+         iref  = 1
+         itype = 0
+      endif
+      idir = uv_flags_dir(ip)
+      !
+      ! Grid spacing (and Coriolis factor).
+      !
+      if (crsgeo_in) then
+         if (itype == 0) then
+            if (idir == 0) then
+               dxuvinv  = dxminv(ip)
+               dyuvinv  = dyrinv(iref)
+               dxuv2inv = dxm2inv(ip)
+               dyuv2inv = dyr2inv(iref)
+            else
+               dxuvinv  = dyrinv(iref)
+               dyuvinv  = dxminv(ip)
+               dxuv2inv = dyr2inv(iref)
+               dyuv2inv = dxm2inv(ip)
+            endif
+         else
+            if (idir == 0) then
+               dxuvinv  = 1.0 / (3 * (1.0 / dxminv(ip)) / 2)
+               dyuvinv  = dyrinv(iref)
+               dxuv2inv = 0.0
+               dyuv2inv = dyr2inv(iref)
+            else
+               dxuvinv  = 1.0 / (3 * (1.0 / dyrinv(iref)) / 2)
+               dyuvinv  = dxminv(ip)
+               dxuv2inv = 0.0
+               dyuv2inv = dxm2inv(ip)
+            endif
+         endif
+         fcoriouv = fcorio2d(nm)
+      else
+         if (itype == 0) then
+            if (idir == 0) then
+               dxuvinv  = dxrinv(iref)
+               dyuvinv  = dyrinv(iref)
+               dxuv2inv = dxr2inv(iref)
+               dyuv2inv = dyr2inv(iref)
+            else
+               dxuvinv  = dyrinv(iref)
+               dyuvinv  = dxrinv(iref)
+               dxuv2inv = dyr2inv(iref)
+               dyuv2inv = dxr2inv(iref)
+            endif
+         else
+            if (idir == 0) then
+               dxuvinv  = dxrinvc(iref)
+               dyuvinv  = dyrinv(iref)
+               dxuv2inv = 0.0
+               dyuv2inv = dyr2inv(iref)
+            else
+               dxuvinv  = dyrinvc(iref)
+               dyuvinv  = dxrinv(iref)
+               dxuv2inv = 0.0
+               dyuv2inv = dxr2inv(iref)
+            endif
+         endif
+         fcoriouv = fcorio_in
+      endif
+      !
+      ! Previous-timestep flux/velocity at this cell and neighbours.
+      !
+      qx_nm = q0(ip)
+      !
+      if (advection_in .or. coriolis_in .or. viscosity_in .or. &
+          friction2d_in .or. thetasmoothing_in) then
+         qx_nmd  = q0(uv_index_u_nmd(ip))
+         qx_nmu  = q0(uv_index_u_nmu(ip))
+         qy_nm   = q0(uv_index_v_nm(ip))
+         qy_nmu  = q0(uv_index_v_nmu(ip))
+         qy_ndm  = q0(uv_index_v_ndm(ip))
+         qy_ndmu = q0(uv_index_v_ndmu(ip))
+         !
+         uu_nm   = uv0(ip)
+         uu_nmd  = uv0(uv_index_u_nmd(ip))
+         uu_nmu  = uv0(uv_index_u_nmu(ip))
+         uu_ndm  = uv0(uv_index_u_ndm(ip))
+         uu_num  = uv0(uv_index_u_num(ip))
+         vu      = (uv0(uv_index_v_ndm(ip))  + uv0(uv_index_v_ndmu(ip)) + &
+                    uv0(uv_index_v_nm(ip))   + uv0(uv_index_v_nmu(ip))) / 4
+      else
+         qx_nmd = 0.0; qx_nmu = 0.0
+         qy_nm  = 0.0; qy_nmu = 0.0
+         qy_ndm = 0.0; qy_ndmu = 0.0
+         uu_nm  = uv0(ip)
+         uu_nmd = 0.0; uu_nmu = 0.0
+         uu_ndm = 0.0; uu_num = 0.0
+         vu     = 0.0
+      endif
+      !
+      phi = 1.0
+      !
+      ! Water depth at uv point.
+      !
+      if (subgrid_in) then
+         if (zsu > zmax) then
+            hu = subgrid_uv_havg_zmax(ip) + zsu
+            if (wave_enhanced_roughness_in) then
+               gnavg2 = gnapp2(ip)
+            else
+               gnavg2 = subgrid_uv_navg_w(ip) - &
+                        (subgrid_uv_navg_w(ip) - subgrid_uv_nrep_zmax(ip)) / &
+                        (subgrid_uv_fnfit(ip) * (zsu - zmax) + 1.0)
+            endif
+         else
+            dzuv   = (zmax - zmin) / (subgrid_nlevels_in - 1)
+            iuv    = min(int((zsu - zmin) / dzuv) + 1, subgrid_nlevels_in - 1)
+            facint = (zsu - (zmin + (iuv - 1) * dzuv)) / dzuv
+            hu     = subgrid_uv_havg(iuv, ip) + &
+                     (subgrid_uv_havg(iuv + 1, ip) - subgrid_uv_havg(iuv, ip)) * facint
+            gnavg2 = subgrid_uv_nrep(iuv, ip) + &
+                     (subgrid_uv_nrep(iuv + 1, ip) - subgrid_uv_nrep(iuv, ip)) * facint
+            phi    = subgrid_uv_pwet(iuv, ip) + &
+                     (subgrid_uv_pwet(iuv + 1, ip) - subgrid_uv_pwet(iuv, ip)) * facint
+         endif
+      else
+         hu     = max(zsu - zbuvmx(ip), huthresh_in)
+         gnavg2 = gn2uv(ip)
+      endif
+      !
+      hwet = hu / phi
+      !
+      ! ===== FORCING TERMS =====
+      !
+      ! Pressure term (with optional slope limiter).
+      !
+      if (slopelim_in < 9999.0) then
+         dzdx = min(max((real(zs(nmu), kind=4) - real(zs(nm), kind=4)) * dxuvinv, &
+                        -slopelim_in), slopelim_in)
+      else
+         dzdx = (real(zs(nmu), kind=4) - real(zs(nm), kind=4)) * dxuvinv
+      endif
+      frc = -g_in * hu * dzdx
+      !
+      ! Advection term.
+      !
+      if (advection_in) then
+         if (mask_adv(ip) == 1) then
+            dqxudx = 0.0
+            dqyudy = 0.0
+            !
+            if (advection_scheme_in == 0) then
+               !
+               ! Original (not great, robust).
+               !
+               if (qx_nm > 1.0e-6) then
+                  dqxudx = (qx_nm * uu_nm - qx_nmd * uu_nmd) * dxuvinv
+               elseif (qx_nm < -1.0e-6) then
+                  dqxudx = (qx_nmu * uu_nmu - qx_nm * uu_nm) * dxuvinv
+               endif
+               !
+               qy = qy_ndm + qy_ndmu + qy_nm + qy_nmu
+               if (qy > 1.0e-6) then
+                  dqyudy = (qy_ndm + qy_ndmu) * (uu_nm - uu_ndm) * dyuvinv / 2
+               elseif (qy < -1.0e-6) then
+                  dqyudy = (qy_nm + qy_nmu) * (uu_num - uu_nm) * dyuvinv / 2
+               endif
+               !
+            elseif (advection_scheme_in == 1) then
+               !
+               ! 1st-order upwind (upw1).
+               !
+               qd = (qx_nmd + qx_nm) / 2
+               qu = (qx_nm  + qx_nmu) / 2
+               !
+               if (qd > 1.0e-6) then
+                  ud     = (uu_nmd + uu_nm) / 2
+                  dqxudx = (qd * (uu_nm - uu_nmd) + ud * (qx_nm - qx_nmd)) * dxuvinv
+               endif
+               if (qu < -1.0e-6) then
+                  uu     = (uu_nm + uu_nmu) / 2
+                  dqxudx = dqxudx + (qu * (uu_nmu - uu_nm) + uu * (qx_nmu - qx_nm)) * dxuvinv
+               endif
+               !
+               qu = (qy_nm  + qy_nmu) / 2
+               qd = (qy_ndm + qy_ndmu) / 2
+               if (qd > 1.0e-6) dqyudy = qd * (uu_nm - uu_ndm) * dyuvinv
+               if (qu < -1.0e-6) dqyudy = dqyudy + qu * (uu_num - uu_nm) * dyuvinv
+               !
+               ud = (uu_nmd + uu_nm) / 2
+               uu = (uu_nm  + uu_nmu) / 2
+               if (ud > 1.0e-6) dqyudy = dqyudy + ud * (qy_nm  - qy_ndm)  * dyuvinv
+               if (uu < -1.0e-6) dqyudy = dqyudy + uu * (qy_nmu - qy_ndmu) * dyuvinv
+            endif
+            !
+            adv = -phi * (dqxudx + dqyudy)
+            adv = min(max(adv, -advlim_in * hu), advlim_in * hu)
+            frc = frc + adv
+         endif
+      endif
+      !
+      ! Viscosity term.
+      !
+      if (viscosity_in) then
+         if (itype == 0) then
+            frc = frc + nuvisc(iref) * hu * &
+                  ((uu_nmu - 2 * uu_nm + uu_nmd) * dxuv2inv + &
+                   (uu_num - 2 * uu_nm + uu_ndm) * dyuv2inv)
+         else
+            frc = frc + nuviscfac_in * nuvisc(iref) * hu * &
+                  ((uu_nmu - 2 * uu_nm + uu_nmd) * dxuv2inv + &
+                   (uu_num - 2 * uu_nm + uu_ndm) * dyuv2inv)
+         endif
+      endif
+      !
+      ! Coriolis term.
+      !
+      if (coriolis_in) then
+         if (idir == 0) then
+            frc = frc + fcoriouv * hu * vu
+         else
+            frc = frc - fcoriouv * hu * vu
+         endif
+      endif
+      !
+      ! Wind forcing.
+      !
+      if (wind_in) then
+         if (hwet > 0.25) then
+            if (idir == 0) then
+               frc = frc + phi * tauwu(nm)
+            else
+               frc = frc + phi * tauwv(nm)
+            endif
+         else
+            if (idir == 0) then
+               frc = frc + tauwu(nm) * hu * 4
+            else
+               frc = frc + tauwv(nm) * hu * 4
+            endif
+         endif
+      endif
+      !
+      ! Atmospheric pressure.
+      !
+      if (patmos_in) then
+         frc = frc + hu * (patm(nm) - patm(nmu)) * dxuvinv / rhow_in
+      endif
+      !
+      ! Wave forcing (depth-limited).
+      !
+      if (snapwave_in) then
+         fwmax = 0.8 * hwet * sqrt(hwet) / 15
+         frc   = frc + phi * sign(min(abs(fwuv(ip)), fwmax), fwuv(ip))
+      endif
+      !
+      ! Friction flux qfr.
+      !
+      if (kfuv(ip) == 0) then
+         qfr = sqrt(abs(dzdx) / (max(gnavg2, 1.0e-5) / 10)) * hu ** (5.0 / 3.0)
+      else
+         if (friction2d_in) then
+            qfr = sqrt(qx_nm**2 + (hu * vu)**2)
+         else
+            qfr = abs(qx_nm)
+         endif
+      endif
+      !
+      ! Optional theta-smoothing (legacy).
+      !
+      qsm = qx_nm
+      if (thetasmoothing_in) then
+         if (kcuv(uv_index_u_nmd(ip)) == 1 .and. kcuv(uv_index_u_nmu(ip)) == 1) then
+            if (abs(qx_nmd) > 1.0e-6 .and. abs(qx_nmu) > 1.0e-6) then
+               qsm = theta_in * qx_nm + 0.5 * (1.0 - theta_in) * (qx_nmu + qx_nmd)
+            endif
+         endif
+      endif
+      !
+      ! New flux (Bates et al. 2010).
+      !
+      if (h73table_in) then
+         hu73 = power7over3_dev(max(hu, 1.0e-6))
+      else
+         hu73 = hu**2 * hu**expo
+      endif
+      !
+      q(ip) = (qsm + frc * dt) / (1.0 + gnavg2 * dt * qfr / hu73)
+      !
+      ! Wiggle suppression (subgrid only).
+      !
+      if (subgrid_in .and. wiggle_suppression_in) then
+         mdrv = abs(zsderv(nm) - zsderv(nmu)) - wiggle_threshold_in
+         if (mdrv > 0.0) then
+            q(ip) = q(ip) * wiggle_threshold_in / (wiggle_factor_in * mdrv + wiggle_threshold_in)
+         endif
+      endif
+      !
+      ! Disallow water leaving a cell with negative depth.
+      !
+      if (subgrid_in) then
+         if (z_volume(nm)  < 0.0) q(ip) = min(q(ip), 0.0)
+         if (z_volume(nmu) < 0.0) q(ip) = max(q(ip), 0.0)
+      else
+         if (zs(nm)  < zb(nm))  q(ip) = min(q(ip), 0.0)
+         if (zs(nmu) < zb(nmu)) q(ip) = max(q(ip), 0.0)
+      endif
+      !
+      ! Flux limiter.
+      !
+      q(ip) = min(max(q(ip), -hu * uvlim_in), hu * uvlim_in)
+      !
+      ! Wet-averaged velocity (huvmin floors absurdly small subgrid hu).
+      !
+      uv(ip)   = q(ip) / max(hu, huvmin_in)
+      kfuv(ip) = 1
+      !
+      ! Per-uv timestep candidate; alfa is applied later in sfincs_lib.
+      !
+      min_dt_ip = 1.0 / (max(sqrt(g_in * hu), abs(uv(ip))) * dxuvinv)
+      !
+      ! Atomic min on IEEE 754 bit pattern. min_dt_ip > 0 by construction
+      ! (hu >= huthresh > 0 so sqrt(g*hu) > 0), so the int representation is
+      ! positive and signed-int order matches float order.
+      !
+      istat = atomicmin(min_dt_int_d, transfer(min_dt_ip, 0_int32))
+      !
+      if (timestep_analysis_in) then
+         timestep_analysis_required_timestep(ip) = min_dt_ip
+      endif
+      !
+   end subroutine k_compute_fluxes
+   !
+   ! Combined-uv averaging kernel mirroring sfincs_momentum.f90:737-756.
+   !
+   attributes(global) subroutine k_combined_uv(ncuv_in)
+      !
+      implicit none
+      !
+      integer, value :: ncuv_in
+      integer :: icuv
+      !
+      icuv = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (icuv > ncuv_in) return
+      !
+      q(cuv_index_uv(icuv))  = (q(cuv_index_uv1(icuv))  + q(cuv_index_uv2(icuv)))  / 2
+      uv(cuv_index_uv(icuv)) = (uv(cuv_index_uv1(icuv)) + uv(cuv_index_uv2(icuv))) / 2
+      !
+   end subroutine k_combined_uv
+   !
+   ! Device function mirroring the host `power7over3` lookup over the x73
+   ! table (declared in sfincs_data_device).
+   !
+   attributes(device) function power7over3_dev(hu) result(hu73)
+      !
+      implicit none
+      !
+      real*4, value :: hu
+      real*4        :: hu73
+      !
+      if (hu < 0.00001) then
+         hu73 = x73(int(1e8 * hu), 1)
+      elseif (hu < 0.0001) then
+         hu73 = x73(int(1e7 * hu), 2)
+      elseif (hu < 0.001) then
+         hu73 = x73(int(1e6 * hu), 3)
+      elseif (hu < 0.01) then
+         hu73 = x73(int(1e5 * hu), 4)
+      elseif (hu < 0.1) then
+         hu73 = x73(int(1e4 * hu), 5)
+      elseif (hu < 1.0) then
+         hu73 = x73(int(1e3 * hu), 6)
+      elseif (hu < 10.0) then
+         hu73 = x73(int(100 * hu), 7)
+      elseif (hu < 100.0) then
+         hu73 = x73(int(10 * hu), 8)
+      elseif (hu < 1000.0) then
+         hu73 = x73(int(1 * hu), 9)
+      elseif (hu < 10000.0) then
+         hu73 = x73(int(0.1 * hu), 10)
+      else
+         hu73 = 10000.0 ** (7.0 / 3.0)
+      endif
+      !
+   end function power7over3_dev
+   !
+end module sfincs_momentum

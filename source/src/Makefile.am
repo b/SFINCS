@@ -69,7 +69,7 @@ libsfincs_la_SOURCES += \
 	sfincs_nonhydrostatic.f90 \
 	sfincs_ncoutput.F90 \
 	sfincs_output.f90 \
-	sfincs_momentum.f90 \
+	sfincs_momentum_gpu.cuf \
 	sfincs_wavemaker_io.f90 \
 	sfincs_wavemaker.f90 \
 	sfincs_bathtub.f90 \
