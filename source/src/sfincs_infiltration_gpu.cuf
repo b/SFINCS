@@ -1,0 +1,477 @@
+module sfincs_infiltration
+   !
+   ! GPU sibling of source/src/sfincs_infiltration.f90.
+   !
+   ! Shadows the CPU module's public surface using native CUDA Fortran kernels
+   ! that operate on device-resident state declared by sfincs_data_device.
+   !
+   ! initialize_infiltration is re-exported from sfincs_infiltration_io (matches
+   ! the CPU sibling). update_infiltration_map is a host-side dispatcher that
+   ! launches one dedicated kernel per inftype branch.
+   !
+   ! Bridge-IN copies host -> device for the union of all per-branch READ sets
+   ! at the top of update_infiltration_map; Bridge-OUT copies device -> host
+   ! for the union of all per-branch WRITE sets at the end. Both legs are
+   ! required during the staging period because unported per-step modules read
+   ! and write only host arrays.
+   !
+   use cudafor
+   use sfincs_data_device
+   use sfincs_infiltration_io, only: initialize_infiltration
+   !
+   implicit none
+   !
+   private
+   public :: initialize_infiltration, &
+             update_infiltration_map
+   !
+   integer, parameter :: TPB = 128   ! threads per block, intentionally simple
+   !
+contains
+   !
+   ! -----------------------------------------------------------------
+   ! Per-step host dispatcher. Mirrors the CPU sibling's if/elseif on
+   ! inftype, launching one CUDA kernel per branch.
+   ! -----------------------------------------------------------------
+   subroutine update_infiltration_map(dt, tloop)
+      !
+      use sfincs_data, only: &
+         inftype_h => inftype, &
+         subgrid_h => subgrid, &
+         crsgeo_h  => crsgeo, &
+         sfacinf_h => sfacinf, &
+         horton_kr_kd_h => horton_kr_kd, &
+         store_cumulative_precipitation_h => store_cumulative_precipitation, &
+         qinfmap_h => qinfmap, &
+         qinffield_h => qinffield, &
+         cuminf_h => cuminf, &
+         scs_rain_h => scs_rain, &
+         scs_Se_h => scs_Se, &
+         scs_P1_h => scs_P1, &
+         scs_F1_h => scs_F1, &
+         scs_S1_h => scs_S1, &
+         rain_T1_h => rain_T1, &
+         ksfield_h => ksfield, &
+         GA_head_h => GA_head, &
+         GA_sigma_h => GA_sigma, &
+         GA_sigma_max_h => GA_sigma_max, &
+         GA_F_h => GA_F, &
+         GA_Lu_h => GA_Lu, &
+         inf_kr_h => inf_kr, &
+         horton_kd_h => horton_kd, &
+         horton_fc_h => horton_fc, &
+         horton_f0_h => horton_f0, &
+         prcp_h => prcp, &
+         cumprcp_h => cumprcp, &
+         netprcp_h => netprcp, &
+         z_volume_h => z_volume, &
+         zs_h => zs, &
+         zb_h => zb, &
+         cell_area_m2_h => cell_area_m2, &
+         cell_area_h => cell_area, &
+         z_flags_iref_h => z_flags_iref
+      !
+      implicit none
+      !
+      real*4  :: dt
+      real    :: tloop
+      !
+      integer :: count0
+      integer :: count1
+      integer :: count_rate
+      integer :: count_max
+      integer :: blocks
+      integer :: istat
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      ! ------ Copy-IN: host -> device (union of all branches' READ sets) ----
+      !
+      qinffield    = qinffield_h
+      prcp         = prcp_h
+      cumprcp      = cumprcp_h
+      ksfield      = ksfield_h
+      GA_sigma_max = GA_sigma_max_h
+      GA_Lu        = GA_Lu_h
+      inf_kr       = inf_kr_h
+      z_volume     = z_volume_h
+      zs           = zs_h
+      zb           = zb_h
+      cell_area_m2 = cell_area_m2_h
+      cell_area    = cell_area_h
+      z_flags_iref = z_flags_iref_h
+      !
+      ! Read-modify-write arrays: also need their current host values copied in
+      ! so kernels see prior step's results.
+      !
+      qinfmap      = qinfmap_h
+      cuminf       = cuminf_h
+      netprcp      = netprcp_h
+      scs_rain     = scs_rain_h
+      scs_Se       = scs_Se_h
+      scs_P1       = scs_P1_h
+      scs_F1       = scs_F1_h
+      scs_S1       = scs_S1_h
+      rain_T1      = rain_T1_h
+      GA_head      = GA_head_h
+      GA_sigma     = GA_sigma_h
+      GA_F         = GA_F_h
+      horton_kd    = horton_kd_h
+      horton_fc    = horton_fc_h
+      horton_f0    = horton_f0_h
+      !
+      blocks = (npn_local + TPB - 1) / TPB
+      !
+      ! ------ Host dispatch on inftype --------------------------------------
+      !
+      if (inftype_h == 'con' .or. inftype_h == 'c2d') then
+         !
+         call k_inf_constant<<<blocks, TPB>>>(dt, npn_local, &
+            subgrid_h, store_cumulative_precipitation_h)
+         istat = cudaDeviceSynchronize()
+         !
+      elseif (inftype_h == 'cna') then
+         !
+         call k_inf_cna<<<blocks, TPB>>>(dt, npn_local, sfacinf_h, &
+            store_cumulative_precipitation_h)
+         istat = cudaDeviceSynchronize()
+         !
+      elseif (inftype_h == 'cnb') then
+         !
+         call k_inf_cnb<<<blocks, TPB>>>(dt, npn_local, sfacinf_h, &
+            store_cumulative_precipitation_h)
+         istat = cudaDeviceSynchronize()
+         !
+      elseif (inftype_h == 'gai') then
+         !
+         call k_inf_gai<<<blocks, TPB>>>(dt, npn_local, &
+            store_cumulative_precipitation_h)
+         istat = cudaDeviceSynchronize()
+         !
+      elseif (inftype_h == 'hor') then
+         !
+         call k_inf_hor<<<blocks, TPB>>>(dt, npn_local, &
+            subgrid_h, crsgeo_h, horton_kr_kd_h, &
+            store_cumulative_precipitation_h)
+         istat = cudaDeviceSynchronize()
+         !
+      endif
+      !
+      ! ------ Copy-OUT: device -> host (union of all branches' WRITE sets) --
+      !
+      qinfmap_h  = qinfmap
+      netprcp_h  = netprcp
+      cuminf_h   = cuminf
+      scs_rain_h = scs_rain
+      scs_Se_h   = scs_Se
+      scs_P1_h   = scs_P1
+      scs_F1_h   = scs_F1
+      scs_S1_h   = scs_S1
+      rain_T1_h  = rain_T1
+      GA_head_h  = GA_head
+      GA_sigma_h = GA_sigma
+      GA_F_h     = GA_F
+      horton_kd_h = horton_kd
+      horton_fc_h = horton_fc
+      horton_f0_h = horton_f0
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0 * (count1 - count0) / count_rate
+      !
+   end subroutine update_infiltration_map
+   !
+   ! ===================================================================
+   !                              KERNELS
+   ! ===================================================================
+   !
+   ! -----------------------------------------------------------------
+   ! Constant rate ('con' / 'c2d'). Mirrors CPU sibling lines 32-73.
+   ! -----------------------------------------------------------------
+   attributes(global) subroutine k_inf_constant(dt, npn_in, &
+                                                subgrid_in, store_cumprcp_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: npn_in
+      logical, value :: subgrid_in
+      logical, value :: store_cumprcp_in
+      !
+      integer :: nm
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      qinfmap(nm) = qinffield(nm)
+      !
+      if (subgrid_in) then
+         if (z_volume(nm) <= 0.0) qinfmap(nm) = 0.0
+      else
+         if (zs(nm) <= zb(nm)) qinfmap(nm) = 0.0
+      endif
+      !
+      netprcp(nm) = netprcp(nm) - qinfmap(nm)
+      !
+      if (store_cumprcp_in) then
+         cuminf(nm) = cuminf(nm) + qinfmap(nm) * dt
+      endif
+      !
+   end subroutine k_inf_constant
+   !
+   ! -----------------------------------------------------------------
+   ! Curve Number, no recovery ('cna'). Mirrors CPU sibling lines 75-117.
+   ! -----------------------------------------------------------------
+   attributes(global) subroutine k_inf_cna(dt, npn_in, sfacinf_in, &
+                                           store_cumprcp_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: npn_in
+      real*4,  value :: sfacinf_in
+      logical, value :: store_cumprcp_in
+      !
+      integer :: nm
+      real*4  :: Qq, I
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      if (cumprcp(nm) > sfacinf_in * qinffield(nm)) then
+         !
+         Qq          = (cumprcp(nm) - sfacinf_in * qinffield(nm))**2 / &
+                       (cumprcp(nm) + (1.0 - sfacinf_in) * qinffield(nm))
+         I           = cumprcp(nm) - Qq
+         qinfmap(nm) = (I - cuminf(nm)) / dt
+         !
+      else
+         !
+         qinfmap(nm) = prcp(nm)
+         !
+      endif
+      !
+      netprcp(nm) = netprcp(nm) - qinfmap(nm)
+      !
+      if (store_cumprcp_in) then
+         cuminf(nm) = cuminf(nm) + qinfmap(nm) * dt
+      endif
+      !
+   end subroutine k_inf_cna
+   !
+   ! -----------------------------------------------------------------
+   ! Curve Number with recovery ('cnb'). Mirrors CPU sibling lines 118-219.
+   ! -----------------------------------------------------------------
+   attributes(global) subroutine k_inf_cnb(dt, npn_in, sfacinf_in, &
+                                           store_cumprcp_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: npn_in
+      real*4,  value :: sfacinf_in
+      logical, value :: store_cumprcp_in
+      !
+      integer :: nm
+      real*4  :: Qq, I
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      if (prcp(nm) > 0.0) then
+         !
+         if (scs_rain(nm) == 1) then
+            ! It was raining before; do nothing
+         else
+            scs_P1(nm)   = 0.0
+            scs_F1(nm)   = 0.0
+            scs_S1(nm)   = scs_Se(nm)
+            scs_rain(nm) = 1
+         endif
+         !
+         scs_P1(nm) = scs_P1(nm) + prcp(nm) * dt
+         !
+         if (scs_P1(nm) > (sfacinf_in * scs_S1(nm))) then
+            !
+            Qq          = (scs_P1(nm) - (sfacinf_in * scs_S1(nm)))**2 / &
+                          (scs_P1(nm) + (1.0 - sfacinf_in) * scs_S1(nm))
+            I           = scs_P1(nm) - Qq
+            qinfmap(nm) = (I - scs_F1(nm)) / dt
+            scs_F1(nm)  = I
+            !
+         else
+            !
+            Qq          = 0.0
+            scs_F1(nm)  = scs_P1(nm)
+            qinfmap(nm) = prcp(nm)
+            !
+         endif
+         !
+         scs_Se(nm)  = max(scs_Se(nm) - qinfmap(nm) * dt, 0.0)
+         qinfmap(nm) = max(qinfmap(nm), 0.0)
+         !
+      else
+         !
+         if (scs_rain(nm) == 1) then
+            scs_rain(nm) = 0
+            qinfmap(nm)  = 0.0
+            rain_T1(nm)  = 0.0
+         endif
+         !
+         rain_T1(nm) = rain_T1(nm) + dt / 3600
+         !
+         if (rain_T1(nm) > (0.06 / inf_kr(nm))) then
+            !
+            scs_Se(nm) = scs_Se(nm) + (inf_kr(nm) * qinffield(nm) * dt / 3600)
+            scs_Se(nm) = min(scs_Se(nm), qinffield(nm))
+            !
+         endif
+         !
+      endif
+      !
+      netprcp(nm) = netprcp(nm) - qinfmap(nm)
+      !
+      if (store_cumprcp_in) then
+         cuminf(nm) = cuminf(nm) + qinfmap(nm) * dt
+      endif
+      !
+   end subroutine k_inf_cnb
+   !
+   ! -----------------------------------------------------------------
+   ! Green-Ampt ('gai'). Mirrors CPU sibling lines 221-299.
+   ! -----------------------------------------------------------------
+   attributes(global) subroutine k_inf_gai(dt, npn_in, store_cumprcp_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: npn_in
+      logical, value :: store_cumprcp_in
+      !
+      integer :: nm
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      if (prcp(nm) > 0.0) then
+         !
+         if (prcp(nm) < ksfield(nm)) then
+            !
+            qinfmap(nm) = prcp(nm)
+            !
+         else
+            !
+            qinfmap(nm) = (ksfield(nm) * (1.0 + (GA_head(npn_in) * GA_sigma(npn_in)) / GA_F(nm)))
+            qinfmap(nm) = max(min(qinfmap(nm), prcp(nm)), 0.0)
+            !
+         endif
+         !
+         GA_sigma(nm) = max(GA_sigma(nm) - (qinfmap(nm) * dt / GA_Lu(nm)), 0.0)
+         GA_F(nm)     = GA_F(nm) + qinfmap(nm) * dt
+         rain_T1(nm)  = 0.0
+         !
+      else
+         !
+         rain_T1(nm) = rain_T1(nm) + dt / 3600
+         !
+         if (rain_T1(nm) > (0.06 / inf_kr(nm))) then
+            !
+            GA_sigma(nm) = GA_sigma(nm) + (inf_kr(nm) * GA_sigma_max(nm) * dt / 3600)
+            GA_sigma(nm) = min(GA_sigma(nm), GA_sigma_max(nm))
+            !
+            GA_F(nm)     = max(GA_F(nm) - (inf_kr(nm) * GA_sigma_max(nm) * dt / 3600 * GA_Lu(nm)), 0.0)
+            !
+         endif
+         !
+      endif
+      !
+      netprcp(nm) = netprcp(nm) - qinfmap(nm)
+      !
+      if (store_cumprcp_in) then
+         cuminf(nm) = cuminf(nm) + qinfmap(nm) * dt
+      endif
+      !
+   end subroutine k_inf_gai
+   !
+   ! -----------------------------------------------------------------
+   ! Horton ('hor'). Mirrors CPU sibling lines 301-410.
+   ! -----------------------------------------------------------------
+   attributes(global) subroutine k_inf_hor(dt, npn_in, &
+                                           subgrid_in, crsgeo_in, &
+                                           horton_kr_kd_in, &
+                                           store_cumprcp_in)
+      !
+      implicit none
+      !
+      real*4,  value :: dt
+      integer, value :: npn_in
+      logical, value :: subgrid_in
+      logical, value :: crsgeo_in
+      real*4,  value :: horton_kr_kd_in
+      logical, value :: store_cumprcp_in
+      !
+      integer :: nm
+      real*4  :: Qq, I, hh_local
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      if (subgrid_in) then
+         if (crsgeo_in) then
+            hh_local = z_volume(nm) / cell_area_m2(nm)
+         else
+            hh_local = z_volume(nm) / cell_area(z_flags_iref(nm))
+         endif
+      else
+         hh_local = zs(nm) - zb(nm)
+      endif
+      !
+      if (hh_local > 0.0 .or. prcp(nm) > 0.0) then
+         !
+         if (rain_T1(nm) > 0.0) then
+            rain_T1(nm) = 0.0
+         endif
+         !
+         rain_T1(nm) = rain_T1(nm) - dt
+         !
+         I = exp(horton_kd(nm) * rain_T1(nm) / 3600)
+         !
+         if (I < 0.01) then
+            !
+            I           = 0.0
+            rain_T1(nm) = rain_T1(nm) + dt
+            qinfmap(nm) = horton_fc(nm) / 3600 / 1000
+            !
+         else
+            !
+            qinfmap(nm) = (horton_fc(nm) + (horton_f0(nm) - horton_fc(nm)) * I) / 3600 / 1000
+            !
+         endif
+         !
+         if (hh_local > 0.0) then
+            Qq = prcp(nm) * dt + hh_local
+         else
+            Qq = prcp(nm) * dt
+         endif
+         !
+         I = qinfmap(nm) * dt
+         !
+         if (I > Qq) then
+            qinfmap(nm) = qinfmap(nm) * Qq / I
+         endif
+         !
+      else
+         !
+         rain_T1(nm) = rain_T1(nm) + dt / horton_kr_kd_in
+         qinfmap(nm) = 0.0
+         !
+      endif
+      !
+      netprcp(nm) = netprcp(nm) - qinfmap(nm)
+      !
+      if (store_cumprcp_in) then
+         cuminf(nm) = cuminf(nm) + qinfmap(nm) * dt
+      endif
+      !
+   end subroutine k_inf_hor
+   !
+end module sfincs_infiltration

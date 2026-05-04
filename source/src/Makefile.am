@@ -57,7 +57,7 @@ libsfincs_la_SOURCES += \
 	sfincs_subgrid.F90 \
 	sfincs_timestep_analysis.f90 \
 	sfincs_infiltration_io.f90 \
-	sfincs_infiltration.f90 \
+	sfincs_infiltration_gpu.cuf \
 	sfincs_domain.f90 \
 	sfincs_structures_io.f90 \
 	sfincs_structures.f90 \
