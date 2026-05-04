@@ -49,7 +49,7 @@ libsfincs_la_SOURCES += \
 	sfincs_ncinput.F90 \
 	sfincs_initial_conditions.f90 \
 	sfincs_boundaries_io.f90 \
-	sfincs_boundaries.f90 \
+	sfincs_boundaries_gpu.cuf \
 	sfincs_continuity_gpu.cuf \
 	sfincs_crosssections.f90 \
 	sfincs_discharges_io.f90 \
