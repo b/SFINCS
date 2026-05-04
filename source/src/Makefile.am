@@ -70,6 +70,7 @@ libsfincs_la_SOURCES += \
 	sfincs_ncoutput.F90 \
 	sfincs_output.f90 \
 	sfincs_momentum.f90 \
+	sfincs_wavemaker_io.f90 \
 	sfincs_wavemaker.f90 \
 	sfincs_bathtub.f90 \
 	sfincs_partition.cuf \
@@ -119,6 +120,7 @@ libsfincs_la_SOURCES += \
 	sfincs_ncoutput.F90 \
 	sfincs_output.f90 \
 	sfincs_momentum.f90 \
+	sfincs_wavemaker_io.f90 \
 	sfincs_wavemaker.f90 \
 	sfincs_bathtub.f90 \
 	sfincs_openacc.f90 \
