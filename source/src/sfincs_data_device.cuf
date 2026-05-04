@@ -230,4 +230,25 @@ module sfincs_data_device
    integer :: cell_index_first
    integer :: cell_index_last
    !
+   ! ===== gpu-wavemaker-snapwave-coupling supplemental ====
+   !
+   ! Device shadows consumed by k_wavemaker_fluxes in
+   ! source/src/sfincs_wavemaker_gpu.cuf. Subgrid mirrors (zb, zbuv,
+   ! subgrid_z_*, subgrid_uv_zmin/zmax/havg/nrep/havg_zmax) are reused
+   ! from the main catalog above; the entries below are the wavemaker-
+   ! specific arrays plus the per-cell wave-height fields hm0 and
+   ! hm0_ig (written by SnapWave coupling on host, read on device).
+   !
+   integer*4, device, dimension(:), allocatable :: wavemaker_index_uv
+   integer*4, device, dimension(:), allocatable :: wavemaker_index_nmi
+   integer*4, device, dimension(:), allocatable :: wavemaker_index_nmb
+   integer*4, device, dimension(:), allocatable :: wavemaker_index_wmfp1
+   integer*4, device, dimension(:), allocatable :: wavemaker_index_wmfp2
+   real*4,    device, dimension(:), allocatable :: wavemaker_fac_wmfp
+   integer*1, device, dimension(:), allocatable :: wavemaker_idir
+   real*4,    device, dimension(:), allocatable :: wavemaker_angfac
+   real*4,    device, dimension(:), allocatable :: wavemaker_uvtrend
+   real*4,    device, dimension(:), allocatable :: hm0
+   real*4,    device, dimension(:), allocatable :: hm0_ig
+   !
 end module sfincs_data_device
