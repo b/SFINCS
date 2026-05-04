@@ -62,7 +62,7 @@ libsfincs_la_SOURCES += \
 	sfincs_wavemaker.f90 \
 	sfincs_bathtub.f90 \
 	sfincs_openacc.f90 \
-	sfincs_lib.f90 \
+	sfincs_lib.F90 \
 	sfincs_bmi.f90
 endif
 

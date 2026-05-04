@@ -24,7 +24,13 @@ module sfincs_lib
    use sfincs_wavemaker
    use sfincs_nonhydrostatic
    use sfincs_bathtub
+#ifdef USE_CUDA
+   use mpi
+   use sfincs_partition
+   use sfincs_data_device, only: mpi_rank, mpi_size
+#else
    use sfincs_openacc
+#endif
    use sfincs_log
    use sfincs_timestep_analysis
    !
@@ -85,12 +91,21 @@ module sfincs_lib
    function sfincs_initialize() result(ierr)
    !
    integer :: ierr
+#ifdef USE_CUDA
+   integer :: ierr_mpi
+#endif
    !
-   call open_log()   
+   call open_log()
    !
    error = 0 ! Error code. This is now only set to 1 in case of instabilities. Could also use other error codes, e.g. for missing files.
    !
-   ierr = 0 ! Always 0 or 1  ! Always 0 or 1 
+   ierr = 0 ! Always 0 or 1  ! Always 0 or 1
+   !
+#ifdef USE_CUDA
+   call mpi_init(ierr_mpi)
+   call mpi_comm_rank(MPI_COMM_WORLD, mpi_rank, ierr_mpi)
+   call mpi_comm_size(MPI_COMM_WORLD, mpi_size, ierr_mpi)
+#endif
    !
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    !
@@ -152,6 +167,10 @@ module sfincs_lib
    !
    call write_log('Preparing domain ...', 0) 
    call initialize_domain()     ! Reads dep, msk, index files, creates index, flag and depth arrays, initializes hydro quantities
+   !
+#ifdef USE_CUDA
+   call partition_and_localize()
+#endif
    !
    call read_structures()       ! Reads thd files and sets kcuv to zero where necessary
    !
@@ -318,7 +337,9 @@ module sfincs_lib
    ! 
    call deallocate_quadtree()
    !
+#ifndef USE_CUDA
    call initialize_openacc() ! Enter data region
+#endif
    !
    ierr = error
    !
@@ -701,7 +722,11 @@ module sfincs_lib
    !
    call finalize_output(t, ntmaxout, tloopoutput, tmaxout)
    !
+#ifndef USE_CUDA
    call finalize_openacc() ! Exit data region
+#else
+   call device_finalize()
+#endif
    !
    dtavg = dtavg / (nt - 1)
    !
