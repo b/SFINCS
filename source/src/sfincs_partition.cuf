@@ -142,6 +142,26 @@ module sfincs_partition
    !
    implicit none
    !
+   ! MPI message tags for the halo exchanges. Distinct tags let zs / q / uv
+   ! exchanges be in flight concurrently without payload mismatch on the
+   ! receiver side. Reserved here per the SOR-708 architect note.
+   !
+   integer, parameter :: HALO_TAG_ZS = 7081
+   integer, parameter :: HALO_TAG_Q  = 7082
+   integer, parameter :: HALO_TAG_UV = 7083
+   !
+   ! CUDA-aware MPI confirmation. HPC-X / UCX bundled in NVHPC SDK 25.9
+   ! provides MPIX_Query_cuda_support; declare an explicit C interface so
+   ! the call doesn't depend on whether the host MPI's `mpi_ext` Fortran
+   ! module is available.
+   !
+   interface
+      function MPIX_Query_cuda_support() bind(C, name="MPIX_Query_cuda_support")
+         use iso_c_binding, only: c_int
+         integer(c_int) :: MPIX_Query_cuda_support
+      end function MPIX_Query_cuda_support
+   end interface
+   !
    public  :: partition_and_localize, device_finalize, &
               halo_exchange_zs, halo_exchange_q_uv, &
               device_to_host_for_output
@@ -182,6 +202,23 @@ contains
       end if
       call mpi_comm_rank(MPI_COMM_WORLD, mpi_rank, ierr)
       call mpi_comm_size(MPI_COMM_WORLD, mpi_size, ierr)
+      !
+      ! --- Phase 1b: CUDA-aware MPI confirmation ----------------------------
+      ! Halo exchange passes attributes(device) buffers directly to MPI; this
+      ! requires GPUDirect-capable MPI (HPC-X / UCX). Probe once on rank 0,
+      ! broadcast, abort everywhere if missing so we never hang in Isend.
+      !
+      block
+         integer :: cuda_aware
+         cuda_aware = 0
+         if (mpi_rank == 0) then
+            cuda_aware = MPIX_Query_cuda_support()
+         end if
+         call mpi_bcast(cuda_aware, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+         if (cuda_aware /= 1) then
+            error stop 'CUDA-aware MPI required for halo exchange; HPC-X with GPUDirect needed'
+         end if
+      end block
       !
       ! --- Phase 2: Device binding ------------------------------------------
       !
@@ -257,6 +294,28 @@ contains
       !
       call build_halo_descriptors(cell_part, &
                                   global_to_local, global_to_local_uv)
+      !
+      ! --- Phase 6: Halo-exchange runtime allocations -----------------------
+      ! Mirror local_to_global to the device so the gather/scatter kernels in
+      ! halo_exchange_zs can index zs by global position; size the per-zs
+      ! send/recv staging buffers to maxval(halo_*_count) so a single 2D
+      ! buffer covers every neighbor slot. mpi_size == 1 leaves
+      ! halo_n_neighbors == 0 and skips the buffer allocations entirely
+      ! (halo_exchange_zs early-returns on that condition).
+      !
+      if (allocated(local_to_global)) then
+         allocate(local_to_global_d(size(local_to_global)))
+         local_to_global_d = local_to_global
+      end if
+      if (halo_n_neighbors > 0) then
+         block
+            integer :: max_send_zs, max_recv_zs
+            max_send_zs = max(maxval(halo_send_count), 1)
+            max_recv_zs = max(maxval(halo_recv_count), 1)
+            allocate(halo_send_buf_zs(max_send_zs, halo_n_neighbors))
+            allocate(halo_recv_buf_zs(max_recv_zs, halo_n_neighbors))
+         end block
+      end if
       !
       ! Drop host-side temporaries. The state that needs to live past this
       ! routine is the device-resident catalog plus the halo descriptor
@@ -1368,6 +1427,8 @@ contains
       if (allocated(halo_neighbor_ranks))     deallocate(halo_neighbor_ranks)
       if (allocated(local_to_global))         deallocate(local_to_global)
       if (allocated(local_to_global_uv))      deallocate(local_to_global_uv)
+      if (allocated(local_to_global_d))       deallocate(local_to_global_d)
+      if (allocated(local_to_global_uv_d))    deallocate(local_to_global_uv_d)
       if (allocated(halo_send_buf_zs))        deallocate(halo_send_buf_zs)
       if (allocated(halo_recv_buf_zs))        deallocate(halo_recv_buf_zs)
       if (allocated(halo_send_buf_q))         deallocate(halo_send_buf_q)
@@ -1380,7 +1441,90 @@ contains
    end subroutine device_finalize
    !
    subroutine halo_exchange_zs()
-      ! Stub; SOR-708 implements (call site wired by SOR-709).
+      !
+      ! Per-step halo exchange of cell water levels (zs) across rank
+      ! boundaries. CUDA-aware MPI consumes the device-side staging
+      ! buffers directly; the gather/scatter kernels translate the
+      ! local-indexed halo descriptors through local_to_global_d into
+      ! the still-full-size global-indexed device shadow of zs.
+      !
+      integer :: nbr_slot, i, n
+      integer :: ierr, istat
+      integer, allocatable :: request_recv(:), request_send(:)
+      integer, allocatable :: statuses_recv(:,:), statuses_send(:,:)
+      !
+      ! Single-rank fast path: no neighbors, nothing to exchange.
+      !
+      if (halo_n_neighbors == 0) return
+      !
+      allocate(request_recv(halo_n_neighbors))
+      allocate(request_send(halo_n_neighbors))
+      allocate(statuses_recv(MPI_STATUS_SIZE, halo_n_neighbors))
+      allocate(statuses_send(MPI_STATUS_SIZE, halo_n_neighbors))
+      !
+      ! Step 1: post all receives first so they are ready when sends arrive.
+      ! CUDA-aware MPI accepts halo_recv_buf_zs's device pointer directly.
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
+                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZS, &
+                        MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
+      end do
+      !
+      ! Step 2: gather owned halo source cells into halo_send_buf_zs. The
+      ! local-indexed halo_send_local_idx is translated through
+      ! local_to_global_d to address the full-size global-indexed zs.
+      ! zs is real*8; the wire format is real*4 to match MPI_REAL.
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         n = halo_send_count(nbr_slot)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            halo_send_buf_zs(i, nbr_slot) = real( zs( local_to_global_d( halo_send_local_idx(i, nbr_slot) ) ), kind=4 )
+         end do
+      end do
+      !
+      ! Synchronize so the gathered halo_send_buf_zs is fully resident in
+      ! device memory before MPI reads from it; the !$cuf kernel launches
+      ! on the default stream and HPC-X's CUDA-aware path does not order
+      ! itself against that stream automatically.
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      ! Step 3: post sends.
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
+                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZS, &
+                        MPI_COMM_WORLD, request_send(nbr_slot), ierr)
+      end do
+      !
+      ! Step 4: wait for the receives so the scatter has data to write.
+      !
+      call MPI_Waitall(halo_n_neighbors, request_recv, statuses_recv, ierr)
+      !
+      ! Step 5: scatter halo_recv_buf_zs into the device shadow of zs at
+      ! the global positions of our halo cells.
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         n = halo_recv_count(nbr_slot)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            zs( local_to_global_d( halo_recv_local_idx(i, nbr_slot) ) ) = real( halo_recv_buf_zs(i, nbr_slot), kind=8 )
+         end do
+      end do
+      !
+      ! Make scattered halo cells visible to subsequent kernels before
+      ! returning to the time loop.
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      ! Step 6: wait for the sends so halo_send_buf_zs is reusable next step.
+      !
+      call MPI_Waitall(halo_n_neighbors, request_send, statuses_send, ierr)
+      !
+      deallocate(request_recv, request_send, statuses_recv, statuses_send)
+      !
    end subroutine halo_exchange_zs
    !
    subroutine halo_exchange_q_uv()
