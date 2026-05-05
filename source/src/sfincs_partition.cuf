@@ -3,12 +3,14 @@ module sfincs_partition
    ! GPU partition / device-binding / halo-exchange entry points.
    !
    ! This module owns the bridge between the host-side state in sfincs_data
-   ! and its device shadow in sfincs_data_device. Multi-rank partition,
-   ! halo discovery and per-rank re-localization are implemented here;
-   ! halo-exchange execution bodies remain stubs (sibling sub-epic 8
-   ! issues fill them in). For mpi_size == 1 the partition is degenerate
-   ! and the catalog copyin produces device-side arrays bit-identical to
-   ! the prior single-rank code path.
+   ! and its device shadow in sfincs_data_device. Multi-rank partition and
+   ! halo discovery are implemented here; halo-exchange execution bodies
+   ! remain stubs (SOR-708 fills halo_exchange_zs / halo_exchange_q_uv;
+   ! SOR-709 wires the call sites and MPI_Allreduce on min_dt; SOR-710
+   ! adds the boundary broadcast; SOR-711 adds SnapWave gather/scatter;
+   ! SOR-712 adds the output gather). For mpi_size == 1 the partition is
+   ! degenerate and the catalog copyin produces device-side arrays
+   ! bit-identical to the prior single-rank code path.
    !
    use cudafor
    use mpi
@@ -147,19 +149,7 @@ module sfincs_partition
               build_local_index_maps, &
               build_halo_descriptors, &
               copyin_phase4_degenerate, &
-              copyin_phase4_partitioned, &
-              sort_indices_by_key, qsort_recursive, &
-              copyin_npn_int1_1d, copyin_npn_int4_1d, &
-              copyin_npn_r4_1d,   copyin_npn_r8_1d, &
-              copyin_npn_r4_2d, &
-              copyin_npn_renumber_uv, &
-              copyin_npuv_int1_1d, copyin_npuv_int4_1d, &
-              copyin_npuv_r4_1d, &
-              copyin_npuv_r4_2d, &
-              copyin_npuv_renumber_z,  copyin_npuv_renumber_uv, &
-              copyin_npuvq_int1_1d, copyin_npuvq_r4_1d, &
-              copyin_mold_int1_1d, copyin_mold_int4_1d, &
-              copyin_mold_r4_1d, copyin_mold_r4_2d
+              sort_indices_by_key, qsort_recursive
    !
 contains
    !
@@ -221,35 +211,35 @@ contains
       ! Every device shadow is allocated with mold=arr_h and copied verbatim
       ! from its host counterpart, both for mpi_size == 1 and mpi_size > 1.
       !
-      ! Why we do not shrink to npn_local + halo here: the per-step host
-      ! wrappers in source/src/sfincs_<name>_gpu.cuf (e.g. compute_fluxes
-      ! at sfincs_momentum_gpu.cuf:138-176) re-copy the full host array
-      ! into the device shadow each step via plain `arr_d = arr_h`
-      ! assignments. Those wrappers are out of scope for this issue per
-      ! the architect contract ("source/src/sfincs_<name>_gpu.cuf are not
-      ! touched"); shrinking the device shadow here would be undone (or
-      ! worse, segfault) on the first compute_fluxes call. The shrinking
-      ! and the corresponding gather-only reload pattern in the wrappers
-      ! are therefore the joint responsibility of the sibling
-      ! halo_exchange_* issues: they own the wrapper edits and at the
-      ! same time will swap copyin_phase4_degenerate for a partitioned
-      ! gather variant.
+      ! NOTE on AC #5/#6 (Phase 4 shrink + connectivity renumber):
       !
-      ! What this issue still delivers as the foundation: cell_part is
-      ! computed (Phase 3), npn_local / npuv_local / cell_index_first /
-      ! cell_index_last are populated (build_local_index_maps), and
-      ! per-neighbor-rank halo index lists are filled (Phase 5). Sibling
-      ! halo_exchange_* issues consume those descriptors directly without
-      ! reaching back into this routine.
+      !    Phase 4 here does NOT shrink to npn_local + halo_count, and the
+      !    connectivity arrays are NOT renumbered to local indices. This is
+      !    a deliberate deferral of acceptance criteria #5 and #6 to the
+      !    sibling halo_exchange_* issues (SOR-708..SOR-712). Reason: the
+      !    per-step host wrappers in source/src/sfincs_<name>_gpu.cuf (e.g.
+      !    compute_fluxes at sfincs_momentum_gpu.cuf:138-176) re-copy the
+      !    full host arrays into the device shadows each step via plain
+      !    `arr_d = arr_h` whole-array assignments — the symmetric Bridge
+      !    code lifetime mandated by the architect's cross-sub-epic
+      !    contract. Shrinking the device shadow here, while leaving the
+      !    bridges as bulk re-copies, triggers a shape mismatch /
+      !    cudaErrorIllegalAddress on the first compute_fluxes call. The
+      !    SOR-707 issue body itself states "the per-step compute kernels
+      !    in sfincs_<name>_gpu.cuf are not touched", which forbids the
+      !    bridge-side gather edit needed to make the shrink work.
       !
-      ! N=1 stays bit-identical to the pre-PR baseline because the
-      ! degenerate copyin block below is a verbatim port of the prior
-      ! Phase 4 body.
+      !    This contradiction in the architect contract is surfaced via a
+      !    PR comment for architect amendment. Until amended, the foundation
+      !    this issue still delivers — cell_part (Phase 3),
+      !    npn_local / npuv_local / cell_index_first / cell_index_last
+      !    (build_local_index_maps), and per-neighbor-rank halo descriptors
+      !    (Phase 5) — is sufficient input for SOR-708..SOR-712 to land
+      !    the bridge-side gather edits and the corresponding partitioned
+      !    Phase 4 in a single coordinated change.
       !
-      ! For maintainability the partitioned helpers (copyin_phase4_partitioned
-      ! and the copyin_npn_* / copyin_npuv_* family they call) remain in
-      ! this module so the sibling halo_exchange_* issues can switch to
-      ! them with a one-line edit once the wrapper side is ready.
+      !    N=1 stays bit-identical to the pre-PR baseline because Phase 4
+      !    here is a verbatim port of the prior single-rank Phase 4 body.
       !
       call copyin_phase4_degenerate()
       !
@@ -276,231 +266,6 @@ contains
       if (allocated(global_to_local_uv)) deallocate(global_to_local_uv)
       !
    end subroutine partition_and_localize
-   !
-   subroutine copyin_phase4_partitioned(local_to_global, local_to_global_uv, &
-                                        global_to_local, global_to_local_uv, &
-                                        npn_total, npuv_total)
-      !
-      ! Multi-rank Phase 4 body. Gathers and renumbers each catalog array
-      ! through the supplied index maps. See partition_and_localize for
-      ! the surrounding 5-phase context.
-      !
-      integer, intent(in) :: local_to_global(:), local_to_global_uv(:)
-      integer, intent(in) :: global_to_local(:), global_to_local_uv(:)
-      integer, intent(in) :: npn_total, npuv_total
-      !
-      ! ---- Cell-indexed (np / npn_h) ----
-      !
-      call copyin_npn_int1_1d(kcs,           kcs_h,           local_to_global, npn_total)
-      call copyin_npn_int1_1d(z_flags_iref,  z_flags_iref_h,  local_to_global, npn_total)
-      call copyin_npn_int1_1d(scs_rain,      scs_rain_h,      local_to_global, npn_total)
-      !
-      call copyin_npn_int4_1d(z_index_wavemaker, z_index_wavemaker_h, local_to_global, npn_total)
-      !
-      ! z_index_uv_*_h holds GLOBAL uv-edge indices; renumber to local.
-      !
-      call copyin_npn_renumber_uv(z_index_uv_md, z_index_uv_md_h, local_to_global, global_to_local_uv, npn_total)
-      call copyin_npn_renumber_uv(z_index_uv_nd, z_index_uv_nd_h, local_to_global, global_to_local_uv, npn_total)
-      call copyin_npn_renumber_uv(z_index_uv_mu, z_index_uv_mu_h, local_to_global, global_to_local_uv, npn_total)
-      call copyin_npn_renumber_uv(z_index_uv_nu, z_index_uv_nu_h, local_to_global, global_to_local_uv, npn_total)
-      !
-      call copyin_npn_r8_1d(zs,       zs_h,       local_to_global, npn_total)
-      call copyin_npn_r8_1d(z_volume, z_volume_h, local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(zs0,    zs0_h,    local_to_global, npn_total)
-      call copyin_npn_r4_1d(zsderv, zsderv_h, local_to_global, npn_total)
-      call copyin_npn_r4_1d(zb,     zb_h,     local_to_global, npn_total)
-      call copyin_npn_r4_1d(zsmax,  zsmax_h,  local_to_global, npn_total)
-      call copyin_npn_r4_1d(maxzsm, maxzsm_h, local_to_global, npn_total)
-      call copyin_npn_r4_1d(qmax,   qmax_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(vmax,   vmax_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(twet,   twet_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(zsm,    zsm_h,    local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(tauwu,  tauwu_h,  local_to_global, npn_total)
-      call copyin_npn_r4_1d(tauwv,  tauwv_h,  local_to_global, npn_total)
-      call copyin_npn_r4_1d(tauwu0, tauwu0_h, local_to_global, npn_total)
-      call copyin_npn_r4_1d(tauwv0, tauwv0_h, local_to_global, npn_total)
-      call copyin_npn_r4_1d(tauwu1, tauwu1_h, local_to_global, npn_total)
-      call copyin_npn_r4_1d(tauwv1, tauwv1_h, local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(windu,   windu_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(windv,   windv_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(windu0,  windu0_h,  local_to_global, npn_total)
-      call copyin_npn_r4_1d(windv0,  windv0_h,  local_to_global, npn_total)
-      call copyin_npn_r4_1d(windu1,  windu1_h,  local_to_global, npn_total)
-      call copyin_npn_r4_1d(windv1,  windv1_h,  local_to_global, npn_total)
-      call copyin_npn_r4_1d(windmax, windmax_h, local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(patm,    patm_h,    local_to_global, npn_total)
-      call copyin_npn_r4_1d(patm0,   patm0_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(patm1,   patm1_h,   local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(prcp,    prcp_h,    local_to_global, npn_total)
-      call copyin_npn_r4_1d(prcp0,   prcp0_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(prcp1,   prcp1_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(cumprcp, cumprcp_h, local_to_global, npn_total)
-      call copyin_npn_r4_1d(netprcp, netprcp_h, local_to_global, npn_total)
-      call copyin_npn_r4_1d(qext,    qext_h,    local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(cell_area_m2,   cell_area_m2_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(dxm,            dxm_h,            local_to_global, npn_total)
-      call copyin_npn_r4_1d(fcorio2d,       fcorio2d_h,       local_to_global, npn_total)
-      call copyin_npn_r4_1d(storage_volume, storage_volume_h, local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(qinffield,    qinffield_h,    local_to_global, npn_total)
-      call copyin_npn_r4_1d(qinfmap,      qinfmap_h,      local_to_global, npn_total)
-      call copyin_npn_r4_1d(cuminf,       cuminf_h,       local_to_global, npn_total)
-      call copyin_npn_r4_1d(scs_Se,       scs_Se_h,       local_to_global, npn_total)
-      call copyin_npn_r4_1d(scs_P1,       scs_P1_h,       local_to_global, npn_total)
-      call copyin_npn_r4_1d(scs_F1,       scs_F1_h,       local_to_global, npn_total)
-      call copyin_npn_r4_1d(scs_S1,       scs_S1_h,       local_to_global, npn_total)
-      call copyin_npn_r4_1d(rain_T1,      rain_T1_h,      local_to_global, npn_total)
-      call copyin_npn_r4_1d(ksfield,      ksfield_h,      local_to_global, npn_total)
-      call copyin_npn_r4_1d(GA_head,      GA_head_h,      local_to_global, npn_total)
-      call copyin_npn_r4_1d(GA_sigma,     GA_sigma_h,     local_to_global, npn_total)
-      call copyin_npn_r4_1d(GA_sigma_max, GA_sigma_max_h, local_to_global, npn_total)
-      call copyin_npn_r4_1d(GA_F,         GA_F_h,         local_to_global, npn_total)
-      call copyin_npn_r4_1d(GA_Lu,        GA_Lu_h,        local_to_global, npn_total)
-      call copyin_npn_r4_1d(inf_kr,       inf_kr_h,       local_to_global, npn_total)
-      call copyin_npn_r4_1d(horton_kd,    horton_kd_h,    local_to_global, npn_total)
-      call copyin_npn_r4_1d(horton_fc,    horton_fc_h,    local_to_global, npn_total)
-      call copyin_npn_r4_1d(horton_f0,    horton_f0_h,    local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(hm0,    hm0_h,    local_to_global, npn_total)
-      call copyin_npn_r4_1d(hm0_ig, hm0_ig_h, local_to_global, npn_total)
-      !
-      call copyin_npn_r4_1d(subgrid_z_zmin,   subgrid_z_zmin_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(subgrid_z_zmax,   subgrid_z_zmax_h,   local_to_global, npn_total)
-      call copyin_npn_r4_1d(subgrid_z_volmax, subgrid_z_volmax_h, local_to_global, npn_total)
-      !
-      call copyin_npn_r4_2d(subgrid_z_dep, subgrid_z_dep_h, local_to_global, npn_total)
-      !
-      ! ---- Edge-indexed (npuv / npuv_h) ----
-      !
-      call copyin_npuv_int1_1d(kfuv,          kfuv_h,          local_to_global_uv, npuv_total)
-      call copyin_npuv_int1_1d(uv_flags_iref, uv_flags_iref_h, local_to_global_uv, npuv_total)
-      call copyin_npuv_int1_1d(uv_flags_type, uv_flags_type_h, local_to_global_uv, npuv_total)
-      call copyin_npuv_int1_1d(uv_flags_dir,  uv_flags_dir_h,  local_to_global_uv, npuv_total)
-      call copyin_npuv_int1_1d(mask_adv,      mask_adv_h,      local_to_global_uv, npuv_total)
-      !
-      ! uv_index_z_* hold GLOBAL cell indices; renumber to local cell index.
-      !
-      call copyin_npuv_renumber_z(uv_index_z_nm,  uv_index_z_nm_h,  local_to_global_uv, global_to_local, npuv_total)
-      call copyin_npuv_renumber_z(uv_index_z_nmu, uv_index_z_nmu_h, local_to_global_uv, global_to_local, npuv_total)
-      !
-      ! uv_index_u_* / uv_index_v_* hold GLOBAL uv-edge indices; renumber.
-      !
-      call copyin_npuv_renumber_uv(uv_index_u_nmd,  uv_index_u_nmd_h,  local_to_global_uv, global_to_local_uv, npuv_total)
-      call copyin_npuv_renumber_uv(uv_index_u_nmu,  uv_index_u_nmu_h,  local_to_global_uv, global_to_local_uv, npuv_total)
-      call copyin_npuv_renumber_uv(uv_index_u_ndm,  uv_index_u_ndm_h,  local_to_global_uv, global_to_local_uv, npuv_total)
-      call copyin_npuv_renumber_uv(uv_index_u_num,  uv_index_u_num_h,  local_to_global_uv, global_to_local_uv, npuv_total)
-      call copyin_npuv_renumber_uv(uv_index_v_ndm,  uv_index_v_ndm_h,  local_to_global_uv, global_to_local_uv, npuv_total)
-      call copyin_npuv_renumber_uv(uv_index_v_ndmu, uv_index_v_ndmu_h, local_to_global_uv, global_to_local_uv, npuv_total)
-      call copyin_npuv_renumber_uv(uv_index_v_nm,   uv_index_v_nm_h,   local_to_global_uv, global_to_local_uv, npuv_total)
-      call copyin_npuv_renumber_uv(uv_index_v_nmu,  uv_index_v_nmu_h,  local_to_global_uv, global_to_local_uv, npuv_total)
-      !
-      call copyin_npuv_int4_1d(timestep_analysis_times_wet,      timestep_analysis_times_wet_h,      local_to_global_uv, npuv_total)
-      call copyin_npuv_int4_1d(timestep_analysis_times_limiting, timestep_analysis_times_limiting_h, local_to_global_uv, npuv_total)
-      !
-      call copyin_npuv_r4_1d(zbuv,    zbuv_h,    local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(zbuvmx,  zbuvmx_h,  local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(fwuv,    fwuv_h,    local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(gn2uv,   gn2uv_h,   local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(dxminv,  dxminv_h,  local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(dxm2inv, dxm2inv_h, local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(gnapp2,  gnapp2_h,  local_to_global_uv, npuv_total)
-      !
-      call copyin_npuv_r4_1d(timestep_analysis_required_timestep,         timestep_analysis_required_timestep_h,         local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(timestep_analysis_average_required_timestep, timestep_analysis_average_required_timestep_h, local_to_global_uv, npuv_total)
-      !
-      call copyin_npuv_r4_1d(subgrid_uv_zmin,      subgrid_uv_zmin_h,      local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(subgrid_uv_zmax,      subgrid_uv_zmax_h,      local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(subgrid_uv_havg_zmax, subgrid_uv_havg_zmax_h, local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(subgrid_uv_nrep_zmax, subgrid_uv_nrep_zmax_h, local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(subgrid_uv_fnfit,     subgrid_uv_fnfit_h,     local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_1d(subgrid_uv_navg_w,    subgrid_uv_navg_w_h,    local_to_global_uv, npuv_total)
-      !
-      call copyin_npuv_r4_2d(subgrid_uv_havg, subgrid_uv_havg_h, local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_2d(subgrid_uv_nrep, subgrid_uv_nrep_h, local_to_global_uv, npuv_total)
-      call copyin_npuv_r4_2d(subgrid_uv_pwet, subgrid_uv_pwet_h, local_to_global_uv, npuv_total)
-      !
-      ! ---- Mixed-tail (npuv + ncuv + 1) ----
-      ! kcuv / q / q0 / uv / uv0 carry an ncuv combined-uv tail and a single
-      ! sentinel slot. Tail and sentinel are copied verbatim from the host;
-      ! only the first-npuv segment is renumbered through local_to_global_uv.
-      ! Combined-uv linkage (cuv_index_uv*) is left global; for regular grids
-      ! ncuv == 0 and the tail/sentinel logic is a no-op.
-      !
-      call copyin_npuvq_int1_1d(kcuv, kcuv_h, local_to_global_uv, npuv_total, npuv_h, ncuv_h)
-      call copyin_npuvq_r4_1d  (q,    q_h,    local_to_global_uv, npuv_total, npuv_h, ncuv_h)
-      call copyin_npuvq_r4_1d  (q0,   q0_h,   local_to_global_uv, npuv_total, npuv_h, ncuv_h)
-      call copyin_npuvq_r4_1d  (uv,   uv_h,   local_to_global_uv, npuv_total, npuv_h, ncuv_h)
-      call copyin_npuvq_r4_1d  (uv0,  uv0_h,  local_to_global_uv, npuv_total, npuv_h, ncuv_h)
-      !
-      ! ---- Other-sized (boundary, structure, drainage, source, wavemaker,
-      !      refinement-level, fixed scratch). Pass through with mold=arr_h. ----
-      !
-      call copyin_mold_int4_1d(index_kcuv2, index_kcuv2_h)
-      call copyin_mold_int4_1d(nmikcuv2,    nmikcuv2_h)
-      call copyin_mold_int4_1d(nmbkcuv2,    nmbkcuv2_h)
-      call copyin_mold_int4_1d(ibkcuv2,     ibkcuv2_h)
-      call copyin_mold_int1_1d(ibuvdir,     ibuvdir_h)
-      call copyin_mold_r4_1d  (zsb,         zsb_h)
-      call copyin_mold_r4_1d  (zsb0,        zsb0_h)
-      call copyin_mold_r4_1d  (uvmean,      uvmean_h)
-      call copyin_mold_r4_1d  (patmb,       patmb_h)
-      call copyin_mold_int4_1d(nmindbnd,    nmindbnd_h)
-      !
-      call copyin_mold_int4_1d(cuv_index_uv,  cuv_index_uv_h)
-      call copyin_mold_int4_1d(cuv_index_uv1, cuv_index_uv1_h)
-      call copyin_mold_int4_1d(cuv_index_uv2, cuv_index_uv2_h)
-      !
-      call copyin_mold_int4_1d(nmindsrc, nmindsrc_h)
-      call copyin_mold_r4_1d  (qtsrc,    qtsrc_h)
-      call copyin_mold_int1_1d(drainage_type,   drainage_type_h)
-      call copyin_mold_r4_2d  (drainage_params, drainage_params_h)
-      !
-      call copyin_mold_int4_1d(structure_uv_index,   structure_uv_index_h)
-      call copyin_mold_r4_2d  (structure_parameters, structure_parameters_h)
-      call copyin_mold_int1_1d(structure_type,       structure_type_h)
-      call copyin_mold_r4_1d  (structure_length,     structure_length_h)
-      !
-      ! Wavemaker indexing arrays are sized by wavemaker count, not cell count.
-      !
-      call copyin_mold_r4_1d  (wavemaker_uvmean, wavemaker_uvmean_h)
-      call copyin_mold_int4_1d(wavemaker_nmd,    wavemaker_nmd_h)
-      call copyin_mold_int4_1d(wavemaker_nmu,    wavemaker_nmu_h)
-      call copyin_mold_int4_1d(wavemaker_ndm,    wavemaker_ndm_h)
-      call copyin_mold_int4_1d(wavemaker_num,    wavemaker_num_h)
-      call copyin_mold_int4_1d(wavemaker_index_uv,    wavemaker_index_uv_h)
-      call copyin_mold_int4_1d(wavemaker_index_nmi,   wavemaker_index_nmi_h)
-      call copyin_mold_int4_1d(wavemaker_index_nmb,   wavemaker_index_nmb_h)
-      call copyin_mold_int4_1d(wavemaker_index_wmfp1, wavemaker_index_wmfp1_h)
-      call copyin_mold_int4_1d(wavemaker_index_wmfp2, wavemaker_index_wmfp2_h)
-      call copyin_mold_r4_1d  (wavemaker_fac_wmfp,    wavemaker_fac_wmfp_h)
-      call copyin_mold_int1_1d(wavemaker_idir,        wavemaker_idir_h)
-      call copyin_mold_r4_1d  (wavemaker_angfac,      wavemaker_angfac_h)
-      call copyin_mold_r4_1d  (wavemaker_uvtrend,     wavemaker_uvtrend_h)
-      !
-      ! Refinement-level-indexed metric arrays (sized nref).
-      !
-      call copyin_mold_r4_1d(dxrinv,  dxrinv_h)
-      call copyin_mold_r4_1d(dyrinv,  dyrinv_h)
-      call copyin_mold_r4_1d(dxr2inv, dxr2inv_h)
-      call copyin_mold_r4_1d(dyr2inv, dyr2inv_h)
-      call copyin_mold_r4_1d(dxrinvc, dxrinvc_h)
-      call copyin_mold_r4_1d(dyrinvc, dyrinvc_h)
-      call copyin_mold_r4_1d(dxrm,    dxrm_h)
-      call copyin_mold_r4_1d(dyrm,    dyrm_h)
-      call copyin_mold_r4_1d(cell_area, cell_area_h)
-      call copyin_mold_r4_1d(nuvisc,    nuvisc_h)
-      !
-      ! Fixed-size scratch (1000 x 10).
-      !
-      call copyin_mold_r4_2d(x73, x73_h)
-      !
-   end subroutine copyin_phase4_partitioned
    !
    subroutine copyin_phase4_degenerate()
       !
@@ -1083,8 +848,8 @@ contains
                                      local_to_global, global_to_local, &
                                      local_to_global_uv, global_to_local_uv)
       !
-      ! Builds the per-neighbor-rank cell and edge index lists used by
-      ! sibling halo_exchange_* issues at runtime. The neighbor-rank list
+      ! Builds the per-neighbor-rank cell and edge index lists consumed by
+      ! halo_exchange_zs / halo_exchange_q_uv (SOR-708) at runtime. The neighbor-rank list
       ! halo_neighbor_ranks and the n_neighbors scalars were already
       ! produced by build_local_index_maps above; this routine fills the
       ! six halo_*_idx and four halo_*_count arrays:
@@ -1092,8 +857,8 @@ contains
       !   halo_recv_local_idx    : local indices (npn_local+1..npn_total) where
       !                            received cell data is scattered.
       !   halo_recv_remote_idx   : matching GLOBAL cell indices on the
-      !                            sending rank (sibling Isend uses these
-      !                            as gather sources).
+      !                            sending rank (the SOR-708 Isend uses
+      !                            these as gather sources).
       !   halo_send_local_idx    : local indices of OWNED cells we need to
       !                            gather and ship to each neighbor.
       !   halo_uv_recv_local_idx / halo_uv_recv_remote_idx /
@@ -1384,350 +1149,6 @@ contains
       !
    end subroutine build_halo_descriptors
    !
-   ! ============================================================
-   ! Copyin helpers. Each performs:
-   !    1. early return if host counterpart is unallocated;
-   !    2. allocate device shadow at the requested size;
-   !    3. gather host values through the local_to_global map (or copy
-   !       through unchanged for the mold helpers) and assign to device.
-   ! Connectivity helpers additionally renumber values from global to
-   ! local indices via the supplied global_to_local map.
-   ! ============================================================
-   !
-   subroutine copyin_npn_int1_1d(arr_d, arr_h, ltg, n)
-      integer*1, allocatable, device, intent(inout) :: arr_d(:)
-      integer*1, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg(:), n
-      integer*1, allocatable :: tmp(:)
-      integer :: i
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         tmp(i) = arr_h(ltg(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npn_int1_1d
-   !
-   subroutine copyin_npn_int4_1d(arr_d, arr_h, ltg, n)
-      integer*4, allocatable, device, intent(inout) :: arr_d(:)
-      integer*4, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg(:), n
-      integer*4, allocatable :: tmp(:)
-      integer :: i
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         tmp(i) = arr_h(ltg(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npn_int4_1d
-   !
-   subroutine copyin_npn_r4_1d(arr_d, arr_h, ltg, n)
-      real*4, allocatable, device, intent(inout) :: arr_d(:)
-      real*4, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg(:), n
-      real*4, allocatable :: tmp(:)
-      integer :: i
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         tmp(i) = arr_h(ltg(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npn_r4_1d
-   !
-   subroutine copyin_npn_r8_1d(arr_d, arr_h, ltg, n)
-      real*8, allocatable, device, intent(inout) :: arr_d(:)
-      real*8, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg(:), n
-      real*8, allocatable :: tmp(:)
-      integer :: i
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         tmp(i) = arr_h(ltg(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npn_r8_1d
-   !
-   subroutine copyin_npn_r4_2d(arr_d, arr_h, ltg, n)
-      ! Trailing dimension is the cell-indexed one (e.g., subgrid_z_dep is
-      ! sized (subgrid_nlevels, np)). Leading dimension is preserved.
-      real*4, allocatable, device, intent(inout) :: arr_d(:,:)
-      real*4, allocatable, intent(in)            :: arr_h(:,:)
-      integer, intent(in) :: ltg(:), n
-      real*4, allocatable :: tmp(:,:)
-      integer :: i, lead
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      lead = size(arr_h, 1)
-      allocate(arr_d(lead, max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(lead, n))
-      do i = 1, n
-         tmp(:, i) = arr_h(:, ltg(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npn_r4_2d
-   !
-   subroutine copyin_npn_renumber_uv(arr_d, arr_h, ltg, gtl_uv, n)
-      ! arr_h sized npn_h, values are GLOBAL uv-edge indices. Translate to
-      ! local uv-edge indices via gtl_uv; entries pointing out of this
-      ! rank's halo become 0 (kernels treat 0 as "no neighbor").
-      integer*4, allocatable, device, intent(inout) :: arr_d(:)
-      integer*4, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg(:), gtl_uv(:), n
-      integer*4, allocatable :: tmp(:)
-      integer :: i, g
-      integer*4 :: v
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         g = ltg(i)
-         v = arr_h(g)
-         if (v > 0 .and. v <= size(gtl_uv)) then
-            tmp(i) = gtl_uv(v)
-         else
-            tmp(i) = 0
-         end if
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npn_renumber_uv
-   !
-   subroutine copyin_npuv_int1_1d(arr_d, arr_h, ltg_uv, n)
-      integer*1, allocatable, device, intent(inout) :: arr_d(:)
-      integer*1, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg_uv(:), n
-      integer*1, allocatable :: tmp(:)
-      integer :: i
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         tmp(i) = arr_h(ltg_uv(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npuv_int1_1d
-   !
-   subroutine copyin_npuv_int4_1d(arr_d, arr_h, ltg_uv, n)
-      integer*4, allocatable, device, intent(inout) :: arr_d(:)
-      integer*4, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg_uv(:), n
-      integer*4, allocatable :: tmp(:)
-      integer :: i
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         tmp(i) = arr_h(ltg_uv(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npuv_int4_1d
-   !
-   subroutine copyin_npuv_r4_1d(arr_d, arr_h, ltg_uv, n)
-      real*4, allocatable, device, intent(inout) :: arr_d(:)
-      real*4, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg_uv(:), n
-      real*4, allocatable :: tmp(:)
-      integer :: i
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         tmp(i) = arr_h(ltg_uv(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npuv_r4_1d
-   !
-   subroutine copyin_npuv_r4_2d(arr_d, arr_h, ltg_uv, n)
-      real*4, allocatable, device, intent(inout) :: arr_d(:,:)
-      real*4, allocatable, intent(in)            :: arr_h(:,:)
-      integer, intent(in) :: ltg_uv(:), n
-      real*4, allocatable :: tmp(:,:)
-      integer :: i, lead
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      lead = size(arr_h, 1)
-      allocate(arr_d(lead, max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(lead, n))
-      do i = 1, n
-         tmp(:, i) = arr_h(:, ltg_uv(i))
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npuv_r4_2d
-   !
-   subroutine copyin_npuv_renumber_z(arr_d, arr_h, ltg_uv, gtl, n)
-      ! arr_h sized npuv_h, values are GLOBAL cell indices. Translate to
-      ! local cell indices via gtl; entries pointing out of this rank's
-      ! halo become 0.
-      integer*4, allocatable, device, intent(inout) :: arr_d(:)
-      integer*4, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg_uv(:), gtl(:), n
-      integer*4, allocatable :: tmp(:)
-      integer :: i, g
-      integer*4 :: v
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         g = ltg_uv(i)
-         v = arr_h(g)
-         if (v > 0 .and. v <= size(gtl)) then
-            tmp(i) = gtl(v)
-         else
-            tmp(i) = 0
-         end if
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npuv_renumber_z
-   !
-   subroutine copyin_npuv_renumber_uv(arr_d, arr_h, ltg_uv, gtl_uv, n)
-      ! arr_h sized npuv_h, values are GLOBAL uv-edge indices. Translate.
-      integer*4, allocatable, device, intent(inout) :: arr_d(:)
-      integer*4, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg_uv(:), gtl_uv(:), n
-      integer*4, allocatable :: tmp(:)
-      integer :: i, g
-      integer*4 :: v
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d(max(n, 1)))
-      if (n <= 0) return
-      allocate(tmp(n))
-      do i = 1, n
-         g = ltg_uv(i)
-         v = arr_h(g)
-         if (v > 0 .and. v <= size(gtl_uv)) then
-            tmp(i) = gtl_uv(v)
-         else
-            tmp(i) = 0
-         end if
-      end do
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npuv_renumber_uv
-   !
-   subroutine copyin_npuvq_int1_1d(arr_d, arr_h, ltg_uv, npuv_total, npuv_global, ncuv_local)
-      ! Mixed npuv + ncuv + 1 layout. The first npuv_total slots gather
-      ! through ltg_uv; the next ncuv_local slots copy verbatim from
-      ! arr_h(npuv_global+1..npuv_global+ncuv_local); the final slot copies
-      ! the trailing sentinel arr_h(npuv_global + ncuv_local + 1).
-      integer*1, allocatable, device, intent(inout) :: arr_d(:)
-      integer*1, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg_uv(:), npuv_total, npuv_global, ncuv_local
-      integer*1, allocatable :: tmp(:)
-      integer :: i, total
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      total = npuv_total + ncuv_local + 1
-      allocate(arr_d(max(total, 1)))
-      if (total <= 0) return
-      allocate(tmp(total))
-      do i = 1, npuv_total
-         tmp(i) = arr_h(ltg_uv(i))
-      end do
-      do i = 1, ncuv_local
-         tmp(npuv_total + i) = arr_h(npuv_global + i)
-      end do
-      tmp(total) = arr_h(npuv_global + ncuv_local + 1)
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npuvq_int1_1d
-   !
-   subroutine copyin_npuvq_r4_1d(arr_d, arr_h, ltg_uv, npuv_total, npuv_global, ncuv_local)
-      real*4, allocatable, device, intent(inout) :: arr_d(:)
-      real*4, allocatable, intent(in)            :: arr_h(:)
-      integer, intent(in) :: ltg_uv(:), npuv_total, npuv_global, ncuv_local
-      real*4, allocatable :: tmp(:)
-      integer :: i, total
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      total = npuv_total + ncuv_local + 1
-      allocate(arr_d(max(total, 1)))
-      if (total <= 0) return
-      allocate(tmp(total))
-      do i = 1, npuv_total
-         tmp(i) = arr_h(ltg_uv(i))
-      end do
-      do i = 1, ncuv_local
-         tmp(npuv_total + i) = arr_h(npuv_global + i)
-      end do
-      tmp(total) = arr_h(npuv_global + ncuv_local + 1)
-      arr_d = tmp
-      deallocate(tmp)
-   end subroutine copyin_npuvq_r4_1d
-   !
-   subroutine copyin_mold_int1_1d(arr_d, arr_h)
-      integer*1, allocatable, device, intent(inout) :: arr_d(:)
-      integer*1, allocatable, intent(in)            :: arr_h(:)
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d, mold=arr_h)
-      arr_d = arr_h
-   end subroutine copyin_mold_int1_1d
-   !
-   subroutine copyin_mold_int4_1d(arr_d, arr_h)
-      integer*4, allocatable, device, intent(inout) :: arr_d(:)
-      integer*4, allocatable, intent(in)            :: arr_h(:)
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d, mold=arr_h)
-      arr_d = arr_h
-   end subroutine copyin_mold_int4_1d
-   !
-   subroutine copyin_mold_r4_1d(arr_d, arr_h)
-      real*4, allocatable, device, intent(inout) :: arr_d(:)
-      real*4, allocatable, intent(in)            :: arr_h(:)
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d, mold=arr_h)
-      arr_d = arr_h
-   end subroutine copyin_mold_r4_1d
-   !
-   subroutine copyin_mold_r4_2d(arr_d, arr_h)
-      real*4, allocatable, device, intent(inout) :: arr_d(:,:)
-      real*4, allocatable, intent(in)            :: arr_h(:,:)
-      if (.not. allocated(arr_h)) return
-      if (allocated(arr_d)) deallocate(arr_d)
-      allocate(arr_d, mold=arr_h)
-      arr_d = arr_h
-   end subroutine copyin_mold_r4_2d
-   !
    subroutine device_finalize()
       !
       integer :: ierr
@@ -1947,11 +1368,11 @@ contains
    end subroutine device_finalize
    !
    subroutine halo_exchange_zs()
-      ! Stub; sub-epic 8 (gpu-multi-gpu) implements.
+      ! Stub; SOR-708 implements (call site wired by SOR-709).
    end subroutine halo_exchange_zs
    !
    subroutine halo_exchange_q_uv()
-      ! Stub; sub-epic 8 (gpu-multi-gpu) implements.
+      ! Stub; SOR-708 implements (call site wired by SOR-709).
    end subroutine halo_exchange_q_uv
    !
    subroutine device_to_host_for_output()
@@ -1959,7 +1380,7 @@ contains
       ! Pull every device-resident state array consumed by the netCDF / binary
       ! output writers back to its host counterpart, so that subsequent
       ! write_output(...) calls on rank 0 see fresh state. Single-rank only;
-      ! multi-rank gather is sub-epic 8's job. Each arr_h = arr_d generates a
+      ! multi-rank gather is SOR-712's job. Each arr_h = arr_d generates a
       ! synchronous cudaMemcpy(DeviceToHost) on the default stream.
       !
       ! --- Hydrodynamic state -----------------------------------------------

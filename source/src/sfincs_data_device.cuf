@@ -309,11 +309,12 @@ module sfincs_data_device
    ! ===== gpu-multi-gpu supplemental =====
    !
    ! Per-neighbor-rank halo descriptors populated by build_halo_descriptors
-   ! in sfincs_partition.cuf. Sibling sub-epic 8 issues consume these in
-   ! the MPI Isend/Irecv halo-exchange bodies. The leading dimension of the
-   ! 2D index arrays is the maximum count across neighbors; the trailing
-   ! dimension is halo_n_neighbors. Per-neighbor counts in halo_*_count are
-   ! the actual valid lengths within that leading dimension.
+   ! in sfincs_partition.cuf. SOR-708 consumes these in the MPI Isend/Irecv
+   ! halo_exchange_zs and halo_exchange_q_uv bodies; SOR-709 wires the
+   ! call sites in sfincs_lib.F90. The leading dimension of the 2D index
+   ! arrays is the maximum count across neighbors; the trailing dimension
+   ! is halo_n_neighbors. Per-neighbor counts in halo_*_count are the
+   ! actual valid lengths within that leading dimension.
    !
    ! Cell (z) halos.
    !
@@ -336,11 +337,10 @@ module sfincs_data_device
    integer :: halo_uv_n_neighbors
    !
    ! Pinned-host fallback / staging send-recv buffers. CUDA-aware MPI reads
-   ! the device-side state directly; these declarations exist so sibling
-   ! halo_exchange_* issues have a stable name to attach to if they need
-   ! pinned-host staging. Allocation is deferred to sibling issues, which
-   ! may also delete these declarations if they decide CUDA-aware MPI
-   ! suffices.
+   ! the device-side state directly; these declarations exist so SOR-708
+   ! has a stable name to attach to if it needs pinned-host staging.
+   ! Allocation is deferred to SOR-708, which may also delete these
+   ! declarations if CUDA-aware MPI suffices.
    !
    real, allocatable, pinned :: halo_send_buf_zs(:,:)
    real, allocatable, pinned :: halo_recv_buf_zs(:,:)
