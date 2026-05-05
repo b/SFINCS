@@ -1049,7 +1049,7 @@ contains
    ! update_spiderweb_data reads host tauwu0/tauwv0/... as a merge
    ! base, and (b) the bridge-IN block in update_meteo_forcing would
    ! otherwise H2D-clobber device writes with stale host values.
-   ! Drops once the bridge-trim issue lands.
+   ! Drops once SOR-739 (bridge-trim) lands.
    ! -----------------------------------------------------------------
    subroutine update_amuv_data()
       !
@@ -1142,7 +1142,7 @@ contains
       ! wind components when store_wind) in sync for downstream CPU
       ! consumers (still-CPU update_spiderweb_data merge base) and to
       ! make the bridge-IN H2D copy in update_meteo_forcing a no-op.
-      ! Removed once the bridge-trim issue lands.
+      ! Removed once SOR-739 (bridge-trim) lands.
       !
       tauwu0_h = tauwu0
       tauwv0_h = tauwv0
