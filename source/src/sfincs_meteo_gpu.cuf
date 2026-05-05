@@ -675,7 +675,7 @@ contains
       ! D2H staging — keep host patm0/patm1 in sync for downstream CPU
       ! consumers (still-CPU update_spiderweb_data merge base) and to
       ! make the bridge-IN H2D copy in update_meteo_forcing a no-op.
-      ! Removed once the bridge-trim issue lands.
+      ! Removed once SOR-739 (bridge-trim integration) lands.
       !
       patm0_h = patm0
       patm1_h = patm1
