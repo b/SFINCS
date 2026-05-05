@@ -905,7 +905,7 @@ contains
       ! D2H staging — keep host prcp0/prcp1 in sync for downstream CPU
       ! consumers (still-CPU update_spiderweb_data merge base) and to
       ! make the bridge-IN H2D copy in update_meteo_forcing a no-op.
-      ! Removed once the bridge-trim issue lands.
+      ! Removed once SOR-740 lands.
       !
       prcp0_h = prcp0
       prcp1_h = prcp1
