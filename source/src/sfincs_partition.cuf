@@ -23,7 +23,7 @@ module sfincs_partition
    ! still maps to a recognisable host name.
    !
    use sfincs_data, only: &
-      npn_h => np, npuv_h => npuv, ncuv_h => ncuv, &
+      npn_h => np, npuv_h => npuv, &
       z_xz_h => z_xz, z_yz_h => z_yz, &
       kcs_h => kcs, kfuv_h => kfuv, kcuv_h => kcuv, &
       zs_h => zs, zs0_h => zs0, zsderv_h => zsderv, &
@@ -159,13 +159,17 @@ contains
       integer :: nGpus, istat
       logical :: flag
       !
-      ! Local partition / index-map state. cell_part is owned by this routine
-      ! and deallocated before return. The local-to-global / global-to-local
-      ! maps are passed to build_halo_descriptors (Phase 5) and then dropped.
+      ! Local partition / index-map state. cell_part and the global_to_local
+      ! reverse maps are owned by this routine and deallocated before return.
+      ! local_to_global / local_to_global_uv live at module scope in
+      ! sfincs_data_device.cuf because SOR-708's halo_exchange needs them at
+      ! runtime to translate LOCAL send indices into GLOBAL device indices
+      ! (the device shadows stay full-size global-indexed while AC #5/#6
+      ! deferral is in effect).
       !
       integer, allocatable :: cell_part(:)
-      integer, allocatable :: local_to_global(:), global_to_local(:)
-      integer, allocatable :: local_to_global_uv(:), global_to_local_uv(:)
+      integer, allocatable :: global_to_local(:)
+      integer, allocatable :: global_to_local_uv(:)
       integer :: npn_total, npuv_total
       !
       ! --- Phase 1: MPI bootstrap -------------------------------------------
@@ -203,8 +207,7 @@ contains
       allocate(cell_part(max(npn_h, 1)))
       call compute_quadtree_geometric_partition(cell_part)
       call build_local_index_maps(cell_part, &
-                                  local_to_global, global_to_local, &
-                                  local_to_global_uv, global_to_local_uv, &
+                                  global_to_local, global_to_local_uv, &
                                   npn_total, npuv_total)
       !
       ! --- Phase 4: Allocate device shadows + copyin ------------------------
@@ -214,29 +217,30 @@ contains
       ! NOTE on AC #5/#6 (Phase 4 shrink + connectivity renumber):
       !
       !    Phase 4 here does NOT shrink to npn_local + halo_count, and the
-      !    connectivity arrays are NOT renumbered to local indices. This is
-      !    a deliberate deferral of acceptance criteria #5 and #6 to the
-      !    sibling halo_exchange_* issues (SOR-708..SOR-712). Reason: the
-      !    per-step host wrappers in source/src/sfincs_<name>_gpu.cuf (e.g.
-      !    compute_fluxes at sfincs_momentum_gpu.cuf:138-176) re-copy the
-      !    full host arrays into the device shadows each step via plain
-      !    `arr_d = arr_h` whole-array assignments — the symmetric Bridge
-      !    code lifetime mandated by the architect's cross-sub-epic
-      !    contract. Shrinking the device shadow here, while leaving the
-      !    bridges as bulk re-copies, triggers a shape mismatch /
-      !    cudaErrorIllegalAddress on the first compute_fluxes call. The
-      !    SOR-707 issue body itself states "the per-step compute kernels
-      !    in sfincs_<name>_gpu.cuf are not touched", which forbids the
-      !    bridge-side gather edit needed to make the shrink work.
+      !    connectivity arrays are NOT renumbered to local indices. Per the
+      !    2026-05-05 architect amendment, AC #5 and AC #6 are deferred to
+      !    sub-epic 10 (gpu-rank-local-allocation), which executes after the
+      !    per-step staging bridges in source/src/sfincs_<name>_gpu.cuf are
+      !    removed. Reason: those bridges (e.g. compute_fluxes at
+      !    sfincs_momentum_gpu.cuf:138-176) re-copy the full host arrays into
+      !    the device shadows each step via plain `arr_d = arr_h` whole-array
+      !    assignments — the symmetric Bridge code lifetime mandated by the
+      !    architect's cross-sub-epic contract. Shrinking the device shadow
+      !    here, while the bridges still bulk re-copy, triggers a shape
+      !    mismatch / cudaErrorIllegalAddress on the first compute_fluxes
+      !    call. The SOR-707 issue body's "the per-step compute kernels in
+      !    sfincs_<name>_gpu.cuf are not touched" clause forbids the
+      !    bridge-side gather edit needed to make the shrink work, so the
+      !    shrink lives in sub-epic 10 instead, after the bridges are gone.
       !
-      !    This contradiction in the architect contract is surfaced via a
-      !    PR comment for architect amendment. Until amended, the foundation
-      !    this issue still delivers — cell_part (Phase 3),
+      !    The foundation this issue delivers — cell_part (Phase 3),
       !    npn_local / npuv_local / cell_index_first / cell_index_last
-      !    (build_local_index_maps), and per-neighbor-rank halo descriptors
-      !    (Phase 5) — is sufficient input for SOR-708..SOR-712 to land
-      !    the bridge-side gather edits and the corresponding partitioned
-      !    Phase 4 in a single coordinated change.
+      !    (build_local_index_maps), per-neighbor-rank halo descriptors
+      !    (Phase 5), and the persisted local_to_global / local_to_global_uv
+      !    translation maps (sfincs_data_device) — is sufficient input for
+      !    SOR-708 / SOR-709's halo-exchange execution to land against the
+      !    full-size global-indexed device shadows, and for sub-epic 10 to
+      !    land the eventual shrink and renumber.
       !
       !    N=1 stays bit-identical to the pre-PR baseline because Phase 4
       !    here is a verbatim port of the prior single-rank Phase 4 body.
@@ -252,17 +256,15 @@ contains
       ! beyond the zero-length neighbor-rank vector.
       !
       call build_halo_descriptors(cell_part, &
-                                  local_to_global, global_to_local, &
-                                  local_to_global_uv, global_to_local_uv)
+                                  global_to_local, global_to_local_uv)
       !
-      ! Drop host-side temporaries; the only state that needs to live past
-      ! this routine is the device-resident catalog plus the halo descriptor
-      ! arrays in sfincs_data_device.
+      ! Drop host-side temporaries. The state that needs to live past this
+      ! routine is the device-resident catalog plus the halo descriptor
+      ! arrays and local_to_global / local_to_global_uv (module scope in
+      ! sfincs_data_device, deallocated by device_finalize).
       !
       if (allocated(cell_part))          deallocate(cell_part)
-      if (allocated(local_to_global))    deallocate(local_to_global)
       if (allocated(global_to_local))    deallocate(global_to_local)
-      if (allocated(local_to_global_uv)) deallocate(local_to_global_uv)
       if (allocated(global_to_local_uv)) deallocate(global_to_local_uv)
       !
    end subroutine partition_and_localize
@@ -622,8 +624,7 @@ contains
    end subroutine qsort_recursive
    !
    subroutine build_local_index_maps(cell_part, &
-                                     local_to_global, global_to_local, &
-                                     local_to_global_uv, global_to_local_uv, &
+                                     global_to_local, global_to_local_uv, &
                                      npn_total, npuv_total)
       !
       ! Walks owned cells, discovers one-cell-deep cell and edge halos, and
@@ -632,10 +633,14 @@ contains
       ! laid out contiguously after owned cells, grouped by neighbor rank
       ! in halo_neighbor_ranks order, so that the per-neighbor receive
       ! slices in halo_recv_local_idx are contiguous local-index ranges.
+      ! local_to_global / local_to_global_uv are module-scope in
+      ! sfincs_data_device.cuf (persisted for SOR-708's halo_exchange);
+      ! global_to_local / global_to_local_uv are routine-local outputs,
+      ! consumed only by build_halo_descriptors.
       !
       integer, intent(in)               :: cell_part(:)
-      integer, allocatable, intent(out) :: local_to_global(:), global_to_local(:)
-      integer, allocatable, intent(out) :: local_to_global_uv(:), global_to_local_uv(:)
+      integer, allocatable, intent(out) :: global_to_local(:)
+      integer, allocatable, intent(out) :: global_to_local_uv(:)
       integer, intent(out)              :: npn_total, npuv_total
       !
       logical, allocatable :: is_halo_cell(:), is_halo_edge(:)
@@ -655,6 +660,12 @@ contains
       cell_index_last   = 0
       halo_n_neighbors  = 0
       halo_uv_n_neighbors = 0
+      !
+      ! Reset module-scope translation maps in case partition_and_localize
+      ! is re-entered (defensive — only one call site today).
+      !
+      if (allocated(local_to_global))    deallocate(local_to_global)
+      if (allocated(local_to_global_uv)) deallocate(local_to_global_uv)
       !
       if (npn_h <= 0) then
          allocate(local_to_global(0))
@@ -845,8 +856,7 @@ contains
    end subroutine build_local_index_maps
    !
    subroutine build_halo_descriptors(cell_part, &
-                                     local_to_global, global_to_local, &
-                                     local_to_global_uv, global_to_local_uv)
+                                     global_to_local, global_to_local_uv)
       !
       ! Builds the per-neighbor-rank cell and edge index lists consumed by
       ! halo_exchange_zs / halo_exchange_q_uv (SOR-708) at runtime. The neighbor-rank list
@@ -870,8 +880,8 @@ contains
       ! N=1 device-side state matches the prior degenerate code path.
       !
       integer, intent(in) :: cell_part(:)
-      integer, intent(in) :: local_to_global(:),    global_to_local(:)
-      integer, intent(in) :: local_to_global_uv(:), global_to_local_uv(:)
+      integer, intent(in) :: global_to_local(:)
+      integer, intent(in) :: global_to_local_uv(:)
       !
       integer, allocatable :: edge_owner(:)
       integer, allocatable :: cell_recv_count(:), cell_send_count(:)
@@ -1356,6 +1366,8 @@ contains
       if (allocated(halo_uv_recv_count))      deallocate(halo_uv_recv_count)
       if (allocated(halo_uv_send_count))      deallocate(halo_uv_send_count)
       if (allocated(halo_neighbor_ranks))     deallocate(halo_neighbor_ranks)
+      if (allocated(local_to_global))         deallocate(local_to_global)
+      if (allocated(local_to_global_uv))      deallocate(local_to_global_uv)
       if (allocated(halo_send_buf_zs))        deallocate(halo_send_buf_zs)
       if (allocated(halo_recv_buf_zs))        deallocate(halo_recv_buf_zs)
       if (allocated(halo_send_buf_q))         deallocate(halo_send_buf_q)

@@ -336,6 +336,19 @@ module sfincs_data_device
    integer, allocatable :: halo_uv_send_count(:)
    integer :: halo_uv_n_neighbors
    !
+   ! Local-to-global translation maps. Persisted across partition_and_localize
+   ! because SOR-708's halo_exchange uses them to translate the LOCAL indices
+   ! stored in halo_send_local_idx back into GLOBAL indices, which are what
+   ! the still-full-size device shadows are addressed by while AC #5/#6
+   ! deferral remains in effect (see sfincs_partition.cuf Phase 4 comment).
+   ! halo_recv_remote_idx already carries global indices on the receive side,
+   ! so only the send side needs the translation. global_to_local /
+   ! global_to_local_uv are not persisted: they are fully consumed inside
+   ! build_local_index_maps + build_halo_descriptors.
+   !
+   integer, allocatable :: local_to_global(:)
+   integer, allocatable :: local_to_global_uv(:)
+   !
    ! Pinned-host fallback / staging send-recv buffers. CUDA-aware MPI reads
    ! the device-side state directly; these declarations exist so SOR-708
    ! has a stable name to attach to if it needs pinned-host staging.
