@@ -502,7 +502,51 @@ contains
    end subroutine halo_exchange_q_uv
    !
    subroutine device_to_host_for_output()
-      ! Stub; sub-epic 7 (gpu-output-sync) implements.
+      !
+      ! Pull every device-resident state array consumed by the netCDF / binary
+      ! output writers back to its host counterpart, so that subsequent
+      ! write_output(...) calls on rank 0 see fresh state. Single-rank only;
+      ! multi-rank gather is sub-epic 8's job. Each arr_h = arr_d generates a
+      ! synchronous cudaMemcpy(DeviceToHost) on the default stream.
+      !
+      ! --- Hydrodynamic state -----------------------------------------------
+      !
+      if (allocated(zs_h)             .and. allocated(zs))             zs_h             = zs
+      if (allocated(q_h)              .and. allocated(q))              q_h              = q
+      if (allocated(uv_h)             .and. allocated(uv))             uv_h             = uv
+      if (allocated(uvmean_h)         .and. allocated(uvmean))         uvmean_h         = uvmean
+      if (allocated(zsmax_h)          .and. allocated(zsmax))          zsmax_h          = zsmax
+      if (allocated(maxzsm_h)         .and. allocated(maxzsm))         maxzsm_h         = maxzsm
+      if (allocated(qmax_h)           .and. allocated(qmax))           qmax_h           = qmax
+      if (allocated(vmax_h)           .and. allocated(vmax))           vmax_h           = vmax
+      if (allocated(twet_h)           .and. allocated(twet))           twet_h           = twet
+      if (allocated(zsm_h)            .and. allocated(zsm))            zsm_h            = zsm
+      if (allocated(z_volume_h)       .and. allocated(z_volume))       z_volume_h       = z_volume
+      if (allocated(storage_volume_h) .and. allocated(storage_volume)) storage_volume_h = storage_volume
+      !
+      ! --- Meteo ------------------------------------------------------------
+      !
+      if (allocated(windu_h)          .and. allocated(windu))          windu_h          = windu
+      if (allocated(windv_h)          .and. allocated(windv))          windv_h          = windv
+      if (allocated(windmax_h)        .and. allocated(windmax))        windmax_h        = windmax
+      if (allocated(patm_h)           .and. allocated(patm))           patm_h           = patm
+      if (allocated(prcp_h)           .and. allocated(prcp))           prcp_h           = prcp
+      if (allocated(cumprcp_h)        .and. allocated(cumprcp))        cumprcp_h        = cumprcp
+      if (allocated(netprcp_h)        .and. allocated(netprcp))        netprcp_h        = netprcp
+      !
+      ! --- Infiltration -----------------------------------------------------
+      !
+      if (allocated(qinfmap_h)        .and. allocated(qinfmap))        qinfmap_h        = qinfmap
+      if (allocated(cuminf_h)         .and. allocated(cuminf))         cuminf_h         = cuminf
+      if (allocated(scs_Se_h)         .and. allocated(scs_Se))         scs_Se_h         = scs_Se
+      if (allocated(GA_sigma_h)       .and. allocated(GA_sigma))       GA_sigma_h       = GA_sigma
+      if (allocated(GA_F_h)           .and. allocated(GA_F))           GA_F_h           = GA_F
+      if (allocated(rain_T1_h)        .and. allocated(rain_T1))        rain_T1_h        = rain_T1
+      !
+      ! --- Discharges / drains ----------------------------------------------
+      !
+      if (allocated(qtsrc_h)          .and. allocated(qtsrc))          qtsrc_h          = qtsrc
+      !
    end subroutine device_to_host_for_output
    !
 end module sfincs_partition
