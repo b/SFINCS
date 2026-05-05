@@ -3,9 +3,14 @@ module sfincs_partition
    ! GPU partition / device-binding / halo-exchange entry points.
    !
    ! This module owns the bridge between the host-side state in sfincs_data
-   ! and its device shadow in sfincs_data_device. The single-rank path is
-   ! implemented; multi-rank halo construction and exchange are deferred to
-   ! sub-epic 8 (gpu-multi-gpu) and sub-epic 7 (gpu-output-sync).
+   ! and its device shadow in sfincs_data_device. Multi-rank partition and
+   ! halo discovery are implemented here; halo-exchange execution bodies
+   ! remain stubs (SOR-708 fills halo_exchange_zs / halo_exchange_q_uv;
+   ! SOR-709 wires the call sites and MPI_Allreduce on min_dt; SOR-710
+   ! adds the boundary broadcast; SOR-711 adds SnapWave gather/scatter;
+   ! SOR-712 adds the output gather). For mpi_size == 1 the partition is
+   ! degenerate and the catalog copyin produces device-side arrays
+   ! bit-identical to the prior single-rank code path.
    !
    use cudafor
    use mpi
@@ -19,6 +24,7 @@ module sfincs_partition
    !
    use sfincs_data, only: &
       npn_h => np, npuv_h => npuv, &
+      z_xz_h => z_xz, z_yz_h => z_yz, &
       kcs_h => kcs, kfuv_h => kfuv, kcuv_h => kcuv, &
       zs_h => zs, zs0_h => zs0, zsderv_h => zsderv, &
       q_h => q, q0_h => q0, uv_h => uv, uv0_h => uv0, &
@@ -136,9 +142,14 @@ module sfincs_partition
    !
    implicit none
    !
-   public :: partition_and_localize, device_finalize, &
-             halo_exchange_zs, halo_exchange_q_uv, &
-             device_to_host_for_output
+   public  :: partition_and_localize, device_finalize, &
+              halo_exchange_zs, halo_exchange_q_uv, &
+              device_to_host_for_output
+   private :: compute_quadtree_geometric_partition, &
+              build_local_index_maps, &
+              build_halo_descriptors, &
+              copyin_phase4_degenerate, &
+              sort_indices_by_key, qsort_recursive
    !
 contains
    !
@@ -147,6 +158,19 @@ contains
       integer :: ierr
       integer :: nGpus, istat
       logical :: flag
+      !
+      ! Local partition / index-map state. cell_part and the global_to_local
+      ! reverse maps are owned by this routine and deallocated before return.
+      ! local_to_global / local_to_global_uv live at module scope in
+      ! sfincs_data_device.cuf because SOR-708's halo_exchange needs them at
+      ! runtime to translate LOCAL send indices into GLOBAL device indices
+      ! (the device shadows stay full-size global-indexed while AC #5/#6
+      ! deferral is in effect).
+      !
+      integer, allocatable :: cell_part(:)
+      integer, allocatable :: global_to_local(:)
+      integer, allocatable :: global_to_local_uv(:)
+      integer :: npn_total, npuv_total
       !
       ! --- Phase 1: MPI bootstrap -------------------------------------------
       ! The orchestrator (sfincs_lib) may have already called mpi_init in the
@@ -168,19 +192,91 @@ contains
          error stop 'cudaSetDevice failed'
       end if
       !
-      ! --- Phase 3: Degenerate (single-rank) partition ----------------------
+      ! --- Phase 3: Quadtree-aware geometric partition ----------------------
+      ! compute_quadtree_geometric_partition fills cell_part(1:npn_h) with
+      ! 0-based rank ids. build_local_index_maps consumes cell_part plus the
+      ! host-side connectivity arrays to produce the cell- and edge-level
+      ! local_to_global / global_to_local maps that Phase 4 needs to gather
+      ! and renumber catalog arrays. npn_local, npuv_local, halo counts and
+      ! cell_index_first/last are set inside build_local_index_maps. For
+      ! mpi_size == 1 the partition is degenerate: cell_part(:) == 0,
+      ! npn_local == npn_h, npuv_local == npuv_h, halo_count_* == 0 and the
+      ! maps are identities, which is what guarantees the N=1 device-side
+      ! state stays bit-identical to the prior single-rank path.
       !
-      if (mpi_size > 1) then
-         error stop 'multi-rank not yet supported; awaiting sub-epic 8'
-      end if
-      npn_local        = npn_h
-      npuv_local       = npuv_h
-      cell_index_first = 1
-      cell_index_last  = npn_h
+      allocate(cell_part(max(npn_h, 1)))
+      call compute_quadtree_geometric_partition(cell_part)
+      call build_local_index_maps(cell_part, &
+                                  global_to_local, global_to_local_uv, &
+                                  npn_total, npuv_total)
       !
       ! --- Phase 4: Allocate device shadows + copyin ------------------------
-      ! Skip arrays whose host counterpart is unallocated (wavemaker,
-      ! drainage, structures, etc. only allocated when their input is given).
+      ! Every device shadow is allocated with mold=arr_h and copied verbatim
+      ! from its host counterpart, both for mpi_size == 1 and mpi_size > 1.
+      !
+      ! NOTE on AC #5/#6 (Phase 4 shrink + connectivity renumber):
+      !
+      !    Phase 4 here does NOT shrink to npn_local + halo_count, and the
+      !    connectivity arrays are NOT renumbered to local indices. Per the
+      !    2026-05-05 architect amendment, AC #5 and AC #6 are deferred to
+      !    sub-epic 10 (gpu-rank-local-allocation), which executes after the
+      !    per-step staging bridges in source/src/sfincs_<name>_gpu.cuf are
+      !    removed. Reason: those bridges (e.g. compute_fluxes at
+      !    sfincs_momentum_gpu.cuf:138-176) re-copy the full host arrays into
+      !    the device shadows each step via plain `arr_d = arr_h` whole-array
+      !    assignments — the symmetric Bridge code lifetime mandated by the
+      !    architect's cross-sub-epic contract. Shrinking the device shadow
+      !    here, while the bridges still bulk re-copy, triggers a shape
+      !    mismatch / cudaErrorIllegalAddress on the first compute_fluxes
+      !    call. The SOR-707 issue body's "the per-step compute kernels in
+      !    sfincs_<name>_gpu.cuf are not touched" clause forbids the
+      !    bridge-side gather edit needed to make the shrink work, so the
+      !    shrink lives in sub-epic 10 instead, after the bridges are gone.
+      !
+      !    The foundation this issue delivers — cell_part (Phase 3),
+      !    npn_local / npuv_local / cell_index_first / cell_index_last
+      !    (build_local_index_maps), per-neighbor-rank halo descriptors
+      !    (Phase 5), and the persisted local_to_global / local_to_global_uv
+      !    translation maps (sfincs_data_device) — is sufficient input for
+      !    SOR-708 / SOR-709's halo-exchange execution to land against the
+      !    full-size global-indexed device shadows, and for sub-epic 10 to
+      !    land the eventual shrink and renumber.
+      !
+      !    N=1 stays bit-identical to the pre-PR baseline because Phase 4
+      !    here is a verbatim port of the prior single-rank Phase 4 body.
+      !
+      call copyin_phase4_degenerate()
+      !
+      ! --- Phase 5: Halo descriptor build -----------------------------------
+      ! Populates halo_recv_local_idx, halo_recv_remote_idx,
+      ! halo_send_local_idx, halo_recv_count, halo_send_count,
+      ! halo_neighbor_ranks, halo_n_neighbors and the matching halo_uv_*
+      ! arrays declared in sfincs_data_device.cuf. For mpi_size == 1 the
+      ! routine returns with halo_n_neighbors == 0 and no allocations
+      ! beyond the zero-length neighbor-rank vector.
+      !
+      call build_halo_descriptors(cell_part, &
+                                  global_to_local, global_to_local_uv)
+      !
+      ! Drop host-side temporaries. The state that needs to live past this
+      ! routine is the device-resident catalog plus the halo descriptor
+      ! arrays and local_to_global / local_to_global_uv (module scope in
+      ! sfincs_data_device, deallocated by device_finalize).
+      !
+      if (allocated(cell_part))          deallocate(cell_part)
+      if (allocated(global_to_local))    deallocate(global_to_local)
+      if (allocated(global_to_local_uv)) deallocate(global_to_local_uv)
+      !
+   end subroutine partition_and_localize
+   !
+   subroutine copyin_phase4_degenerate()
+      !
+      ! Mirror of the prior single-rank Phase 4 body. Every device shadow
+      ! is allocated with mold=arr_h and copied verbatim from its host
+      ! counterpart, guaranteeing the N=1 path produces device-side arrays
+      ! bit-identical to the pre-PR baseline. Skip arrays whose host
+      ! counterpart is unallocated (wavemaker, drainage, structures, etc.
+      ! only allocated when their input is given).
       !
       if (allocated(kcs_h))           then; allocate(kcs,           mold=kcs_h);           kcs           = kcs_h;           end if
       if (allocated(kfuv_h))          then; allocate(kfuv,          mold=kfuv_h);          kfuv          = kfuv_h;          end if
@@ -389,10 +485,679 @@ contains
       if (allocated(z0land_h))       then; allocate(z0land,       mold=z0land_h);       z0land       = z0land_h;       end if
       if (allocated(z0land_table_h)) then; allocate(z0land_table, mold=z0land_table_h); z0land_table = z0land_table_h; end if
       !
-      ! --- Phase 5: Halo descriptor build -----------------------------------
-      ! Halo descriptor build; sub-epic 8 (gpu-multi-gpu) will populate this.
+   end subroutine copyin_phase4_degenerate
+   !
+   subroutine compute_quadtree_geometric_partition(cell_part)
       !
-   end subroutine partition_and_localize
+      ! Strategy: quadtree-aware geometric split. METIS not used (avoids
+      ! external configure dep, vendoring, C-binding wrapper).
+      !
+      ! Algorithm:
+      !   1. Compute the bounding box of cells with kcs_h > 0.
+      !   2. Choose the longer-axis (x or y) as split axis.
+      !   3. Sort active cells by the chosen-axis centroid (z_xz_h or z_yz_h).
+      !   4. Walk the sorted list, splitting it into mpi_size contiguous
+      !      slabs of size (n_active / mpi_size). At each cut, snap forward
+      !      past any z_flags_iref_h > 1 cells so quadtree children stay on
+      !      the same rank as their coarse parent. For regular grids this
+      !      snap is a no-op.
+      !   5. Cells with kcs_h <= 0 are assigned to rank 0 by default; halo
+      !      discovery treats them as belonging to a foreign rank from the
+      !      perspective of any rank > 0, which is wasteful but harmless
+      !      because their kcs is zero so kernels skip them.
+      !   6. For mpi_size == 1 the loop body never runs and cell_part(:)
+      !      stays at zero.
+      !
+      integer, intent(out) :: cell_part(:)
+      !
+      integer :: i, k, n_active, lo, hi
+      real*4 :: xmin, xmax, ymin, ymax
+      real*4 :: extent_x, extent_y
+      integer :: split_axis
+      integer, allocatable :: active_idx(:)
+      real*4,  allocatable :: keys(:)
+      !
+      cell_part(:) = 0
+      if (mpi_size <= 1)  return
+      if (npn_h    <= 0)  return
+      if (.not. allocated(kcs_h))  return
+      if (.not. allocated(z_xz_h)) return
+      if (.not. allocated(z_yz_h)) return
+      !
+      xmin =  huge(0.0_4); xmax = -huge(0.0_4)
+      ymin =  huge(0.0_4); ymax = -huge(0.0_4)
+      n_active = 0
+      do i = 1, npn_h
+         if (kcs_h(i) > 0) then
+            n_active = n_active + 1
+            if (z_xz_h(i) < xmin) xmin = z_xz_h(i)
+            if (z_xz_h(i) > xmax) xmax = z_xz_h(i)
+            if (z_yz_h(i) < ymin) ymin = z_yz_h(i)
+            if (z_yz_h(i) > ymax) ymax = z_yz_h(i)
+         end if
+      end do
+      if (n_active <= 0) return
+      !
+      extent_x = xmax - xmin
+      extent_y = ymax - ymin
+      if (extent_x >= extent_y) then
+         split_axis = 1
+      else
+         split_axis = 2
+      end if
+      !
+      allocate(active_idx(n_active))
+      allocate(keys(n_active))
+      k = 0
+      do i = 1, npn_h
+         if (kcs_h(i) > 0) then
+            k = k + 1
+            active_idx(k) = i
+            if (split_axis == 1) then
+               keys(k) = z_xz_h(i)
+            else
+               keys(k) = z_yz_h(i)
+            end if
+         end if
+      end do
+      call sort_indices_by_key(active_idx, keys, n_active)
+      !
+      lo = 1
+      do k = 0, mpi_size - 1
+         if (k < mpi_size - 1) then
+            hi = (n_active * (k + 1)) / mpi_size
+            if (allocated(z_flags_iref_h)) then
+               do while (hi < n_active)
+                  if (z_flags_iref_h(active_idx(hi + 1)) > 1) then
+                     hi = hi + 1
+                  else
+                     exit
+                  end if
+               end do
+            end if
+         else
+            hi = n_active
+         end if
+         do i = lo, hi
+            cell_part(active_idx(i)) = k
+         end do
+         lo = hi + 1
+      end do
+      !
+      deallocate(active_idx)
+      deallocate(keys)
+      !
+   end subroutine compute_quadtree_geometric_partition
+   !
+   subroutine sort_indices_by_key(idx, keys, n)
+      integer, intent(inout) :: idx(:)
+      real*4,  intent(inout) :: keys(:)
+      integer, intent(in)    :: n
+      if (n > 1) call qsort_recursive(idx, keys, 1, n)
+   end subroutine sort_indices_by_key
+   !
+   recursive subroutine qsort_recursive(idx, keys, lo, hi)
+      integer, intent(inout) :: idx(:)
+      real*4,  intent(inout) :: keys(:)
+      integer, intent(in)    :: lo, hi
+      integer :: i, j, tmp_i
+      real*4  :: pivot, tmp_k
+      if (lo >= hi) return
+      pivot = keys((lo + hi) / 2)
+      i = lo - 1
+      j = hi + 1
+      do
+         do
+            i = i + 1
+            if (keys(i) >= pivot) exit
+         end do
+         do
+            j = j - 1
+            if (keys(j) <= pivot) exit
+         end do
+         if (i >= j) exit
+         tmp_k   = keys(i); keys(i) = keys(j); keys(j) = tmp_k
+         tmp_i   = idx(i);  idx(i)  = idx(j);  idx(j)  = tmp_i
+      end do
+      call qsort_recursive(idx, keys, lo, j)
+      call qsort_recursive(idx, keys, j + 1, hi)
+   end subroutine qsort_recursive
+   !
+   subroutine build_local_index_maps(cell_part, &
+                                     global_to_local, global_to_local_uv, &
+                                     npn_total, npuv_total)
+      !
+      ! Walks owned cells, discovers one-cell-deep cell and edge halos, and
+      ! produces the local_to_global / global_to_local maps consumed by
+      ! Phase 4 copyin and Phase 5 halo-descriptor build. Halo cells are
+      ! laid out contiguously after owned cells, grouped by neighbor rank
+      ! in halo_neighbor_ranks order, so that the per-neighbor receive
+      ! slices in halo_recv_local_idx are contiguous local-index ranges.
+      ! local_to_global / local_to_global_uv are module-scope in
+      ! sfincs_data_device.cuf (persisted for SOR-708's halo_exchange);
+      ! global_to_local / global_to_local_uv are routine-local outputs,
+      ! consumed only by build_halo_descriptors.
+      !
+      integer, intent(in)               :: cell_part(:)
+      integer, allocatable, intent(out) :: global_to_local(:)
+      integer, allocatable, intent(out) :: global_to_local_uv(:)
+      integer, intent(out)              :: npn_total, npuv_total
+      !
+      logical, allocatable :: is_halo_cell(:), is_halo_edge(:)
+      integer, allocatable :: edge_owner(:)
+      logical, allocatable :: neighbor_present(:)
+      integer, allocatable :: nbr_ranks(:)
+      integer :: nm, iuv, nm_a, nm_b, nm_other
+      integer :: edge_slot
+      integer :: i, k, r, ridx, n_neighbors
+      !
+      ! Initialise scalars/output arrays to safe defaults for the
+      ! mpi_size == 1 / unallocated-input fast path.
+      !
+      npn_local         = 0
+      npuv_local        = 0
+      cell_index_first  = 0
+      cell_index_last   = 0
+      halo_n_neighbors  = 0
+      halo_uv_n_neighbors = 0
+      !
+      ! Reset module-scope translation maps in case partition_and_localize
+      ! is re-entered (defensive — only one call site today).
+      !
+      if (allocated(local_to_global))    deallocate(local_to_global)
+      if (allocated(local_to_global_uv)) deallocate(local_to_global_uv)
+      !
+      if (npn_h <= 0) then
+         allocate(local_to_global(0))
+         allocate(global_to_local(0))
+         allocate(local_to_global_uv(0))
+         allocate(global_to_local_uv(0))
+         npn_total  = 0
+         npuv_total = 0
+         return
+      end if
+      !
+      allocate(is_halo_cell(npn_h));  is_halo_cell = .false.
+      allocate(is_halo_edge(max(npuv_h, 1)))
+      is_halo_edge = .false.
+      !
+      ! Edge ownership rule per architect contract: the owner rank of edge
+      ! iuv is the rank that owns uv_index_z_nm_h(iuv) (the "first cell"
+      ! side of the edge). Edges with no first-cell-side fall back to the
+      ! second-cell side; otherwise they are assigned to rank 0.
+      !
+      allocate(edge_owner(max(npuv_h, 1)))
+      edge_owner = 0
+      if (allocated(uv_index_z_nm_h)) then
+         do iuv = 1, npuv_h
+            nm_a = uv_index_z_nm_h(iuv)
+            if (nm_a > 0 .and. nm_a <= npn_h) then
+               edge_owner(iuv) = cell_part(nm_a)
+            else if (allocated(uv_index_z_nmu_h)) then
+               nm_b = uv_index_z_nmu_h(iuv)
+               if (nm_b > 0 .and. nm_b <= npn_h) then
+                  edge_owner(iuv) = cell_part(nm_b)
+               end if
+            end if
+         end do
+      end if
+      !
+      ! Halo discovery: walk owned cells, classify referenced neighbors and
+      ! edges. Each rank's halo_send_to_rank / halo_uv_send_to_rank flags
+      ! are reconstructed by build_halo_descriptors from cell_part + the
+      ! same neighbor walk; here we only need the receive flags because
+      ! they are what defines local_to_global's halo region.
+      !
+      if (mpi_size > 1 .and. allocated(z_index_uv_md_h) .and. &
+          allocated(z_index_uv_nd_h) .and. allocated(z_index_uv_mu_h) .and. &
+          allocated(z_index_uv_nu_h) .and. allocated(uv_index_z_nm_h) .and. &
+          allocated(uv_index_z_nmu_h)) then
+         do nm = 1, npn_h
+            if (cell_part(nm) /= mpi_rank) cycle
+            do edge_slot = 1, 4
+               select case (edge_slot)
+                  case (1); iuv = z_index_uv_md_h(nm)
+                  case (2); iuv = z_index_uv_nd_h(nm)
+                  case (3); iuv = z_index_uv_mu_h(nm)
+                  case (4); iuv = z_index_uv_nu_h(nm)
+               end select
+               if (iuv <= 0 .or. iuv > npuv_h) cycle
+               nm_a = uv_index_z_nm_h(iuv)
+               nm_b = uv_index_z_nmu_h(iuv)
+               if (nm_a == nm) then
+                  nm_other = nm_b
+               else if (nm_b == nm) then
+                  nm_other = nm_a
+               else
+                  nm_other = 0
+               end if
+               if (nm_other > 0 .and. nm_other <= npn_h) then
+                  if (cell_part(nm_other) /= mpi_rank) is_halo_cell(nm_other) = .true.
+               end if
+               if (edge_owner(iuv) /= mpi_rank) is_halo_edge(iuv) = .true.
+            end do
+         end do
+      end if
+      !
+      ! Determine neighbor ranks (ranks we receive from). We use only the
+      ! receive sides here because halo_send_count and halo_neighbor_ranks
+      ! (which is shared between z and uv halos) get a second symmetric
+      ! pass in build_halo_descriptors after both sides agree on the same
+      ! cell_part.
+      !
+      allocate(neighbor_present(0:max(mpi_size-1, 0)))
+      neighbor_present = .false.
+      do nm = 1, npn_h
+         if (is_halo_cell(nm)) then
+            r = cell_part(nm)
+            if (r >= 0 .and. r < mpi_size .and. r /= mpi_rank) neighbor_present(r) = .true.
+         end if
+      end do
+      do iuv = 1, npuv_h
+         if (is_halo_edge(iuv)) then
+            r = edge_owner(iuv)
+            if (r >= 0 .and. r < mpi_size .and. r /= mpi_rank) neighbor_present(r) = .true.
+         end if
+      end do
+      !
+      n_neighbors = count(neighbor_present)
+      allocate(nbr_ranks(max(n_neighbors, 1)))
+      nbr_ranks = -1
+      k = 0
+      do r = 0, mpi_size - 1
+         if (neighbor_present(r)) then
+            k = k + 1
+            nbr_ranks(k) = r
+         end if
+      end do
+      !
+      ! Stash neighbor list into module-level halo state. build_halo_descriptors
+      ! re-uses this and fills the per-rank counts and index arrays.
+      !
+      if (allocated(halo_neighbor_ranks)) deallocate(halo_neighbor_ranks)
+      allocate(halo_neighbor_ranks(n_neighbors))
+      do k = 1, n_neighbors
+         halo_neighbor_ranks(k) = nbr_ranks(k)
+      end do
+      halo_n_neighbors    = n_neighbors
+      halo_uv_n_neighbors = n_neighbors
+      !
+      ! ---- Build cell map ----
+      !
+      npn_local = 0
+      do nm = 1, npn_h
+         if (cell_part(nm) == mpi_rank) npn_local = npn_local + 1
+      end do
+      npn_total = npn_local + count(is_halo_cell)
+      !
+      allocate(local_to_global(max(npn_total, 1)))
+      allocate(global_to_local(max(npn_h, 1)))
+      local_to_global = 0
+      global_to_local = 0
+      i = 0
+      do nm = 1, npn_h
+         if (cell_part(nm) == mpi_rank) then
+            i = i + 1
+            local_to_global(i) = nm
+            global_to_local(nm) = i
+         end if
+      end do
+      do ridx = 1, n_neighbors
+         r = nbr_ranks(ridx)
+         do nm = 1, npn_h
+            if (is_halo_cell(nm) .and. cell_part(nm) == r) then
+               i = i + 1
+               local_to_global(i) = nm
+               global_to_local(nm) = i
+            end if
+         end do
+      end do
+      !
+      cell_index_first = 1
+      cell_index_last  = npn_local
+      !
+      ! ---- Build edge map ----
+      !
+      npuv_local = 0
+      do iuv = 1, npuv_h
+         if (edge_owner(iuv) == mpi_rank) npuv_local = npuv_local + 1
+      end do
+      npuv_total = npuv_local + count(is_halo_edge)
+      !
+      allocate(local_to_global_uv(max(npuv_total, 1)))
+      allocate(global_to_local_uv(max(npuv_h, 1)))
+      local_to_global_uv = 0
+      global_to_local_uv = 0
+      i = 0
+      do iuv = 1, npuv_h
+         if (edge_owner(iuv) == mpi_rank) then
+            i = i + 1
+            local_to_global_uv(i) = iuv
+            global_to_local_uv(iuv) = i
+         end if
+      end do
+      do ridx = 1, n_neighbors
+         r = nbr_ranks(ridx)
+         do iuv = 1, npuv_h
+            if (is_halo_edge(iuv) .and. edge_owner(iuv) == r) then
+               i = i + 1
+               local_to_global_uv(i) = iuv
+               global_to_local_uv(iuv) = i
+            end if
+         end do
+      end do
+      !
+      deallocate(is_halo_cell)
+      deallocate(is_halo_edge)
+      deallocate(edge_owner)
+      deallocate(neighbor_present)
+      deallocate(nbr_ranks)
+      !
+   end subroutine build_local_index_maps
+   !
+   subroutine build_halo_descriptors(cell_part, &
+                                     global_to_local, global_to_local_uv)
+      !
+      ! Builds the per-neighbor-rank cell and edge index lists consumed by
+      ! halo_exchange_zs / halo_exchange_q_uv (SOR-708) at runtime. The neighbor-rank list
+      ! halo_neighbor_ranks and the n_neighbors scalars were already
+      ! produced by build_local_index_maps above; this routine fills the
+      ! six halo_*_idx and four halo_*_count arrays:
+      !
+      !   halo_recv_local_idx    : local indices (npn_local+1..npn_total) where
+      !                            received cell data is scattered.
+      !   halo_recv_remote_idx   : matching GLOBAL cell indices on the
+      !                            sending rank (the SOR-708 Isend uses
+      !                            these as gather sources).
+      !   halo_send_local_idx    : local indices of OWNED cells we need to
+      !                            gather and ship to each neighbor.
+      !   halo_uv_recv_local_idx / halo_uv_recv_remote_idx /
+      !   halo_uv_send_local_idx : same shape, but for edge (uv) halos.
+      !   halo_*_count           : per-neighbor valid lengths.
+      !
+      ! For mpi_size == 1 the routine returns immediately with all device
+      ! arrays unallocated and counts at zero, which is what guarantees the
+      ! N=1 device-side state matches the prior degenerate code path.
+      !
+      integer, intent(in) :: cell_part(:)
+      integer, intent(in) :: global_to_local(:)
+      integer, intent(in) :: global_to_local_uv(:)
+      !
+      integer, allocatable :: edge_owner(:)
+      integer, allocatable :: cell_recv_count(:), cell_send_count(:)
+      integer, allocatable :: edge_recv_count(:), edge_send_count(:)
+      integer, allocatable :: cell_recv_loc(:,:), cell_recv_rem(:,:), cell_send_loc(:,:)
+      integer, allocatable :: edge_recv_loc(:,:), edge_recv_rem(:,:), edge_send_loc(:,:)
+      integer :: nm, iuv, nm_a, nm_b, nm_other
+      integer :: edge_slot
+      integer :: r, ridx, k
+      integer :: max_cell_recv, max_cell_send, max_edge_recv, max_edge_send
+      integer, allocatable :: rank_to_idx(:)
+      !
+      ! Reset previous-run device-side allocations defensively. For N=1 the
+      ! call returns here with zero allocations.
+      !
+      if (allocated(halo_recv_local_idx))    deallocate(halo_recv_local_idx)
+      if (allocated(halo_recv_remote_idx))   deallocate(halo_recv_remote_idx)
+      if (allocated(halo_send_local_idx))    deallocate(halo_send_local_idx)
+      if (allocated(halo_uv_recv_local_idx)) deallocate(halo_uv_recv_local_idx)
+      if (allocated(halo_uv_recv_remote_idx))deallocate(halo_uv_recv_remote_idx)
+      if (allocated(halo_uv_send_local_idx)) deallocate(halo_uv_send_local_idx)
+      if (allocated(halo_recv_count))        deallocate(halo_recv_count)
+      if (allocated(halo_send_count))        deallocate(halo_send_count)
+      if (allocated(halo_uv_recv_count))     deallocate(halo_uv_recv_count)
+      if (allocated(halo_uv_send_count))     deallocate(halo_uv_send_count)
+      !
+      if (mpi_size <= 1 .or. halo_n_neighbors <= 0) then
+         allocate(halo_recv_count(0))
+         allocate(halo_send_count(0))
+         allocate(halo_uv_recv_count(0))
+         allocate(halo_uv_send_count(0))
+         return
+      end if
+      !
+      ! Reverse map rank -> neighbor-list index for fast lookup during walk.
+      !
+      allocate(rank_to_idx(0:mpi_size - 1))
+      rank_to_idx = 0
+      do ridx = 1, halo_n_neighbors
+         rank_to_idx(halo_neighbor_ranks(ridx)) = ridx
+      end do
+      !
+      ! Recompute edge ownership (same rule as build_local_index_maps).
+      !
+      allocate(edge_owner(max(npuv_h, 1)))
+      edge_owner = 0
+      if (allocated(uv_index_z_nm_h)) then
+         do iuv = 1, npuv_h
+            nm_a = uv_index_z_nm_h(iuv)
+            if (nm_a > 0 .and. nm_a <= npn_h) then
+               edge_owner(iuv) = cell_part(nm_a)
+            else if (allocated(uv_index_z_nmu_h)) then
+               nm_b = uv_index_z_nmu_h(iuv)
+               if (nm_b > 0 .and. nm_b <= npn_h) then
+                  edge_owner(iuv) = cell_part(nm_b)
+               end if
+            end if
+         end do
+      end if
+      !
+      ! ---- Pass 1: count per-neighbor entries ----
+      !
+      allocate(cell_recv_count(halo_n_neighbors)); cell_recv_count = 0
+      allocate(cell_send_count(halo_n_neighbors)); cell_send_count = 0
+      allocate(edge_recv_count(halo_n_neighbors)); edge_recv_count = 0
+      allocate(edge_send_count(halo_n_neighbors)); edge_send_count = 0
+      !
+      block
+         logical, allocatable :: cell_recv_seen(:), cell_send_seen(:,:)
+         logical, allocatable :: edge_recv_seen(:), edge_send_seen(:,:)
+         allocate(cell_recv_seen(npn_h));                       cell_recv_seen = .false.
+         allocate(cell_send_seen(npn_h, halo_n_neighbors));     cell_send_seen = .false.
+         allocate(edge_recv_seen(max(npuv_h, 1)));              edge_recv_seen = .false.
+         allocate(edge_send_seen(max(npuv_h, 1), halo_n_neighbors)); edge_send_seen = .false.
+         !
+         do nm = 1, npn_h
+            if (cell_part(nm) /= mpi_rank) cycle
+            do edge_slot = 1, 4
+               select case (edge_slot)
+                  case (1); iuv = z_index_uv_md_h(nm)
+                  case (2); iuv = z_index_uv_nd_h(nm)
+                  case (3); iuv = z_index_uv_mu_h(nm)
+                  case (4); iuv = z_index_uv_nu_h(nm)
+               end select
+               if (iuv <= 0 .or. iuv > npuv_h) cycle
+               nm_a = uv_index_z_nm_h(iuv)
+               nm_b = uv_index_z_nmu_h(iuv)
+               if (nm_a == nm) then
+                  nm_other = nm_b
+               else if (nm_b == nm) then
+                  nm_other = nm_a
+               else
+                  nm_other = 0
+               end if
+               !
+               if (nm_other > 0 .and. nm_other <= npn_h) then
+                  r = cell_part(nm_other)
+                  if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
+                     ridx = rank_to_idx(r)
+                     if (ridx > 0) then
+                        if (.not. cell_recv_seen(nm_other)) then
+                           cell_recv_seen(nm_other) = .true.
+                           cell_recv_count(ridx) = cell_recv_count(ridx) + 1
+                        end if
+                        if (.not. cell_send_seen(nm, ridx)) then
+                           cell_send_seen(nm, ridx) = .true.
+                           cell_send_count(ridx) = cell_send_count(ridx) + 1
+                        end if
+                     end if
+                  end if
+               end if
+               !
+               r = edge_owner(iuv)
+               if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
+                  ridx = rank_to_idx(r)
+                  if (ridx > 0 .and. .not. edge_recv_seen(iuv)) then
+                     edge_recv_seen(iuv) = .true.
+                     edge_recv_count(ridx) = edge_recv_count(ridx) + 1
+                  end if
+               else if (r == mpi_rank .and. nm_other > 0 .and. nm_other <= npn_h) then
+                  k = cell_part(nm_other)
+                  if (k /= mpi_rank .and. k >= 0 .and. k < mpi_size) then
+                     ridx = rank_to_idx(k)
+                     if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
+                        edge_send_seen(iuv, ridx) = .true.
+                        edge_send_count(ridx) = edge_send_count(ridx) + 1
+                     end if
+                  end if
+               end if
+            end do
+         end do
+         !
+         ! ---- Pass 2: allocate buffers and fill index arrays ----
+         !
+         max_cell_recv = max(maxval(cell_recv_count), 1)
+         max_cell_send = max(maxval(cell_send_count), 1)
+         max_edge_recv = max(maxval(edge_recv_count), 1)
+         max_edge_send = max(maxval(edge_send_count), 1)
+         !
+         allocate(cell_recv_loc(max_cell_recv, halo_n_neighbors)); cell_recv_loc = 0
+         allocate(cell_recv_rem(max_cell_recv, halo_n_neighbors)); cell_recv_rem = 0
+         allocate(cell_send_loc(max_cell_send, halo_n_neighbors)); cell_send_loc = 0
+         allocate(edge_recv_loc(max_edge_recv, halo_n_neighbors)); edge_recv_loc = 0
+         allocate(edge_recv_rem(max_edge_recv, halo_n_neighbors)); edge_recv_rem = 0
+         allocate(edge_send_loc(max_edge_send, halo_n_neighbors)); edge_send_loc = 0
+         !
+         block
+            integer, allocatable :: c_recv_pos(:), c_send_pos(:), e_recv_pos(:), e_send_pos(:)
+            allocate(c_recv_pos(halo_n_neighbors)); c_recv_pos = 0
+            allocate(c_send_pos(halo_n_neighbors)); c_send_pos = 0
+            allocate(e_recv_pos(halo_n_neighbors)); e_recv_pos = 0
+            allocate(e_send_pos(halo_n_neighbors)); e_send_pos = 0
+            !
+            ! Reset _seen flags so we do not double-count during the second walk.
+            !
+            cell_recv_seen = .false.
+            cell_send_seen = .false.
+            edge_recv_seen = .false.
+            edge_send_seen = .false.
+            !
+            ! Drive the fill via the owned-cell walk so that we only enter
+            ! cells that are genuine halos for this rank. Halo cells are
+            ! discovered in increasing global-index order; build_local_index_maps
+            ! laid out the halo region of local_to_global in the same order
+            ! (ranks ordered by halo_neighbor_ranks, then global index within
+            ! a rank), so the entries we write to halo_recv_local_idx via
+            ! global_to_local stay contiguous within each per-neighbor slice.
+            !
+            do nm = 1, npn_h
+               if (cell_part(nm) /= mpi_rank) cycle
+               do edge_slot = 1, 4
+                  select case (edge_slot)
+                     case (1); iuv = z_index_uv_md_h(nm)
+                     case (2); iuv = z_index_uv_nd_h(nm)
+                     case (3); iuv = z_index_uv_mu_h(nm)
+                     case (4); iuv = z_index_uv_nu_h(nm)
+                  end select
+                  if (iuv <= 0 .or. iuv > npuv_h) cycle
+                  nm_a = uv_index_z_nm_h(iuv)
+                  nm_b = uv_index_z_nmu_h(iuv)
+                  if (nm_a == nm) then
+                     nm_other = nm_b
+                  else if (nm_b == nm) then
+                     nm_other = nm_a
+                  else
+                     nm_other = 0
+                  end if
+                  !
+                  if (nm_other > 0 .and. nm_other <= npn_h) then
+                     r = cell_part(nm_other)
+                     if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
+                        ridx = rank_to_idx(r)
+                        if (ridx > 0) then
+                           if (.not. cell_recv_seen(nm_other)) then
+                              cell_recv_seen(nm_other) = .true.
+                              c_recv_pos(ridx) = c_recv_pos(ridx) + 1
+                              cell_recv_loc(c_recv_pos(ridx), ridx) = global_to_local(nm_other)
+                              cell_recv_rem(c_recv_pos(ridx), ridx) = nm_other
+                           end if
+                           if (.not. cell_send_seen(nm, ridx)) then
+                              cell_send_seen(nm, ridx) = .true.
+                              c_send_pos(ridx) = c_send_pos(ridx) + 1
+                              cell_send_loc(c_send_pos(ridx), ridx) = global_to_local(nm)
+                           end if
+                        end if
+                     end if
+                  end if
+                  !
+                  r = edge_owner(iuv)
+                  if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
+                     ridx = rank_to_idx(r)
+                     if (ridx > 0 .and. .not. edge_recv_seen(iuv)) then
+                        edge_recv_seen(iuv) = .true.
+                        e_recv_pos(ridx) = e_recv_pos(ridx) + 1
+                        edge_recv_loc(e_recv_pos(ridx), ridx) = global_to_local_uv(iuv)
+                        edge_recv_rem(e_recv_pos(ridx), ridx) = iuv
+                     end if
+                  else if (r == mpi_rank .and. nm_other > 0 .and. nm_other <= npn_h) then
+                     k = cell_part(nm_other)
+                     if (k /= mpi_rank .and. k >= 0 .and. k < mpi_size) then
+                        ridx = rank_to_idx(k)
+                        if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
+                           edge_send_seen(iuv, ridx) = .true.
+                           e_send_pos(ridx) = e_send_pos(ridx) + 1
+                           edge_send_loc(e_send_pos(ridx), ridx) = global_to_local_uv(iuv)
+                        end if
+                     end if
+                  end if
+               end do
+            end do
+            !
+            deallocate(c_recv_pos)
+            deallocate(c_send_pos)
+            deallocate(e_recv_pos)
+            deallocate(e_send_pos)
+         end block
+         !
+         deallocate(cell_recv_seen)
+         deallocate(cell_send_seen)
+         deallocate(edge_recv_seen)
+         deallocate(edge_send_seen)
+      end block
+      !
+      ! ---- Push host descriptors onto the device ----
+      !
+      allocate(halo_recv_local_idx(max_cell_recv, halo_n_neighbors))
+      allocate(halo_recv_remote_idx(max_cell_recv, halo_n_neighbors))
+      allocate(halo_send_local_idx(max_cell_send, halo_n_neighbors))
+      allocate(halo_uv_recv_local_idx(max_edge_recv, halo_n_neighbors))
+      allocate(halo_uv_recv_remote_idx(max_edge_recv, halo_n_neighbors))
+      allocate(halo_uv_send_local_idx(max_edge_send, halo_n_neighbors))
+      !
+      halo_recv_local_idx     = cell_recv_loc
+      halo_recv_remote_idx    = cell_recv_rem
+      halo_send_local_idx     = cell_send_loc
+      halo_uv_recv_local_idx  = edge_recv_loc
+      halo_uv_recv_remote_idx = edge_recv_rem
+      halo_uv_send_local_idx  = edge_send_loc
+      !
+      allocate(halo_recv_count(halo_n_neighbors))
+      allocate(halo_send_count(halo_n_neighbors))
+      allocate(halo_uv_recv_count(halo_n_neighbors))
+      allocate(halo_uv_send_count(halo_n_neighbors))
+      halo_recv_count    = cell_recv_count
+      halo_send_count    = cell_send_count
+      halo_uv_recv_count = edge_recv_count
+      halo_uv_send_count = edge_send_count
+      !
+      deallocate(cell_recv_loc); deallocate(cell_recv_rem); deallocate(cell_send_loc)
+      deallocate(edge_recv_loc); deallocate(edge_recv_rem); deallocate(edge_send_loc)
+      deallocate(cell_recv_count); deallocate(cell_send_count)
+      deallocate(edge_recv_count); deallocate(edge_send_count)
+      deallocate(rank_to_idx)
+      deallocate(edge_owner)
+      !
+   end subroutine build_halo_descriptors
    !
    subroutine device_finalize()
       !
@@ -588,16 +1353,38 @@ contains
       if (allocated(z0land))       deallocate(z0land)
       if (allocated(z0land_table)) deallocate(z0land_table)
       !
+      ! ===== gpu-multi-gpu supplemental =====
+      !
+      if (allocated(halo_recv_local_idx))     deallocate(halo_recv_local_idx)
+      if (allocated(halo_recv_remote_idx))    deallocate(halo_recv_remote_idx)
+      if (allocated(halo_send_local_idx))     deallocate(halo_send_local_idx)
+      if (allocated(halo_uv_recv_local_idx))  deallocate(halo_uv_recv_local_idx)
+      if (allocated(halo_uv_recv_remote_idx)) deallocate(halo_uv_recv_remote_idx)
+      if (allocated(halo_uv_send_local_idx))  deallocate(halo_uv_send_local_idx)
+      if (allocated(halo_recv_count))         deallocate(halo_recv_count)
+      if (allocated(halo_send_count))         deallocate(halo_send_count)
+      if (allocated(halo_uv_recv_count))      deallocate(halo_uv_recv_count)
+      if (allocated(halo_uv_send_count))      deallocate(halo_uv_send_count)
+      if (allocated(halo_neighbor_ranks))     deallocate(halo_neighbor_ranks)
+      if (allocated(local_to_global))         deallocate(local_to_global)
+      if (allocated(local_to_global_uv))      deallocate(local_to_global_uv)
+      if (allocated(halo_send_buf_zs))        deallocate(halo_send_buf_zs)
+      if (allocated(halo_recv_buf_zs))        deallocate(halo_recv_buf_zs)
+      if (allocated(halo_send_buf_q))         deallocate(halo_send_buf_q)
+      if (allocated(halo_recv_buf_q))         deallocate(halo_recv_buf_q)
+      if (allocated(halo_send_buf_uv))        deallocate(halo_send_buf_uv)
+      if (allocated(halo_recv_buf_uv))        deallocate(halo_recv_buf_uv)
+      !
       call mpi_finalize(ierr)
       !
    end subroutine device_finalize
    !
    subroutine halo_exchange_zs()
-      ! Stub; sub-epic 8 (gpu-multi-gpu) implements.
+      ! Stub; SOR-708 implements (call site wired by SOR-709).
    end subroutine halo_exchange_zs
    !
    subroutine halo_exchange_q_uv()
-      ! Stub; sub-epic 8 (gpu-multi-gpu) implements.
+      ! Stub; SOR-708 implements (call site wired by SOR-709).
    end subroutine halo_exchange_q_uv
    !
    subroutine device_to_host_for_output()
@@ -605,7 +1392,7 @@ contains
       ! Pull every device-resident state array consumed by the netCDF / binary
       ! output writers back to its host counterpart, so that subsequent
       ! write_output(...) calls on rank 0 see fresh state. Single-rank only;
-      ! multi-rank gather is sub-epic 8's job. Each arr_h = arr_d generates a
+      ! multi-rank gather is SOR-712's job. Each arr_h = arr_d generates a
       ! synchronous cudaMemcpy(DeviceToHost) on the default stream.
       !
       ! --- Hydrodynamic state -----------------------------------------------
