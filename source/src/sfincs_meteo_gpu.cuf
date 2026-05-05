@@ -18,8 +18,7 @@ module sfincs_meteo
    use sfincs_data_device
    use sfincs_meteo_io, only: read_meteo_data, &
                               update_spiderweb_data, &
-                              update_amuv_data, &
-                              update_ampr_data
+                              update_amuv_data
    !
    implicit none
    !
@@ -792,5 +791,235 @@ contains
       endif
       !
    end subroutine k_amp_spatial
+   !
+   ! -----------------------------------------------------------------
+   ! GPU port of update_ampr_data. Mirrors CPU sibling
+   ! sfincs_meteo_io.f90:1093-1226 — precipitation regular-grid
+   ! bilinear interpolation onto SFINCS cells.
+   !
+   ! The outer do itw = 1, 2 loop fills prcp0 (itw=1) or prcp1 (itw=2).
+   ! Per itw: a host-side time-find preamble computes itw0/itw1/twfac
+   ! against ampr_times (with twfac forced to 0.0 when ampr_block is
+   ! true — block function for rainfall, default), then two kernels run:
+   !   - k_ampr_snapshot: ampr_nrows*ampr_ncols threads compute
+   !     ampr_pr01 via blend of ampr_pr(itw0,...) and ampr_pr(itw1,...)
+   !     by twfac.
+   !   - k_ampr_spatial:  npn_local threads bilinearly interpolate
+   !     ampr_pr01 onto each cell, writing prcp0/prcp1 in m/s.
+   ! cudaDeviceSynchronize() between snapshot and spatial because the
+   ! spatial kernel reads ampr_pr01 written by snapshot.
+   !
+   ! After both halves complete, a D2H staging block publishes the
+   ! device-resident prcp0/prcp1 back to the host arrays. Needed during
+   ! the staging period so (a) the still-CPU update_spiderweb_data
+   ! reads host prcp0/prcp1 as a merge base, and (b) the bridge-IN H2D
+   ! in update_meteo_forcing does not clobber the device writes with
+   ! stale host values. The D2H block drops once the bridge-trim issue
+   ! lands.
+   ! -----------------------------------------------------------------
+   subroutine update_ampr_data()
+      !
+      use sfincs_data, only: meteo_t0_h => meteo_t0, meteo_t1_h => meteo_t1, &
+                             ampr_nt_h => ampr_nt, &
+                             ampr_nrows_h => ampr_nrows, ampr_ncols_h => ampr_ncols, &
+                             ampr_dx_h => ampr_dx, ampr_dy_h => ampr_dy, &
+                             ampr_x_llcorner_h => ampr_x_llcorner, &
+                             ampr_y_llcorner_h => ampr_y_llcorner, &
+                             ampr_times_h => ampr_times, &
+                             ampr_block_h => ampr_block, &
+                             prcp0_h => prcp0, prcp1_h => prcp1
+      !
+      implicit none
+      !
+      integer :: itw, itw0, itw1, itspw
+      integer :: blocks
+      integer :: snap_threads
+      integer :: snap_blocks
+      integer :: istat
+      real*4  :: meteo_t
+      real*4  :: twfac
+      real*4  :: yul, xll
+      !
+      yul = ampr_y_llcorner_h + (ampr_nrows_h - 1) * ampr_dy_h + 0.5 * ampr_dy_h
+      xll = ampr_x_llcorner_h + 0.5 * ampr_dx_h
+      !
+      do itw = 1, 2
+         !
+         if (itw == 1) then
+            meteo_t = real(meteo_t0_h, kind=4)
+         else
+            meteo_t = real(meteo_t1_h, kind=4)
+         endif
+         !
+         ! Clamp meteo_t into [ampr_times(1), ampr_times(ampr_nt)]
+         !
+         meteo_t = max(meteo_t, ampr_times_h(1))
+         meteo_t = min(meteo_t, ampr_times_h(ampr_nt_h))
+         !
+         ! Find time indices in ampr file
+         !
+         itw0 = 1
+         do itspw = 1, ampr_nt_h
+            if (ampr_times_h(itspw) <= meteo_t) then
+               itw0 = itspw
+            endif
+         enddo
+         !
+         itw1 = itw0 + 1
+         itw1 = min(itw1, ampr_nt_h)
+         !
+         meteo_t = min(meteo_t, ampr_times_h(itw1))
+         !
+         twfac = (meteo_t - ampr_times_h(itw0)) / max(ampr_times_h(itw1) - ampr_times_h(itw0), 1.0e-6)
+         !
+         if (ampr_block_h) then
+            !
+            ! Use block function for rainfall data from ampr files (default)
+            !
+            twfac = 0.0
+            !
+         endif
+         !
+         ! Snapshot: blend ampr_pr(itw0,...) and ampr_pr(itw1,...) into ampr_pr01
+         !
+         snap_threads = ampr_nrows_h * ampr_ncols_h
+         snap_blocks  = (snap_threads + TPB - 1) / TPB
+         !
+         call k_ampr_snapshot<<<snap_blocks, TPB>>>(itw0, itw1, twfac, &
+            ampr_nrows_h, ampr_ncols_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         ! Spatial: bilinear interpolation of ampr_pr01 onto SFINCS cells
+         !
+         blocks = (npn_local + TPB - 1) / TPB
+         !
+         call k_ampr_spatial<<<blocks, TPB>>>(itw, npn_local, &
+            ampr_nrows_h, ampr_ncols_h, &
+            ampr_dx_h, ampr_dy_h, yul, xll)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+      enddo
+      !
+      ! D2H staging — keep host prcp0/prcp1 in sync for downstream CPU
+      ! consumers (still-CPU update_spiderweb_data merge base) and to
+      ! make the bridge-IN H2D copy in update_meteo_forcing a no-op.
+      ! Removed once the bridge-trim issue lands.
+      !
+      prcp0_h = prcp0
+      prcp1_h = prcp1
+      !
+   end subroutine update_ampr_data
+   !
+   ! Snapshot kernel: ampr_pr01(irow, icol) = blend of ampr_pr slices
+   ! at itw0 / itw1 by twfac. Mirrors CPU sibling lines 1146-1152.
+   !
+   attributes(global) subroutine k_ampr_snapshot(itw0_in, itw1_in, twfac_in, &
+                                                 ampr_nrows_in, ampr_ncols_in)
+      !
+      implicit none
+      !
+      integer, value :: itw0_in
+      integer, value :: itw1_in
+      real*4,  value :: twfac_in
+      integer, value :: ampr_nrows_in
+      integer, value :: ampr_ncols_in
+      !
+      integer :: tid, irow, icol
+      !
+      tid = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (tid > ampr_nrows_in * ampr_ncols_in) return
+      !
+      irow = ((tid - 1) / ampr_ncols_in) + 1
+      icol = mod(tid - 1, ampr_ncols_in) + 1
+      !
+      ampr_pr01(irow, icol) = ampr_pr(itw0_in, irow, icol) * (1.0 - twfac_in) &
+                            + ampr_pr(itw1_in, irow, icol) *        twfac_in
+      !
+   end subroutine k_ampr_snapshot
+   !
+   ! Spatial kernel: bilinear interpolation of ampr_pr01 onto each
+   ! SFINCS cell. Mirrors CPU sibling lines 1156-1223.
+   !
+   attributes(global) subroutine k_ampr_spatial(itw_in, npn_in, &
+                                                ampr_nrows_in, ampr_ncols_in, &
+                                                ampr_dx_in, ampr_dy_in, &
+                                                yul_in, xll_in)
+      !
+      implicit none
+      !
+      integer, value :: itw_in
+      integer, value :: npn_in
+      integer, value :: ampr_nrows_in
+      integer, value :: ampr_ncols_in
+      real*4,  value :: ampr_dx_in
+      real*4,  value :: ampr_dy_in
+      real*4,  value :: yul_in
+      real*4,  value :: xll_in
+      !
+      integer :: nm
+      integer :: ix, iy, ip
+      integer :: ind1(4), ind2(4)
+      real*4  :: x, y, di1, dj1, prp
+      real*4  :: f(4)
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      x = z_xz(nm)
+      y = z_yz(nm)
+      !
+      ! Row indices
+      !
+      iy = int((yul_in - y) / ampr_dy_in) + 1
+      ind1(1) = iy
+      ind1(2) = iy
+      ind1(3) = iy + 1
+      ind1(4) = iy + 1
+      dj1 = (yul_in - (iy - 1) * ampr_dy_in - y) / ampr_dy_in
+      !
+      ! Column indices
+      !
+      ix = int((x - xll_in) / ampr_dx_in) + 1
+      ind2(1) = ix
+      ind2(2) = ix + 1
+      ind2(3) = ix + 1
+      ind2(4) = ix
+      di1 = (x - (xll_in + (ix - 1) * ampr_dx_in)) / ampr_dx_in
+      !
+      if (iy <= 1 .or. iy >= ampr_nrows_in .or. ix <= 0 .or. ix >= ampr_ncols_in) then
+         !
+         ! Point outside rectangular ampr grid
+         !
+         if (itw_in == 1) then
+            prcp0(nm) = 0.0
+         else
+            prcp1(nm) = 0.0
+         endif
+         !
+         return
+         !
+      endif
+      !
+      ! Bilinear weights
+      !
+      f(1) = (1.0 - di1) * (1.0 - dj1)
+      f(2) = (      di1) * (1.0 - dj1)
+      f(3) = (      di1) * (      dj1)
+      f(4) = (1.0 - di1) * (      dj1)
+      !
+      prp = 0.0
+      do ip = 1, 4
+         prp = prp + f(ip) * ampr_pr01(ind1(ip), ind2(ip))
+      enddo
+      !
+      if (itw_in == 1) then
+         prcp0(nm) = prp / (1000.0 * 3600.0)   ! m/s
+      else
+         prcp1(nm) = prp / (1000.0 * 3600.0)   ! m/s
+      endif
+      !
+   end subroutine k_ampr_spatial
    !
 end module sfincs_meteo
