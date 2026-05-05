@@ -251,4 +251,59 @@ module sfincs_data_device
    real*4,    device, dimension(:), allocatable :: hm0
    real*4,    device, dimension(:), allocatable :: hm0_ig
    !
+   ! ===== gpu-meteo-spatial-interp supplemental ====
+   !
+   ! Device shadows consumed by the four spatial-interpolation kernels
+   ! (update_spiderweb_data, update_amuv_data, update_amp_data,
+   ! update_ampr_data) ported from sfincs_meteo_io.f90 into
+   ! source/src/sfincs_meteo_gpu.cuf. Type and rank match the host
+   ! counterparts in source/src/sfincs_data.f90:691-743 (and z_xz / z_yz
+   ! at sfincs_data.f90:365-366; cdval / cdlgx / z0land / z0land_table
+   ! near sfincs_data.f90:404-405, 750, 825).
+   !
+   ! Spiderweb time-major and temporal-snapshot scratches
+   !
+   real*4,    device, dimension(:),     allocatable :: spw_times
+   real*4,    device, dimension(:),     allocatable :: spw_xe
+   real*4,    device, dimension(:),     allocatable :: spw_ye
+   real*4,    device, dimension(:,:,:), allocatable :: spw_wu
+   real*4,    device, dimension(:,:,:), allocatable :: spw_wv
+   real*4,    device, dimension(:,:,:), allocatable :: spw_pabs
+   real*4,    device, dimension(:,:,:), allocatable :: spw_prcp
+   real*4,    device, dimension(:,:),   allocatable :: spw_wu01
+   real*4,    device, dimension(:,:),   allocatable :: spw_wv01
+   real*4,    device, dimension(:,:),   allocatable :: spw_pabs01
+   real*4,    device, dimension(:,:),   allocatable :: spw_prcp01
+   !
+   ! Regular-grid time-major and temporal-snapshot scratches
+   !
+   real*4,    device, dimension(:),     allocatable :: amuv_times
+   real*4,    device, dimension(:,:,:), allocatable :: amuv_wu
+   real*4,    device, dimension(:,:,:), allocatable :: amuv_wv
+   real*4,    device, dimension(:,:),   allocatable :: amuv_wu01
+   real*4,    device, dimension(:,:),   allocatable :: amuv_wv01
+   real*4,    device, dimension(:),     allocatable :: amp_times
+   real*4,    device, dimension(:,:,:), allocatable :: amp_patm
+   real*4,    device, dimension(:,:),   allocatable :: amp_patm01
+   real*4,    device, dimension(:),     allocatable :: ampr_times
+   real*4,    device, dimension(:,:,:), allocatable :: ampr_pr
+   real*4,    device, dimension(:,:),   allocatable :: ampr_pr01
+   !
+   ! Per-cell coordinate arrays
+   !
+   real*4,    device, dimension(:),     allocatable :: z_xz
+   real*4,    device, dimension(:),     allocatable :: z_yz
+   !
+   ! Wind-stress lookup tables. cdval and cdlgx are non-allocatable
+   ! fixed-size on the host (sfincs_data.f90:750, 825); declaring the
+   ! device shadows fixed-size with the matching shape avoids an extra
+   ! allocate/deallocate pair (design (a) per the issue notes). z0land
+   ! and z0land_table are allocatable on the host; their device shadows
+   ! follow the standard mold/copy/deallocate pattern.
+   !
+   real*4,    device, dimension(1000)              :: cdval
+   real*4,    device, dimension(50, 20)            :: cdlgx
+   real*4,    device, dimension(:,:),   allocatable :: z0land
+   real*4,    device, dimension(:),     allocatable :: z0land_table
+   !
 end module sfincs_data_device

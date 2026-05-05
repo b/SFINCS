@@ -102,6 +102,38 @@ module sfincs_partition
       hm0_h                   => hm0, &
       hm0_ig_h                => hm0_ig
    !
+   ! ===== gpu-meteo-spatial-interp supplemental ====
+   !
+   use sfincs_data, only: &
+      spw_times_h     => spw_times, &
+      spw_xe_h        => spw_xe, &
+      spw_ye_h        => spw_ye, &
+      spw_wu_h        => spw_wu, &
+      spw_wv_h        => spw_wv, &
+      spw_pabs_h      => spw_pabs, &
+      spw_prcp_h      => spw_prcp, &
+      spw_wu01_h      => spw_wu01, &
+      spw_wv01_h      => spw_wv01, &
+      spw_pabs01_h    => spw_pabs01, &
+      spw_prcp01_h    => spw_prcp01, &
+      amuv_times_h    => amuv_times, &
+      amuv_wu_h       => amuv_wu, &
+      amuv_wv_h       => amuv_wv, &
+      amuv_wu01_h     => amuv_wu01, &
+      amuv_wv01_h     => amuv_wv01, &
+      amp_times_h     => amp_times, &
+      amp_patm_h      => amp_patm, &
+      amp_patm01_h    => amp_patm01, &
+      ampr_times_h    => ampr_times, &
+      ampr_pr_h       => ampr_pr, &
+      ampr_pr01_h     => ampr_pr01, &
+      z_xz_h          => z_xz, &
+      z_yz_h          => z_yz, &
+      cdval_h         => cdval, &
+      cdlgx_h         => cdlgx, &
+      z0land_h        => z0land, &
+      z0land_table_h  => z0land_table
+   !
    implicit none
    !
    public :: partition_and_localize, device_finalize, &
@@ -321,6 +353,42 @@ contains
       if (allocated(hm0_h))                   then; allocate(hm0,                   mold=hm0_h);                   hm0                   = hm0_h;                   end if
       if (allocated(hm0_ig_h))                then; allocate(hm0_ig,                mold=hm0_ig_h);                hm0_ig                = hm0_ig_h;                end if
       !
+      ! ===== gpu-meteo-spatial-interp supplemental ====
+      !
+      ! cdval and cdlgx are non-allocatable fixed-size on both host and
+      ! device sides; copy them unconditionally. Everything else here
+      ! follows the standard mold/copy pattern, gated by allocated() so
+      ! we tolerate runs that don't use spiderweb / amuv / amp / ampr.
+      !
+      cdval = cdval_h
+      cdlgx = cdlgx_h
+      if (allocated(spw_times_h))    then; allocate(spw_times,    mold=spw_times_h);    spw_times    = spw_times_h;    end if
+      if (allocated(spw_xe_h))       then; allocate(spw_xe,       mold=spw_xe_h);       spw_xe       = spw_xe_h;       end if
+      if (allocated(spw_ye_h))       then; allocate(spw_ye,       mold=spw_ye_h);       spw_ye       = spw_ye_h;       end if
+      if (allocated(spw_wu_h))       then; allocate(spw_wu,       mold=spw_wu_h);       spw_wu       = spw_wu_h;       end if
+      if (allocated(spw_wv_h))       then; allocate(spw_wv,       mold=spw_wv_h);       spw_wv       = spw_wv_h;       end if
+      if (allocated(spw_pabs_h))     then; allocate(spw_pabs,     mold=spw_pabs_h);     spw_pabs     = spw_pabs_h;     end if
+      if (allocated(spw_prcp_h))     then; allocate(spw_prcp,     mold=spw_prcp_h);     spw_prcp     = spw_prcp_h;     end if
+      if (allocated(spw_wu01_h))     then; allocate(spw_wu01,     mold=spw_wu01_h);     spw_wu01     = spw_wu01_h;     end if
+      if (allocated(spw_wv01_h))     then; allocate(spw_wv01,     mold=spw_wv01_h);     spw_wv01     = spw_wv01_h;     end if
+      if (allocated(spw_pabs01_h))   then; allocate(spw_pabs01,   mold=spw_pabs01_h);   spw_pabs01   = spw_pabs01_h;   end if
+      if (allocated(spw_prcp01_h))   then; allocate(spw_prcp01,   mold=spw_prcp01_h);   spw_prcp01   = spw_prcp01_h;   end if
+      if (allocated(amuv_times_h))   then; allocate(amuv_times,   mold=amuv_times_h);   amuv_times   = amuv_times_h;   end if
+      if (allocated(amuv_wu_h))      then; allocate(amuv_wu,      mold=amuv_wu_h);      amuv_wu      = amuv_wu_h;      end if
+      if (allocated(amuv_wv_h))      then; allocate(amuv_wv,      mold=amuv_wv_h);      amuv_wv      = amuv_wv_h;      end if
+      if (allocated(amuv_wu01_h))    then; allocate(amuv_wu01,    mold=amuv_wu01_h);    amuv_wu01    = amuv_wu01_h;    end if
+      if (allocated(amuv_wv01_h))    then; allocate(amuv_wv01,    mold=amuv_wv01_h);    amuv_wv01    = amuv_wv01_h;    end if
+      if (allocated(amp_times_h))    then; allocate(amp_times,    mold=amp_times_h);    amp_times    = amp_times_h;    end if
+      if (allocated(amp_patm_h))     then; allocate(amp_patm,     mold=amp_patm_h);     amp_patm     = amp_patm_h;     end if
+      if (allocated(amp_patm01_h))   then; allocate(amp_patm01,   mold=amp_patm01_h);   amp_patm01   = amp_patm01_h;   end if
+      if (allocated(ampr_times_h))   then; allocate(ampr_times,   mold=ampr_times_h);   ampr_times   = ampr_times_h;   end if
+      if (allocated(ampr_pr_h))      then; allocate(ampr_pr,      mold=ampr_pr_h);      ampr_pr      = ampr_pr_h;      end if
+      if (allocated(ampr_pr01_h))    then; allocate(ampr_pr01,    mold=ampr_pr01_h);    ampr_pr01    = ampr_pr01_h;    end if
+      if (allocated(z_xz_h))         then; allocate(z_xz,         mold=z_xz_h);         z_xz         = z_xz_h;         end if
+      if (allocated(z_yz_h))         then; allocate(z_yz,         mold=z_yz_h);         z_yz         = z_yz_h;         end if
+      if (allocated(z0land_h))       then; allocate(z0land,       mold=z0land_h);       z0land       = z0land_h;       end if
+      if (allocated(z0land_table_h)) then; allocate(z0land_table, mold=z0land_table_h); z0land_table = z0land_table_h; end if
+      !
       ! --- Phase 5: Halo descriptor build -----------------------------------
       ! Halo descriptor build; sub-epic 8 (gpu-multi-gpu) will populate this.
       !
@@ -488,6 +556,37 @@ contains
       if (allocated(wavemaker_uvtrend))     deallocate(wavemaker_uvtrend)
       if (allocated(hm0))                   deallocate(hm0)
       if (allocated(hm0_ig))                deallocate(hm0_ig)
+      !
+      ! ===== gpu-meteo-spatial-interp supplemental ====
+      !
+      ! cdval and cdlgx are non-allocatable fixed-size; no deallocate.
+      !
+      if (allocated(spw_times))    deallocate(spw_times)
+      if (allocated(spw_xe))       deallocate(spw_xe)
+      if (allocated(spw_ye))       deallocate(spw_ye)
+      if (allocated(spw_wu))       deallocate(spw_wu)
+      if (allocated(spw_wv))       deallocate(spw_wv)
+      if (allocated(spw_pabs))     deallocate(spw_pabs)
+      if (allocated(spw_prcp))     deallocate(spw_prcp)
+      if (allocated(spw_wu01))     deallocate(spw_wu01)
+      if (allocated(spw_wv01))     deallocate(spw_wv01)
+      if (allocated(spw_pabs01))   deallocate(spw_pabs01)
+      if (allocated(spw_prcp01))   deallocate(spw_prcp01)
+      if (allocated(amuv_times))   deallocate(amuv_times)
+      if (allocated(amuv_wu))      deallocate(amuv_wu)
+      if (allocated(amuv_wv))      deallocate(amuv_wv)
+      if (allocated(amuv_wu01))    deallocate(amuv_wu01)
+      if (allocated(amuv_wv01))    deallocate(amuv_wv01)
+      if (allocated(amp_times))    deallocate(amp_times)
+      if (allocated(amp_patm))     deallocate(amp_patm)
+      if (allocated(amp_patm01))   deallocate(amp_patm01)
+      if (allocated(ampr_times))   deallocate(ampr_times)
+      if (allocated(ampr_pr))      deallocate(ampr_pr)
+      if (allocated(ampr_pr01))    deallocate(ampr_pr01)
+      if (allocated(z_xz))         deallocate(z_xz)
+      if (allocated(z_yz))         deallocate(z_yz)
+      if (allocated(z0land))       deallocate(z0land)
+      if (allocated(z0land_table)) deallocate(z0land_table)
       !
       call mpi_finalize(ierr)
       !
