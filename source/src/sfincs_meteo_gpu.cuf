@@ -17,8 +17,7 @@ module sfincs_meteo
    use cudafor
    use sfincs_data_device
    use sfincs_meteo_io, only: read_meteo_data, &
-                              update_spiderweb_data, &
-                              update_amuv_data
+                              update_spiderweb_data
    !
    implicit none
    !
@@ -1021,5 +1020,311 @@ contains
       endif
       !
    end subroutine k_ampr_spatial
+   !
+   ! -----------------------------------------------------------------
+   ! GPU port of update_amuv_data. Mirrors CPU sibling
+   ! sfincs_meteo_io.f90:785-960 — regular-grid wind bilinear
+   ! interpolation with cd-based wind-stress conversion.
+   !
+   ! The outer do itw = 1, 2 loop fills the *0 staging arrays (itw=1)
+   ! or *1 staging arrays (itw=2). Per itw: a host-side time-find
+   ! preamble computes itw0/itw1/twfac against amuv_times, then two
+   ! kernels run:
+   !   - k_amuv_snapshot: amuv_nrows*amuv_ncols threads compute
+   !     amuv_wu01/amuv_wv01 via blend of amuv_wu(itw0,...) and
+   !     amuv_wu(itw1,...) (and similarly for amuv_wv) by twfac.
+   !   - k_amuv_spatial: npn_local threads bilinearly interpolate
+   !     amuv_wu01/amuv_wv01 onto each cell, compute cd via cdval/cdlgx
+   !     lookup, and write tauwu0/tauwv0 (itw=1) or tauwu1/tauwv1
+   !     (itw=2). When store_wind, also writes windu0/windv0 or
+   !     windu1/windv1 (in the standard branch only — the radstr
+   !     branch does not write wind components, matching CPU sibling).
+   ! cudaDeviceSynchronize() between snapshot and spatial because the
+   ! spatial kernel reads amuv_wu01/amuv_wv01 written by snapshot.
+   !
+   ! After both halves complete, a D2H staging block publishes the
+   ! device-resident tauwu0/tauwv0/tauwu1/tauwv1 (and windu0/windv0/
+   ! windu1/windv1 when store_wind) back to the host arrays. Needed
+   ! during the staging period because (a) the still-CPU
+   ! update_spiderweb_data reads host tauwu0/tauwv0/... as a merge
+   ! base, and (b) the bridge-IN block in update_meteo_forcing would
+   ! otherwise H2D-clobber device writes with stale host values.
+   ! Drops once the bridge-trim issue lands.
+   ! -----------------------------------------------------------------
+   subroutine update_amuv_data()
+      !
+      use sfincs_data, only: meteo_t0_h => meteo_t0, meteo_t1_h => meteo_t1, &
+                             amuv_nt_h => amuv_nt, &
+                             amuv_nrows_h => amuv_nrows, amuv_ncols_h => amuv_ncols, &
+                             amuv_dx_h => amuv_dx, amuv_dy_h => amuv_dy, &
+                             amuv_x_llcorner_h => amuv_x_llcorner, &
+                             amuv_y_llcorner_h => amuv_y_llcorner, &
+                             amuv_times_h => amuv_times, &
+                             waveage_h => waveage, radstr_h => radstr, &
+                             store_wind_h => store_wind, &
+                             rhoa_h => rhoa, rhow_h => rhow, &
+                             cosrot_h => cosrot, sinrot_h => sinrot, &
+                             tauwu0_h => tauwu0, tauwv0_h => tauwv0, &
+                             tauwu1_h => tauwu1, tauwv1_h => tauwv1, &
+                             windu0_h => windu0, windv0_h => windv0, &
+                             windu1_h => windu1, windv1_h => windv1
+      !
+      implicit none
+      !
+      integer :: itw, itw0, itw1, itspw
+      integer :: blocks
+      integer :: snap_threads
+      integer :: snap_blocks
+      integer :: istat
+      real*4  :: meteo_t
+      real*4  :: twfac
+      real*4  :: yul, xll
+      !
+      yul = amuv_y_llcorner_h + (amuv_nrows_h - 1) * amuv_dy_h + 0.5 * amuv_dy_h
+      xll = amuv_x_llcorner_h + 0.5 * amuv_dx_h
+      !
+      do itw = 1, 2
+         !
+         if (itw == 1) then
+            meteo_t = real(meteo_t0_h, kind=4)
+         else
+            meteo_t = real(meteo_t1_h, kind=4)
+         endif
+         !
+         ! Clamp meteo_t into [amuv_times(1), amuv_times(amuv_nt)]
+         !
+         meteo_t = max(meteo_t, amuv_times_h(1))
+         meteo_t = min(meteo_t, amuv_times_h(amuv_nt_h))
+         !
+         ! Find time indices in amuv file
+         !
+         itw0 = 1
+         do itspw = 1, amuv_nt_h
+            if (amuv_times_h(itspw) <= meteo_t) then
+               itw0 = itspw
+            endif
+         enddo
+         !
+         itw1 = itw0 + 1
+         itw1 = min(itw1, amuv_nt_h)
+         !
+         meteo_t = min(meteo_t, amuv_times_h(itw1))
+         !
+         twfac = (meteo_t - amuv_times_h(itw0)) / max(amuv_times_h(itw1) - amuv_times_h(itw0), 1.0e-6)
+         !
+         ! Snapshot: blend amuv_wu(itw0,...) and amuv_wu(itw1,...) into
+         ! amuv_wu01 (and similarly for amuv_wv into amuv_wv01).
+         !
+         snap_threads = amuv_nrows_h * amuv_ncols_h
+         snap_blocks  = (snap_threads + TPB - 1) / TPB
+         !
+         call k_amuv_snapshot<<<snap_blocks, TPB>>>(itw0, itw1, twfac, &
+            amuv_nrows_h, amuv_ncols_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         ! Spatial: bilinear interpolation of amuv_wu01/amuv_wv01 onto
+         ! SFINCS cells, then cd-based wind-stress conversion.
+         !
+         blocks = (npn_local + TPB - 1) / TPB
+         !
+         call k_amuv_spatial<<<blocks, TPB>>>(itw, npn_local, &
+            amuv_nrows_h, amuv_ncols_h, &
+            amuv_dx_h, amuv_dy_h, yul, xll, &
+            waveage_h, radstr_h, store_wind_h, &
+            rhoa_h, rhow_h, cosrot_h, sinrot_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+      enddo
+      !
+      ! D2H staging — keep host tauwu0/tauwv0/tauwu1/tauwv1 (and the
+      ! wind components when store_wind) in sync for downstream CPU
+      ! consumers (still-CPU update_spiderweb_data merge base) and to
+      ! make the bridge-IN H2D copy in update_meteo_forcing a no-op.
+      ! Removed once the bridge-trim issue lands.
+      !
+      tauwu0_h = tauwu0
+      tauwv0_h = tauwv0
+      tauwu1_h = tauwu1
+      tauwv1_h = tauwv1
+      if (store_wind_h) then
+         windu0_h = windu0
+         windv0_h = windv0
+         windu1_h = windu1
+         windv1_h = windv1
+      endif
+      !
+   end subroutine update_amuv_data
+   !
+   ! Snapshot kernel: amuv_wu01(irow, icol) / amuv_wv01(irow, icol) =
+   ! blend of amuv_wu / amuv_wv slices at itw0 / itw1 by twfac. Mirrors
+   ! CPU sibling lines 832-839.
+   !
+   attributes(global) subroutine k_amuv_snapshot(itw0_in, itw1_in, twfac_in, &
+                                                 amuv_nrows_in, amuv_ncols_in)
+      !
+      implicit none
+      !
+      integer, value :: itw0_in
+      integer, value :: itw1_in
+      real*4,  value :: twfac_in
+      integer, value :: amuv_nrows_in
+      integer, value :: amuv_ncols_in
+      !
+      integer :: tid, irow, icol
+      !
+      tid = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (tid > amuv_nrows_in * amuv_ncols_in) return
+      !
+      irow = ((tid - 1) / amuv_ncols_in) + 1
+      icol = mod(tid - 1, amuv_ncols_in) + 1
+      !
+      amuv_wu01(irow, icol) = amuv_wu(itw0_in, irow, icol) * (1.0 - twfac_in) &
+                            + amuv_wu(itw1_in, irow, icol) *        twfac_in
+      amuv_wv01(irow, icol) = amuv_wv(itw0_in, irow, icol) * (1.0 - twfac_in) &
+                            + amuv_wv(itw1_in, irow, icol) *        twfac_in
+      !
+   end subroutine k_amuv_snapshot
+   !
+   ! Spatial kernel: bilinear interpolation of amuv_wu01/amuv_wv01 onto
+   ! each SFINCS cell, then cd-based wind-stress conversion. Mirrors
+   ! CPU sibling lines 846-957.
+   !
+   attributes(global) subroutine k_amuv_spatial(itw_in, npn_in, &
+                                                amuv_nrows_in, amuv_ncols_in, &
+                                                amuv_dx_in, amuv_dy_in, &
+                                                yul_in, xll_in, &
+                                                waveage_in, radstr_in, &
+                                                store_wind_in, &
+                                                rhoa_in, rhow_in, &
+                                                cosrot_in, sinrot_in)
+      !
+      implicit none
+      !
+      integer, value :: itw_in
+      integer, value :: npn_in
+      integer, value :: amuv_nrows_in
+      integer, value :: amuv_ncols_in
+      real*4,  value :: amuv_dx_in
+      real*4,  value :: amuv_dy_in
+      real*4,  value :: yul_in
+      real*4,  value :: xll_in
+      real*4,  value :: waveage_in
+      logical, value :: radstr_in
+      logical, value :: store_wind_in
+      real*4,  value :: rhoa_in
+      real*4,  value :: rhow_in
+      real*4,  value :: cosrot_in
+      real*4,  value :: sinrot_in
+      !
+      integer :: nm
+      integer :: ix, iy, ip, ivm, iwa
+      integer :: ind1(4), ind2(4)
+      real*4  :: x, y, di1, dj1
+      real*4  :: f(4)
+      real*4  :: wup, wvp, vmag, cd, wa
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      x = z_xz(nm)
+      y = z_yz(nm)
+      !
+      ! Row indices
+      !
+      iy = int((yul_in - y) / amuv_dy_in) + 1
+      ind1(1) = iy
+      ind1(2) = iy
+      ind1(3) = iy + 1
+      ind1(4) = iy + 1
+      dj1 = (yul_in - (iy - 1) * amuv_dy_in - y) / amuv_dy_in
+      !
+      ! Column indices
+      !
+      ix = int((x - xll_in) / amuv_dx_in) + 1
+      ind2(1) = ix
+      ind2(2) = ix + 1
+      ind2(3) = ix + 1
+      ind2(4) = ix
+      di1 = (x - (xll_in + (ix - 1) * amuv_dx_in)) / amuv_dx_in
+      !
+      if (iy <= 1 .or. iy >= amuv_nrows_in .or. ix <= 0 .or. ix >= amuv_ncols_in) then
+         !
+         ! Point outside rectangular amu/amv grid
+         !
+         if (itw_in == 1) then
+            tauwu0(nm) = 0.0
+            tauwv0(nm) = 0.0
+         else
+            tauwu1(nm) = 0.0
+            tauwv1(nm) = 0.0
+         endif
+         !
+         return
+         !
+      endif
+      !
+      ! Bilinear weights
+      !
+      f(1) = (1.0 - di1) * (1.0 - dj1)
+      f(2) = (      di1) * (1.0 - dj1)
+      f(3) = (      di1) * (      dj1)
+      f(4) = (1.0 - di1) * (      dj1)
+      !
+      wup = 0.0
+      wvp = 0.0
+      do ip = 1, 4
+         wup = wup + f(ip) * amuv_wu01(ind1(ip), ind2(ip))
+         wvp = wvp + f(ip) * amuv_wv01(ind1(ip), ind2(ip))
+      enddo
+      !
+      ! Wind stress: cd lookup
+      !
+      vmag = sqrt(wup**2 + wvp**2)
+      !
+      if (waveage_in > 0.0) then
+         wa  = max(min(waveage_in, 1.99), 0.1001)
+         ivm = max(int(vmag / 2.0), 1)
+         iwa = int(wa / 0.1)
+         cd  = 0.001 * cdlgx(ivm, iwa)
+      else
+         cd  = cdval(int(vmag * 10) + 1)
+      endif
+      !
+      if (radstr_in) then
+         !
+         ! Treat wind speeds as radiation stresses (temporary solution
+         ! for including wave forcing). Does NOT write windu*/windv*.
+         !
+         if (itw_in == 1) then
+            tauwu0(nm) = ( cosrot_in * wup + sinrot_in * wvp) / rhow_in
+            tauwv0(nm) = (-sinrot_in * wup + cosrot_in * wvp) / rhow_in
+         else
+            tauwu1(nm) = ( cosrot_in * wup + sinrot_in * wvp) / rhow_in
+            tauwv1(nm) = (-sinrot_in * wup + cosrot_in * wvp) / rhow_in
+         endif
+         !
+      else
+         !
+         if (itw_in == 1) then
+            tauwu0(nm) = vmag * ( cosrot_in * wup + sinrot_in * wvp) * rhoa_in * cd / rhow_in
+            tauwv0(nm) = vmag * (-sinrot_in * wup + cosrot_in * wvp) * rhoa_in * cd / rhow_in
+            if (store_wind_in) then
+               windu0(nm) = wup
+               windv0(nm) = wvp
+            endif
+         else
+            tauwu1(nm) = vmag * ( cosrot_in * wup + sinrot_in * wvp) * rhoa_in * cd / rhow_in
+            tauwv1(nm) = vmag * (-sinrot_in * wup + cosrot_in * wvp) * rhoa_in * cd / rhow_in
+            if (store_wind_in) then
+               windu1(nm) = wup
+               windv1(nm) = wvp
+            endif
+         endif
+         !
+      endif
+      !
+   end subroutine k_amuv_spatial
    !
 end module sfincs_meteo
