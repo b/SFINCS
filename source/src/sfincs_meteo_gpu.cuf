@@ -363,29 +363,282 @@ contains
       real     :: tloop
       !
       real*8   :: t
+      logical  :: has_amu
+      logical  :: has_amp
+      logical  :: has_ampr
+      logical  :: has_spw
       !
       call system_clock(count0, count_rate, count_max)
       !
-      if (amufile(1:4) /= 'none' .or. netamuamvfile(1:4) /= 'none') then
+      has_amu  = (amufile(1:4)  /= 'none' .or. netamuamvfile(1:4) /= 'none')
+      has_amp  = (ampfile(1:4)  /= 'none' .or. netampfile(1:4)    /= 'none') .and. patmos
+      has_ampr = (amprfile(1:4) /= 'none' .or. netamprfile(1:4)   /= 'none')
+      has_spw  = (spwfile(1:4)  /= 'none' .or. netspwfile(1:4)    /= 'none')
+      !
+      if (has_amu) then
          call update_amuv_data()
+         call launch_amuv_interp_gpu()
       endif
       !
-      if ((ampfile(1:4) /= 'none' .or. netampfile(1:4) /= 'none') .and. patmos) then
+      if (has_amp) then
          call update_amp_data()
       endif
       !
-      if (amprfile(1:4) /= 'none' .or. netamprfile(1:4) /= 'none') then
+      if (has_ampr) then
          call update_ampr_data()
       endif
       !
-      if (spwfile(1:4) /= 'none' .or. netspwfile(1:4) /= 'none') then
+      if (has_spw) then
          call update_spiderweb_data()
+         call launch_spiderweb_interp_gpu(has_amu, has_amp, has_ampr)
+      endif
+      !
+      if (has_amu .or. has_amp .or. has_ampr .or. has_spw) then
+         call bridge_out_meteo_fields(has_amu, has_amp, has_ampr, has_spw)
       endif
       !
       call system_clock(count1, count_rate, count_max)
       tloop = tloop + 1.0 * (count1 - count0) / count_rate
       !
    end subroutine update_meteo_fields
+   !
+   ! -----------------------------------------------------------------
+   ! Bridge OUT of the host arrays the device kernels wrote, so consumer
+   ! modules (compute_fluxes, update_meteo_forcing on next step, etc.)
+   ! see the GPU's results.
+   ! -----------------------------------------------------------------
+   subroutine bridge_out_meteo_fields(has_amu, has_amp, has_ampr, has_spw)
+      !
+      use sfincs_data, only: store_wind_h => store_wind, &
+                             patmos_h => patmos, &
+                             precip_h => precip, spw_precip_h => spw_precip, &
+                             tauwu0_h => tauwu0, tauwv0_h => tauwv0, &
+                             tauwu1_h => tauwu1, tauwv1_h => tauwv1, &
+                             windu0_h => windu0, windv0_h => windv0, &
+                             windu1_h => windu1, windv1_h => windv1, &
+                             patm0_h => patm0, patm1_h => patm1, &
+                             prcp0_h => prcp0, prcp1_h => prcp1
+      !
+      implicit none
+      !
+      logical, intent(in) :: has_amu
+      logical, intent(in) :: has_amp
+      logical, intent(in) :: has_ampr
+      logical, intent(in) :: has_spw
+      !
+      if (has_amu .or. has_spw) then
+         tauwu0_h = tauwu0
+         tauwv0_h = tauwv0
+         tauwu1_h = tauwu1
+         tauwv1_h = tauwv1
+         if (store_wind_h) then
+            windu0_h = windu0
+            windv0_h = windv0
+            windu1_h = windu1
+            windv1_h = windv1
+         endif
+      endif
+      !
+      if (patmos_h .and. (has_amp .or. has_spw)) then
+         patm0_h = patm0
+         patm1_h = patm1
+      endif
+      !
+      if (precip_h .and. (has_ampr .or. (has_spw .and. spw_precip_h))) then
+         prcp0_h = prcp0
+         prcp1_h = prcp1
+      endif
+      !
+   end subroutine bridge_out_meteo_fields
+   !
+   ! -----------------------------------------------------------------
+   ! Host launcher for k_amuv_interp. Host-side time-interp into
+   ! amuv_wu01 / amuv_wv01 (which the CPU IO already overwrote, but we
+   ! redo it per itw to capture both itw=1 and itw=2 states), copy to
+   ! private device scratch, launch kernel, two passes.
+   ! -----------------------------------------------------------------
+   subroutine launch_amuv_interp_gpu()
+      !
+      use sfincs_data, only: amuv_nrows, amuv_ncols, amuv_dx, amuv_dy, &
+                             amuv_x_llcorner, amuv_y_llcorner, &
+                             amuv_nt, &
+                             amuv_times_h => amuv_times, &
+                             amuv_wu_h => amuv_wu, &
+                             amuv_wv_h => amuv_wv, &
+                             amuv_wu01_h => amuv_wu01, &
+                             amuv_wv01_h => amuv_wv01, &
+                             meteo_t0_h => meteo_t0, meteo_t1_h => meteo_t1, &
+                             cosrot_h => cosrot, sinrot_h => sinrot, &
+                             rhoa_h => rhoa, rhow_h => rhow, &
+                             waveage_h => waveage, &
+                             store_wind_h => store_wind, radstr_h => radstr
+      !
+      implicit none
+      !
+      integer :: itw, irow, icol, itspw, itw0, itw1
+      integer :: blocks, istat
+      real*4  :: meteo_t, twfac
+      !
+      blocks = (npn_local + TPB - 1) / TPB
+      !
+      do itw = 1, 2
+         !
+         if (itw == 1) then
+            meteo_t = meteo_t0_h
+         else
+            meteo_t = meteo_t1_h
+         endif
+         !
+         meteo_t = max(meteo_t, amuv_times_h(1))
+         meteo_t = min(meteo_t, amuv_times_h(amuv_nt))
+         !
+         itw0 = 1
+         do itspw = 1, amuv_nt
+            if (amuv_times_h(itspw) <= meteo_t) itw0 = itspw
+         enddo
+         itw1 = min(itw0 + 1, amuv_nt)
+         meteo_t = min(meteo_t, amuv_times_h(itw1))
+         twfac = (meteo_t - amuv_times_h(itw0)) / max(amuv_times_h(itw1) - amuv_times_h(itw0), 1.0e-6)
+         !
+         ! Recompute time-interp on host into the *01 scratch. CPU IO
+         ! already filled this once for itw=2; we redo per itw.
+         !
+         do irow = 1, amuv_nrows
+            do icol = 1, amuv_ncols
+               amuv_wu01_h(irow, icol) = amuv_wu_h(itw0, irow, icol) * (1.0 - twfac) + amuv_wu_h(itw1, irow, icol) * twfac
+               amuv_wv01_h(irow, icol) = amuv_wv_h(itw0, irow, icol) * (1.0 - twfac) + amuv_wv_h(itw1, irow, icol) * twfac
+            enddo
+         enddo
+         !
+         ! Bridge IN: host -> device-resident shadows (in sfincs_data_device,
+         ! provisioned by SOR-735).
+         !
+         amuv_wu01 = amuv_wu01_h
+         amuv_wv01 = amuv_wv01_h
+         !
+         call k_amuv_interp<<<blocks, TPB>>>( &
+            itw, npn_local, &
+            amuv_nrows, amuv_ncols, amuv_dx, amuv_dy, &
+            amuv_x_llcorner, amuv_y_llcorner, &
+            cosrot_h, sinrot_h, rhoa_h, rhow_h, &
+            waveage_h, store_wind_h, radstr_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+      enddo
+      !
+   end subroutine launch_amuv_interp_gpu
+   !
+   ! -----------------------------------------------------------------
+   ! Host launcher for k_spiderweb_interp.
+   ! -----------------------------------------------------------------
+   subroutine launch_spiderweb_interp_gpu(has_amu, has_amp, has_ampr)
+      !
+      use sfincs_data, only: spw_nrows, spw_ncols, spw_radius, &
+                             dradspw, dphispw, spw_merge_frac, &
+                             spw_nt, &
+                             spw_times_h => spw_times, &
+                             spw_xe_h => spw_xe, &
+                             spw_ye_h => spw_ye, &
+                             spw_wu_h => spw_wu, &
+                             spw_wv_h => spw_wv, &
+                             spw_pabs_h => spw_pabs, &
+                             spw_prcp_h => spw_prcp, &
+                             spw_wu01_h => spw_wu01, &
+                             spw_wv01_h => spw_wv01, &
+                             spw_pabs01_h => spw_pabs01, &
+                             spw_prcp01_h => spw_prcp01, &
+                             spw_precip_h => spw_precip, &
+                             patmos_h => patmos, precip_h => precip, &
+                             store_wind_h => store_wind, &
+                             wind_reduction_h => wind_reduction, &
+                             waveage_h => waveage, &
+                             crsgeo_h => crsgeo, &
+                             pi_h => pi, gapres_h => gapres, &
+                             rhoa_h => rhoa, rhow_h => rhow, &
+                             cosrot_h => cosrot, sinrot_h => sinrot, &
+                             meteo_t0_h => meteo_t0, meteo_t1_h => meteo_t1
+      !
+      implicit none
+      !
+      logical, intent(in) :: has_amu
+      logical, intent(in) :: has_amp
+      logical, intent(in) :: has_ampr
+      !
+      integer :: itw, irow, icol, itspw, itw0, itw1
+      integer :: blocks, istat
+      real*4  :: meteo_t, twfac, tspinup_fac, spw_xe01, spw_ye01
+      !
+      blocks = (npn_local + TPB - 1) / TPB
+      !
+      do itw = 1, 2
+         !
+         if (itw == 1) then
+            meteo_t = meteo_t0_h
+         else
+            meteo_t = meteo_t1_h
+         endif
+         !
+         ! Mirror CPU IO time-bracket logic (lines 466-513).
+         !
+         if (meteo_t < spw_times_h(1)) then
+            itw0 = 1
+            itw1 = 1
+            twfac = 1.0
+            tspinup_fac = max(1.0 - (spw_times_h(1) - meteo_t) / 21600.0, 0.0)
+         elseif (meteo_t > spw_times_h(spw_nt)) then
+            itw0 = spw_nt
+            itw1 = spw_nt
+            twfac = 1.0
+            tspinup_fac = max(1.0 - (meteo_t - spw_times_h(spw_nt)) / 21600.0, 0.0)
+         else
+            itw0 = 1
+            do itspw = 1, spw_nt
+               if (spw_times_h(itspw) <= meteo_t) itw0 = itspw
+            enddo
+            itw1 = min(itw0 + 1, spw_nt)
+            twfac = (meteo_t - spw_times_h(itw0)) / max(spw_times_h(itw1) - spw_times_h(itw0), 1.0e-6)
+            tspinup_fac = 1.0
+         endif
+         !
+         spw_xe01 = spw_xe_h(itw0) * (1.0 - twfac) + spw_xe_h(itw1) * twfac
+         spw_ye01 = spw_ye_h(itw0) * (1.0 - twfac) + spw_ye_h(itw1) * twfac
+         !
+         do irow = 1, spw_nrows
+            do icol = 1, spw_ncols
+               spw_wu01_h(irow, icol) = spw_wu_h(itw0, irow, icol) * (1.0 - twfac) + spw_wu_h(itw1, irow, icol) * twfac
+               spw_wv01_h(irow, icol) = spw_wv_h(itw0, irow, icol) * (1.0 - twfac) + spw_wv_h(itw1, irow, icol) * twfac
+               if (patmos_h) then
+                  spw_pabs01_h(irow, icol) = spw_pabs_h(itw0, irow, icol) * (1.0 - twfac) + spw_pabs_h(itw1, irow, icol) * twfac
+               endif
+               if (spw_precip_h) then
+                  spw_prcp01_h(irow, icol) = spw_prcp_h(itw0, irow, icol) * (1.0 - twfac) + spw_prcp_h(itw1, irow, icol) * twfac
+               endif
+            enddo
+         enddo
+         !
+         ! Bridge IN: host -> device-resident shadows.
+         !
+         spw_wu01 = spw_wu01_h
+         spw_wv01 = spw_wv01_h
+         if (patmos_h) spw_pabs01 = spw_pabs01_h
+         if (spw_precip_h) spw_prcp01 = spw_prcp01_h
+         !
+         call k_spiderweb_interp<<<blocks, TPB>>>( &
+            itw, npn_local, &
+            spw_nrows, spw_ncols, spw_radius, dradspw, dphispw, &
+            spw_xe01, spw_ye01, tspinup_fac, spw_merge_frac, &
+            crsgeo_h, pi_h, gapres_h, rhoa_h, rhow_h, cosrot_h, sinrot_h, &
+            has_amu, has_amp, has_ampr, &
+            patmos_h, spw_precip_h, precip_h, store_wind_h, &
+            wind_reduction_h, waveage_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+      enddo
+      !
+   end subroutine launch_spiderweb_interp_gpu
+   !
    !
    ! ===================================================================
    !                              KERNELS
@@ -1021,5 +1274,363 @@ contains
       endif
       !
    end subroutine k_ampr_spatial
+   !
+   ! -----------------------------------------------------------------
+   ! Spiderweb spatial interpolation kernel. One thread per SFINCS cell.
+   ! Translates the CPU IO loop body in sfincs_meteo_io.update_spiderweb_data
+   ! (lines 543-778) — this is a translation, not a reimplementation.
+   ! -----------------------------------------------------------------
+   attributes(global) subroutine k_spiderweb_interp( &
+      itw_in, npn_in, &
+      spw_nrows_in, spw_ncols_in, &
+      spw_radius_in, dradspw_in, dphispw_in, &
+      spw_xe01_in, spw_ye01_in, &
+      tspinup_fac_in, spw_merge_frac_in, &
+      crsgeo_in, pi_in, gapres_in, rhoa_in, rhow_in, &
+      cosrot_in, sinrot_in, &
+      has_amu_in, has_amp_in, has_ampr_in, &
+      patmos_in, spw_precip_in, precip_in, store_wind_in, &
+      wind_reduction_in, waveage_in)
+      !
+      implicit none
+      !
+      integer, value :: itw_in
+      integer, value :: npn_in
+      integer, value :: spw_nrows_in
+      integer, value :: spw_ncols_in
+      real*4,  value :: spw_radius_in
+      real*4,  value :: dradspw_in
+      real*4,  value :: dphispw_in
+      real*4,  value :: spw_xe01_in
+      real*4,  value :: spw_ye01_in
+      real*4,  value :: tspinup_fac_in
+      real*4,  value :: spw_merge_frac_in
+      logical, value :: crsgeo_in
+      real*4,  value :: pi_in
+      real*4,  value :: gapres_in
+      real*4,  value :: rhoa_in
+      real*4,  value :: rhow_in
+      real*4,  value :: cosrot_in
+      real*4,  value :: sinrot_in
+      logical, value :: has_amu_in
+      logical, value :: has_amp_in
+      logical, value :: has_ampr_in
+      logical, value :: patmos_in
+      logical, value :: spw_precip_in
+      logical, value :: precip_in
+      logical, value :: store_wind_in
+      logical, value :: wind_reduction_in
+      real*4,  value :: waveage_in
+      !
+      integer :: nm
+      integer :: idstspw, iphispw, ip, ivm, iwa, idir, id
+      integer :: ind1_1, ind1_2, ind1_3, ind1_4
+      integer :: ind2_1, ind2_2, ind2_3, ind2_4
+      real*4  :: x, y, dxe, dye, dstspw, di1, dj1, phispw
+      real*4  :: f1, f2, f3, f4
+      real*4  :: wup, wvp, prp, pcp, vmag, cd
+      real*4  :: merge_frac, wa, z0marine, z0l, fd, wdir, facint
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      x = z_xz(nm)
+      y = z_yz(nm)
+      !
+      if (crsgeo_in) then
+         dxe = (cos(spw_ye01_in * pi_in / 180.0) * 111111.0) * (x - spw_xe01_in)
+         dye = 111111.0 * (y - spw_ye01_in)
+      else
+         dxe = x - spw_xe01_in
+         dye = y - spw_ye01_in
+      endif
+      !
+      dstspw = sqrt(dxe**2 + dye**2)
+      !
+      ! Initialize output to zero (or gapres for pressure) when the
+      ! corresponding background module is absent. Mirrors CPU sibling
+      ! lines 566-617.
+      !
+      if (itw_in == 1) then
+         if (.not. has_amu_in) then
+            tauwu0(nm) = 0.0
+            tauwv0(nm) = 0.0
+            if (store_wind_in) then
+               windu0(nm) = 0.0
+               windv0(nm) = 0.0
+            endif
+         endif
+         if (patmos_in .and. .not. has_amp_in) then
+            patm0(nm) = gapres_in
+         endif
+         if (precip_in .and. spw_precip_in .and. .not. has_ampr_in) then
+            prcp0(nm) = 0.0
+         endif
+      else
+         if (.not. has_amu_in) then
+            tauwu1(nm) = 0.0
+            tauwv1(nm) = 0.0
+            if (store_wind_in) then
+               windu1(nm) = 0.0
+               windv1(nm) = 0.0
+            endif
+         endif
+         if (patmos_in .and. .not. has_amp_in) then
+            patm1(nm) = gapres_in
+         endif
+         if (precip_in .and. spw_precip_in .and. .not. has_ampr_in) then
+            prcp1(nm) = 0.0
+         endif
+      endif
+      !
+      if (dstspw > spw_radius_in) return  ! Outside spiderweb
+      !
+      ! Row indices
+      !
+      idstspw = int(dstspw / dradspw_in)
+      if (idstspw < 1) idstspw = 1
+      ind1_1 = idstspw
+      ind1_2 = idstspw
+      ind1_3 = idstspw + 1
+      ind1_4 = idstspw + 1
+      if (ind1_3 > spw_nrows_in) return
+      dj1 = (dstspw - dradspw_in * idstspw) / dradspw_in
+      phispw = 0.5 * pi_in - atan2(dye, dxe)
+      phispw = modulo(phispw, 2.0 * pi_in)
+      !
+      ! Column indices
+      !
+      iphispw = int(phispw / dphispw_in) + 1
+      if (iphispw > spw_ncols_in) iphispw = spw_ncols_in
+      ind2_1 = iphispw
+      ind2_2 = iphispw + 1
+      ind2_3 = iphispw + 1
+      ind2_4 = iphispw
+      if (ind2_2 > spw_ncols_in) ind2_2 = 1
+      if (ind2_3 > spw_ncols_in) ind2_3 = 1
+      di1 = (phispw - dphispw_in * (iphispw - 1)) / dphispw_in
+      !
+      ! Bilinear weights
+      !
+      f1 = (1.0 - di1) * (1.0 - dj1)
+      f2 = (      di1) * (1.0 - dj1)
+      f3 = (      di1) * (      dj1)
+      f4 = (1.0 - di1) * (      dj1)
+      !
+      ! Interpolate polar buffers
+      !
+      wup = f1 * spw_wu01(ind1_1, ind2_1) + f2 * spw_wu01(ind1_2, ind2_2) &
+          + f3 * spw_wu01(ind1_3, ind2_3) + f4 * spw_wu01(ind1_4, ind2_4)
+      wvp = f1 * spw_wv01(ind1_1, ind2_1) + f2 * spw_wv01(ind1_2, ind2_2) &
+          + f3 * spw_wv01(ind1_3, ind2_3) + f4 * spw_wv01(ind1_4, ind2_4)
+      pcp = 0.0
+      prp = 0.0
+      if (patmos_in) then
+         pcp = f1 * spw_pabs01(ind1_1, ind2_1) + f2 * spw_pabs01(ind1_2, ind2_2) &
+             + f3 * spw_pabs01(ind1_3, ind2_3) + f4 * spw_pabs01(ind1_4, ind2_4)
+      endif
+      if (precip_in .and. spw_precip_in) then
+         prp = f1 * spw_prcp01(ind1_1, ind2_1) + f2 * spw_prcp01(ind1_2, ind2_2) &
+             + f3 * spw_prcp01(ind1_3, ind2_3) + f4 * spw_prcp01(ind1_4, ind2_4)
+      endif
+      !
+      vmag = sqrt(wup**2 + wvp**2)
+      !
+      ! Determine Cd
+      !
+      if (waveage_in > 0.0) then
+         wa  = max(min(waveage_in, 1.99), 0.1001)
+         ivm = int(vmag / 2.0)
+         if (ivm < 1) ivm = 1
+         iwa = int(wa / 0.1)
+         cd  = 0.001 * cdlgx(ivm, iwa)
+      else
+         cd  = cdval(int(vmag * 10.0) + 1)
+      endif
+      !
+      ! Merge fraction
+      !
+      if (dstspw > spw_merge_frac_in * spw_radius_in) then
+         merge_frac = (1.0 / (1.0 - min(spw_merge_frac_in, 0.999))) * (spw_radius_in - dstspw) / spw_radius_in
+      else
+         merge_frac = 1.0
+      endif
+      merge_frac = merge_frac * tspinup_fac_in
+      !
+      ! Wind reduction over land
+      !
+      if (wind_reduction_in) then
+         z0marine = 0.001835 * cd * vmag**2
+         wdir = 270.0 - atan2(wvp, wup) * 180.0 / pi_in
+         if (wdir < 0.0)    wdir = wdir + 360.0
+         if (wdir >= 360.0) wdir = wdir - 360.0
+         idir = int(wdir / 30.0) + 1
+         facint = (wdir - (idir - 1) * 30.0) / 30.0
+         if (idir < 12) then
+            z0l = z0land(idir, nm) + (z0land(idir + 1, nm) - z0land(idir, nm)) * facint
+         else
+            z0l = z0land(  12, nm) + (z0land(       1, nm) - z0land(  12, nm)) * facint
+         endif
+         if (z0l > z0marine) then
+            id = int(0.2 * z0l / z0marine) + 1
+            if (id > 101) id = 101
+            fd = z0land_table(id)
+            vmag = fd * vmag
+            wup  = fd * wup
+            wvp  = fd * wvp
+         endif
+      endif
+      !
+      ! Apply merge into the *0 / *1 device shadows.
+      !
+      if (itw_in == 1) then
+         tauwu0(nm) = (1.0 - merge_frac) * tauwu0(nm) + merge_frac * vmag * ( cosrot_in * wup + sinrot_in * wvp) * rhoa_in * cd / rhow_in
+         tauwv0(nm) = (1.0 - merge_frac) * tauwv0(nm) + merge_frac * vmag * (-sinrot_in * wup + cosrot_in * wvp) * rhoa_in * cd / rhow_in
+         if (patmos_in) then
+            patm0(nm) = (1.0 - merge_frac) * patm0(nm) + merge_frac * pcp
+         endif
+         if (precip_in .and. spw_precip_in) then
+            prcp0(nm) = (1.0 - merge_frac) * prcp0(nm) + merge_frac * prp / (1000.0 * 3600.0)
+         endif
+         if (store_wind_in) then
+            windu0(nm) = (1.0 - merge_frac) * windu0(nm) + merge_frac * wup
+            windv0(nm) = (1.0 - merge_frac) * windv0(nm) + merge_frac * wvp
+         endif
+      else
+         tauwu1(nm) = (1.0 - merge_frac) * tauwu1(nm) + merge_frac * vmag * ( cosrot_in * wup + sinrot_in * wvp) * rhoa_in * cd / rhow_in
+         tauwv1(nm) = (1.0 - merge_frac) * tauwv1(nm) + merge_frac * vmag * (-sinrot_in * wup + cosrot_in * wvp) * rhoa_in * cd / rhow_in
+         if (patmos_in) then
+            patm1(nm) = (1.0 - merge_frac) * patm1(nm) + merge_frac * pcp
+         endif
+         if (precip_in .and. spw_precip_in) then
+            prcp1(nm) = (1.0 - merge_frac) * prcp1(nm) + merge_frac * prp / (1000.0 * 3600.0)
+         endif
+         if (store_wind_in) then
+            windu1(nm) = (1.0 - merge_frac) * windu1(nm) + merge_frac * wup
+            windv1(nm) = (1.0 - merge_frac) * windv1(nm) + merge_frac * wvp
+         endif
+      endif
+      !
+   end subroutine k_spiderweb_interp
+   !
+   ! -----------------------------------------------------------------
+   ! Regular-grid wind kernel. Translates the CPU IO loop body in
+   ! sfincs_meteo_io.update_amuv_data (lines 846-957).
+   ! -----------------------------------------------------------------
+   attributes(global) subroutine k_amuv_interp( &
+      itw_in, npn_in, &
+      amuv_nrows_in, amuv_ncols_in, amuv_dx_in, amuv_dy_in, &
+      amuv_xll_in, amuv_yll_in, &
+      cosrot_in, sinrot_in, rhoa_in, rhow_in, &
+      waveage_in, store_wind_in, radstr_in)
+      !
+      implicit none
+      !
+      integer, value :: itw_in
+      integer, value :: npn_in
+      integer, value :: amuv_nrows_in
+      integer, value :: amuv_ncols_in
+      real*4,  value :: amuv_dx_in
+      real*4,  value :: amuv_dy_in
+      real*4,  value :: amuv_xll_in
+      real*4,  value :: amuv_yll_in
+      real*4,  value :: cosrot_in
+      real*4,  value :: sinrot_in
+      real*4,  value :: rhoa_in
+      real*4,  value :: rhow_in
+      real*4,  value :: waveage_in
+      logical, value :: store_wind_in
+      logical, value :: radstr_in
+      !
+      integer :: nm, ix, iy, ivm, iwa
+      integer :: ind1_1, ind1_2, ind1_3, ind1_4
+      integer :: ind2_1, ind2_2, ind2_3, ind2_4
+      real*4  :: x, y, yul, xll, di1, dj1
+      real*4  :: f1, f2, f3, f4
+      real*4  :: wup, wvp, vmag, cd, wa
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      yul = amuv_yll_in + (amuv_nrows_in - 1) * amuv_dy_in + 0.5 * amuv_dy_in
+      xll = amuv_xll_in + 0.5 * amuv_dx_in
+      !
+      x = z_xz(nm)
+      y = z_yz(nm)
+      !
+      iy = int((yul - y) / amuv_dy_in) + 1
+      ind1_1 = iy
+      ind1_2 = iy
+      ind1_3 = iy + 1
+      ind1_4 = iy + 1
+      dj1 = (yul - (iy - 1) * amuv_dy_in - y) / amuv_dy_in
+      !
+      ix = int((x - xll) / amuv_dx_in) + 1
+      ind2_1 = ix
+      ind2_2 = ix + 1
+      ind2_3 = ix + 1
+      ind2_4 = ix
+      di1 = (x - (xll + (ix - 1) * amuv_dx_in)) / amuv_dx_in
+      !
+      if (iy <= 1 .or. iy >= amuv_nrows_in .or. ix <= 0 .or. ix >= amuv_ncols_in) then
+         if (itw_in == 1) then
+            tauwu0(nm) = 0.0
+            tauwv0(nm) = 0.0
+         else
+            tauwu1(nm) = 0.0
+            tauwv1(nm) = 0.0
+         endif
+         return
+      endif
+      !
+      f1 = (1.0 - di1) * (1.0 - dj1)
+      f2 = (      di1) * (1.0 - dj1)
+      f3 = (      di1) * (      dj1)
+      f4 = (1.0 - di1) * (      dj1)
+      !
+      wup = f1 * amuv_wu01(ind1_1, ind2_1) + f2 * amuv_wu01(ind1_2, ind2_2) &
+          + f3 * amuv_wu01(ind1_3, ind2_3) + f4 * amuv_wu01(ind1_4, ind2_4)
+      wvp = f1 * amuv_wv01(ind1_1, ind2_1) + f2 * amuv_wv01(ind1_2, ind2_2) &
+          + f3 * amuv_wv01(ind1_3, ind2_3) + f4 * amuv_wv01(ind1_4, ind2_4)
+      !
+      vmag = sqrt(wup**2 + wvp**2)
+      !
+      if (waveage_in > 0.0) then
+         wa  = max(min(waveage_in, 1.99), 0.1001)
+         ivm = int(vmag / 2.0)
+         if (ivm < 1) ivm = 1
+         iwa = int(wa / 0.1)
+         cd  = 0.001 * cdlgx(ivm, iwa)
+      else
+         cd  = cdval(int(vmag * 10.0) + 1)
+      endif
+      !
+      if (radstr_in) then
+         if (itw_in == 1) then
+            tauwu0(nm) = ( cosrot_in * wup + sinrot_in * wvp) / rhow_in
+            tauwv0(nm) = (-sinrot_in * wup + cosrot_in * wvp) / rhow_in
+         else
+            tauwu1(nm) = ( cosrot_in * wup + sinrot_in * wvp) / rhow_in
+            tauwv1(nm) = (-sinrot_in * wup + cosrot_in * wvp) / rhow_in
+         endif
+      else
+         if (itw_in == 1) then
+            tauwu0(nm) = vmag * ( cosrot_in * wup + sinrot_in * wvp) * rhoa_in * cd / rhow_in
+            tauwv0(nm) = vmag * (-sinrot_in * wup + cosrot_in * wvp) * rhoa_in * cd / rhow_in
+            if (store_wind_in) then
+               windu0(nm) = wup
+               windv0(nm) = wvp
+            endif
+         else
+            tauwu1(nm) = vmag * ( cosrot_in * wup + sinrot_in * wvp) * rhoa_in * cd / rhow_in
+            tauwv1(nm) = vmag * (-sinrot_in * wup + cosrot_in * wvp) * rhoa_in * cd / rhow_in
+            if (store_wind_in) then
+               windu1(nm) = wup
+               windv1(nm) = wvp
+            endif
+         endif
+      endif
+      !
+   end subroutine k_amuv_interp
    !
 end module sfincs_meteo

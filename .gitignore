@@ -67,5 +67,5 @@ source/sfincs/sfincs.opt.yaml
 /source/third_party_open/netcdf/netcdf-fortran-4.6.1/Debug
 
 # Smoke-test build/run output (driver script: run_smoke_*.sh).
-/source/build_scripts/smoke/_build/
-/source/build_scripts/smoke/_run/
+/source/build_scripts/smoke/_build*/
+/source/build_scripts/smoke/_run*/
