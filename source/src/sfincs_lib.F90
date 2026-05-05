@@ -28,8 +28,6 @@ module sfincs_lib
    use mpi
    use sfincs_partition
    use sfincs_data_device, only: mpi_rank, mpi_size
-#else
-   use sfincs_openacc
 #endif
    use sfincs_log
    use sfincs_timestep_analysis
@@ -343,10 +341,6 @@ module sfincs_lib
    ! 
    call deallocate_quadtree()
    !
-#ifndef USE_CUDA
-   call initialize_openacc() ! Enter data region
-#endif
-   !
    ierr = error
    !
    call write_log('', 1)
@@ -652,6 +646,9 @@ module sfincs_lib
          !
          ! if (.not. fixed_output_intervals) tout = t
          !
+#ifdef USE_CUDA
+         call device_to_host_for_output()
+#endif
          call write_output(tout, write_map, write_his, write_max, write_rst, ntmapout, ntmaxout, nthisout, tloopoutput)
          !
       endif
@@ -666,8 +663,11 @@ module sfincs_lib
          !
          ! Write map output at last time step 
          !
-         ntmaxout = ntmaxout + 1 ! Max sure that max output is not called again through 'finalize_output' 
+         ntmaxout = ntmaxout + 1 ! Max sure that max output is not called again through 'finalize_output'
          !
+#ifdef USE_CUDA
+         call device_to_host_for_output()
+#endif
          call write_output(t, .true., .true., .true., .false., ntmapout + 1, ntmaxout, nthisout + 1, tloopoutput)
          !
          t = t1 + 1.0
@@ -726,11 +726,12 @@ module sfincs_lib
       !
    endif     
    !
+#ifdef USE_CUDA
+   call device_to_host_for_output()
+#endif
    call finalize_output(t, ntmaxout, tloopoutput, tmaxout)
    !
-#ifndef USE_CUDA
-   call finalize_openacc() ! Exit data region
-#else
+#ifdef USE_CUDA
    call device_finalize()
 #endif
    !
