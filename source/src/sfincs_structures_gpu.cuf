@@ -1,0 +1,218 @@
+module sfincs_structures
+   !
+   ! GPU sibling of source/src/sfincs_structures.f90.
+   !
+   ! Shadows the CPU module's public surface (read_structures,
+   ! read_structure_file, read_thin_dams, give_structure_information,
+   ! give_thindam_information, compute_fluxes_over_structures) using a
+   ! native CUDA Fortran kernel for compute_fluxes_over_structures that
+   ! operates on the device-resident catalog declared by
+   ! sfincs_data_device. The five IO subroutines are re-exported from
+   ! sfincs_structures_io (the helper module that owns their bodies) so
+   ! consumers like sfincs_ncoutput continue to find the same surface.
+   !
+   ! Bridge convention (gpu-foundation): host-side `use sfincs_data` arrays
+   ! are suffixed _h via USE-rename; device-side `use sfincs_data_device`
+   ! arrays are bare. CUDA Fortran translates `<dev> = <host>` (and
+   ! vice-versa) to cudaMemcpy at the assignment level. The kernel's
+   ! READ set is refreshed from host before launch (bridge-IN) and the
+   ! WRITE set is published back to host after sync (bridge-OUT) so
+   ! unported CPU per-step modules (continuity etc., until ported) read
+   ! fresh data. Both legs are required during the staging period.
+   !
+   use cudafor
+   use sfincs_data_device
+   use sfincs_structures_io, only: read_structures, &
+                                   read_structure_file, &
+                                   read_thin_dams, &
+                                   give_structure_information, &
+                                   give_thindam_information
+   !
+   implicit none
+   !
+   private
+   public :: read_structures, &
+             read_structure_file, &
+             read_thin_dams, &
+             give_structure_information, &
+             give_thindam_information, &
+             compute_fluxes_over_structures
+   !
+   integer, parameter :: TPB = 128   ! threads per block, intentionally simple
+   !
+contains
+   !
+   ! -----------------------------------------------------------------
+   ! Per-step kernel dispatcher. Mirrors the CPU sibling at
+   ! source/src/sfincs_structures.f90:75. Per the mandate,
+   ! `structure_uv_index` drives the per-structure parallelism — one
+   ! thread per structure-face entry.
+   ! -----------------------------------------------------------------
+   subroutine compute_fluxes_over_structures(tloop)
+      !
+      use sfincs_data, only: &
+         nrstructures_h => nrstructures, &
+         zs_h => zs, q_h => q, uv_h => uv, &
+         structure_uv_index_h => structure_uv_index, &
+         uv_index_z_nm_h => uv_index_z_nm, &
+         uv_index_z_nmu_h => uv_index_z_nmu, &
+         structure_parameters_h => structure_parameters, &
+         structure_type_h => structure_type, &
+         structure_length_h => structure_length
+      !
+      implicit none
+      !
+      integer  :: count0
+      integer  :: count1
+      integer  :: count_rate
+      integer  :: count_max
+      real     :: tloop
+      !
+      integer  :: blocks
+      integer  :: istat
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      if (nrstructures_h <= 0) then
+         call system_clock(count1, count_rate, count_max)
+         tloop = tloop + 1.0 * (count1 - count0) / count_rate
+         return
+      endif
+      !
+      ! ------ Copy-IN: host -> device for kernel READ set ----------------
+      !
+      zs                   = zs_h
+      q                    = q_h
+      uv                   = uv_h
+      structure_uv_index   = structure_uv_index_h
+      uv_index_z_nm        = uv_index_z_nm_h
+      uv_index_z_nmu       = uv_index_z_nmu_h
+      structure_parameters = structure_parameters_h
+      structure_type       = structure_type_h
+      structure_length     = structure_length_h
+      !
+      ! ------ One thread per structure-face entry ------------------------
+      !
+      blocks = (nrstructures_h + TPB - 1) / TPB
+      !
+      call k_compute_fluxes_over_structures<<<blocks, TPB>>>( &
+         nrstructures_h, npuv_local)
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      ! ------ Copy-OUT: device -> host for WRITE set ---------------------
+      !
+      q_h  = q
+      uv_h = uv
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0 * (count1 - count0) / count_rate
+      !
+   end subroutine compute_fluxes_over_structures
+   !
+   ! ===================================================================
+   !                              KERNEL
+   ! ===================================================================
+   !
+   ! Per-structure kernel. Mirrors the do-loop body at the CPU sibling
+   ! source/src/sfincs_structures.f90:108-172. Only structures whose
+   ! `structure_uv_index` falls in the rank-local UV range [1, npuv_local]
+   ! are processed; threads outside that range exit without writing
+   ! (per C6: iterate rank-local indices).
+   !
+   attributes(global) subroutine k_compute_fluxes_over_structures( &
+                                    nrstructures_in, npuv_local_in)
+      !
+      implicit none
+      !
+      integer, value :: nrstructures_in
+      integer, value :: npuv_local_in
+      !
+      integer :: istruc
+      integer :: ip
+      integer :: nm
+      integer :: nmu
+      integer :: idir
+      real*4  :: zsnm
+      real*4  :: zsnmu
+      real*4  :: cweir
+      real*4  :: Cd
+      real*4  :: m
+      real*4  :: h1
+      real*4  :: h2
+      real*4  :: qstruc
+      !
+      istruc = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (istruc > nrstructures_in) return
+      !
+      ip = structure_uv_index(istruc)
+      !
+      ! Rank-local filter: only process structures whose uv index belongs
+      ! to this rank's UV range. For single-rank npuv_local == npuv so all
+      ! entries pass.
+      !
+      if (ip < 1 .or. ip > npuv_local_in) return
+      !
+      q(ip)  = 0.0
+      uv(ip) = 0.0
+      !
+      nm  = uv_index_z_nm(ip)
+      nmu = uv_index_z_nmu(ip)
+      !
+      zsnm  = real(zs(nm),  kind=4)
+      zsnmu = real(zs(nmu), kind=4)
+      !
+      if (zsnm  < structure_parameters(1, istruc) .and. &
+          zsnmu < structure_parameters(1, istruc)) then
+         return  ! No flow over structure
+      endif
+      !
+      qstruc = 0.0
+      idir   = 0
+      !
+      select case(structure_type(istruc))
+         case(1)
+            !
+            ! Broad-crested weir
+            !
+            cweir = 1.7049
+            m     = 0.0   ! Modular limit ...
+            Cd    = structure_parameters(2, istruc)
+            !
+            if (zsnm > zsnmu) then
+               idir = 1
+               h1 = zsnm  - structure_parameters(1, istruc)
+               h2 = zsnmu - structure_parameters(1, istruc)
+            else
+               idir = -1
+               h1 = zsnmu - structure_parameters(1, istruc)
+               h2 = zsnm  - structure_parameters(1, istruc)
+            endif
+            !
+            if (h2 > 2.0 / 3.0 * h1) then
+               !
+               ! fully submerged
+               !
+               qstruc = Cd * h2 * sqrt(2.0 * 9.81 * (h1 - h2) / (1.0 - m))
+               !
+            else
+               !
+               ! free flow
+               !
+               qstruc = Cd * cweir * h1**1.5
+               !
+            endif
+            !
+         case(2)
+            ! reserved (gates) — not yet implemented in CPU sibling
+         case(3)
+            ! reserved — not yet implemented in CPU sibling
+      end select
+      !
+      qstruc = qstruc * structure_length(istruc)
+      !
+      q(ip) = qstruc * idir
+      !
+   end subroutine k_compute_fluxes_over_structures
+   !
+end module sfincs_structures
