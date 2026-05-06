@@ -16,8 +16,7 @@ module sfincs_meteo
    !
    use cudafor
    use sfincs_data_device
-   use sfincs_meteo_io, only: read_meteo_data, &
-                              update_spiderweb_data
+   use sfincs_meteo_io, only: read_meteo_data
    !
    implicit none
    !
@@ -1326,5 +1325,504 @@ contains
       endif
       !
    end subroutine k_amuv_spatial
+   !
+   ! -----------------------------------------------------------------
+   ! GPU port of update_spiderweb_data. Mirrors CPU sibling
+   ! sfincs_meteo_io.f90:437-781 — per-cell spiderweb spatial
+   ! interpolation with merge-blending against background regular-grid
+   ! forcing, optional wind-reduction over land, and optional
+   ! precipitation.
+   !
+   ! The outer do itw = 1, 2 loop fills the *0 staging arrays (itw=1)
+   ! or *1 staging arrays (itw=2). Per itw: a host-side time-find +
+   ! eye-interpolation preamble runs against host arrays
+   ! (spw_times_h/spw_xe_h/spw_ye_h), then two kernels run:
+   !   - k_spw_snapshot: spw_nrows*spw_ncols threads compute
+   !     spw_wu01/spw_wv01 (and spw_pabs01 when patmos, spw_prcp01 when
+   !     precip .and. spw_precip) by twfac-blending the (itw0, itw1)
+   !     slices of the corresponding spw_* shadows.
+   !   - k_spw_spatial: npn_local threads each handle one cell — they
+   !     compute distance/angle from the eye, perform bilinear
+   !     interpolation in the spw polar mesh, apply the cd lookup, the
+   !     merge_frac blending against the device-resident
+   !     tauwu*/tauwv*/patm*/prcp*/windu*/windv* arrays, and the
+   !     optional wind-reduction non-linearity. Threads outside the
+   !     spiderweb early-return (mirroring the CPU `cycle`) after
+   !     applying the init writes that the CPU sibling does
+   !     unconditionally before the radius check.
+   ! cudaDeviceSynchronize() between snapshot and spatial because the
+   ! spatial kernel reads the *01 scratches written by snapshot.
+   !
+   ! After both halves complete, a D2H staging block publishes
+   ! tauwu0/tauwv0/tauwu1/tauwv1 (plus patm0/patm1, prcp0/prcp1,
+   ! windu0/windv0/windu1/windv1 as appropriate) back to the host
+   ! arrays. Needed so the bridge-IN block in update_meteo_forcing
+   ! does not H2D-clobber the device writes with stale host values.
+   ! Will be removed by the bridge-trim issue.
+   ! -----------------------------------------------------------------
+   subroutine update_spiderweb_data()
+      !
+      use sfincs_data, only: meteo_t0_h => meteo_t0, meteo_t1_h => meteo_t1, &
+                             spw_nt_h => spw_nt, &
+                             spw_nrows_h => spw_nrows, spw_ncols_h => spw_ncols, &
+                             spw_radius_h => spw_radius, &
+                             spw_merge_frac_h => spw_merge_frac, &
+                             dradspw_h => dradspw, dphispw_h => dphispw, &
+                             spw_times_h => spw_times, &
+                             spw_xe_h => spw_xe, spw_ye_h => spw_ye, &
+                             pi_h => pi, gapres_h => gapres, &
+                             cosrot_h => cosrot, sinrot_h => sinrot, &
+                             rhoa_h => rhoa, rhow_h => rhow, &
+                             crsgeo_h => crsgeo, &
+                             wind_reduction_h => wind_reduction, &
+                             store_wind_h => store_wind, &
+                             waveage_h => waveage, &
+                             patmos_h => patmos, &
+                             precip_h => precip, spw_precip_h => spw_precip, &
+                             amufile_h => amufile, &
+                             netamuamvfile_h => netamuamvfile, &
+                             ampfile_h => ampfile, &
+                             netampfile_h => netampfile, &
+                             amprfile_h => amprfile, &
+                             netamprfile_h => netamprfile, &
+                             tauwu0_h => tauwu0, tauwv0_h => tauwv0, &
+                             tauwu1_h => tauwu1, tauwv1_h => tauwv1, &
+                             windu0_h => windu0, windv0_h => windv0, &
+                             windu1_h => windu1, windv1_h => windv1, &
+                             patm0_h => patm0, patm1_h => patm1, &
+                             prcp0_h => prcp0, prcp1_h => prcp1
+      !
+      implicit none
+      !
+      integer :: itw, itw0, itw1, itspw
+      integer :: blocks
+      integer :: snap_threads
+      integer :: snap_blocks
+      integer :: istat
+      real*4  :: meteo_t
+      real*4  :: twfac
+      real*4  :: tspinup_fac
+      real*4  :: spw_xe01
+      real*4  :: spw_ye01
+      logical :: do_prcp
+      logical :: init_wind
+      logical :: init_patm
+      logical :: init_prcp
+      !
+      do_prcp   = precip_h .and. spw_precip_h
+      init_wind = (amufile_h(1:4) == 'none' .and. netamuamvfile_h(1:4) == 'none')
+      init_patm = patmos_h .and. (ampfile_h(1:4) == 'none' .and. netampfile_h(1:4) == 'none')
+      init_prcp = do_prcp  .and. (amprfile_h(1:4) == 'none' .and. netamprfile_h(1:4) == 'none')
+      !
+      do itw = 1, 2
+         !
+         if (itw == 1) then
+            meteo_t = real(meteo_t0_h, kind=4)
+         else
+            meteo_t = real(meteo_t1_h, kind=4)
+         endif
+         !
+         ! Time range: three cases mirroring CPU sibling lines 476-513.
+         !
+         if (meteo_t < spw_times_h(1)) then
+            !
+            itw0 = 1
+            itw1 = 1
+            twfac = 1.0
+            tspinup_fac = max(1.0 - (spw_times_h(1) - meteo_t) / 21600.0, 0.0)
+            !
+         elseif (meteo_t > spw_times_h(spw_nt_h)) then
+            !
+            itw0 = spw_nt_h
+            itw1 = spw_nt_h
+            twfac = 1.0
+            tspinup_fac = max(1.0 - (meteo_t - spw_times_h(spw_nt_h)) / 21600.0, 0.0)
+            !
+         else
+            !
+            itw0 = 1
+            do itspw = 1, spw_nt_h
+               if (spw_times_h(itspw) <= meteo_t) then
+                  itw0 = itspw
+               endif
+            enddo
+            !
+            itw1 = min(itw0 + 1, spw_nt_h)
+            twfac = (meteo_t - spw_times_h(itw0)) / max(spw_times_h(itw1) - spw_times_h(itw0), 1.0e-6)
+            tspinup_fac = 1.0
+            !
+         endif
+         !
+         ! Eye position (host-side blend of host spw_xe / spw_ye).
+         !
+         spw_xe01 = spw_xe_h(itw0) * (1.0 - twfac) + spw_xe_h(itw1) * twfac
+         spw_ye01 = spw_ye_h(itw0) * (1.0 - twfac) + spw_ye_h(itw1) * twfac
+         !
+         ! Snapshot kernel: blend spw_wu/spw_wv (and spw_pabs, spw_prcp
+         ! when enabled) into the spw_*01 scratches.
+         !
+         snap_threads = spw_nrows_h * spw_ncols_h
+         snap_blocks  = (snap_threads + TPB - 1) / TPB
+         !
+         call k_spw_snapshot<<<snap_blocks, TPB>>>(itw0, itw1, twfac, &
+            spw_nrows_h, spw_ncols_h, patmos_h, do_prcp)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         ! Spatial kernel: per-cell spiderweb interp + merge blend.
+         !
+         blocks = (npn_local + TPB - 1) / TPB
+         !
+         call k_spw_spatial<<<blocks, TPB>>>(itw, npn_local, &
+            spw_xe01, spw_ye01, tspinup_fac, &
+            spw_nrows_h, spw_ncols_h, &
+            spw_radius_h, spw_merge_frac_h, &
+            dradspw_h, dphispw_h, &
+            real(pi_h, kind=4), real(gapres_h, kind=4), &
+            cosrot_h, sinrot_h, rhoa_h, rhow_h, &
+            crsgeo_h, wind_reduction_h, store_wind_h, &
+            patmos_h, do_prcp, &
+            init_wind, init_patm, init_prcp, &
+            waveage_h)
+         !
+         istat = cudaDeviceSynchronize()
+         !
+      enddo
+      !
+      ! D2H staging — keep host tauwu0/tauwv0/tauwu1/tauwv1 (and
+      ! patm0/patm1, prcp0/prcp1, windu0/windv0/windu1/windv1 as
+      ! appropriate) in sync for downstream CPU consumers and to make
+      ! the bridge-IN H2D copy in update_meteo_forcing a no-op.
+      ! Removed once the bridge-trim issue lands.
+      !
+      tauwu0_h = tauwu0
+      tauwv0_h = tauwv0
+      tauwu1_h = tauwu1
+      tauwv1_h = tauwv1
+      !
+      if (patmos_h) then
+         patm0_h = patm0
+         patm1_h = patm1
+      endif
+      !
+      if (do_prcp) then
+         prcp0_h = prcp0
+         prcp1_h = prcp1
+      endif
+      !
+      if (store_wind_h) then
+         windu0_h = windu0
+         windv0_h = windv0
+         windu1_h = windu1
+         windv1_h = windv1
+      endif
+      !
+   end subroutine update_spiderweb_data
+   !
+   ! Snapshot kernel: blend spw_wu/spw_wv (and spw_pabs, spw_prcp when
+   ! enabled) at slices itw0 / itw1 into spw_wu01 / spw_wv01 (and
+   ! spw_pabs01 / spw_prcp01) by twfac. Mirrors CPU sibling lines
+   ! 522-537.
+   !
+   attributes(global) subroutine k_spw_snapshot(itw0_in, itw1_in, twfac_in, &
+                                                spw_nrows_in, spw_ncols_in, &
+                                                patmos_in, do_prcp_in)
+      !
+      implicit none
+      !
+      integer, value :: itw0_in
+      integer, value :: itw1_in
+      real*4,  value :: twfac_in
+      integer, value :: spw_nrows_in
+      integer, value :: spw_ncols_in
+      logical, value :: patmos_in
+      logical, value :: do_prcp_in
+      !
+      integer :: tid, irow, icol
+      real*4  :: omt
+      !
+      tid = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (tid > spw_nrows_in * spw_ncols_in) return
+      !
+      irow = ((tid - 1) / spw_ncols_in) + 1
+      icol = mod(tid - 1, spw_ncols_in) + 1
+      !
+      omt = 1.0 - twfac_in
+      !
+      spw_wu01(irow, icol) = spw_wu(itw0_in, irow, icol) * omt &
+                           + spw_wu(itw1_in, irow, icol) * twfac_in
+      spw_wv01(irow, icol) = spw_wv(itw0_in, irow, icol) * omt &
+                           + spw_wv(itw1_in, irow, icol) * twfac_in
+      !
+      if (patmos_in) then
+         spw_pabs01(irow, icol) = spw_pabs(itw0_in, irow, icol) * omt &
+                                + spw_pabs(itw1_in, irow, icol) * twfac_in
+      endif
+      !
+      if (do_prcp_in) then
+         spw_prcp01(irow, icol) = spw_prcp(itw0_in, irow, icol) * omt &
+                                + spw_prcp(itw1_in, irow, icol) * twfac_in
+      endif
+      !
+   end subroutine k_spw_snapshot
+   !
+   ! Spatial kernel: per-cell spiderweb spatial interpolation with
+   ! merge-blending against the existing tauwu*/tauwv*/patm*/prcp*/
+   ! windu*/windv* values, plus optional wind-reduction over land.
+   ! Mirrors CPU sibling lines 543-777.
+   !
+   attributes(global) subroutine k_spw_spatial(itw_in, npn_in, &
+                                               spw_xe01_in, spw_ye01_in, &
+                                               tspinup_fac_in, &
+                                               spw_nrows_in, spw_ncols_in, &
+                                               spw_radius_in, spw_merge_frac_in, &
+                                               dradspw_in, dphispw_in, &
+                                               pi_in, gapres_in, &
+                                               cosrot_in, sinrot_in, &
+                                               rhoa_in, rhow_in, &
+                                               crsgeo_in, wind_reduction_in, &
+                                               store_wind_in, &
+                                               patmos_in, do_prcp_in, &
+                                               init_wind_in, init_patm_in, &
+                                               init_prcp_in, waveage_in)
+      !
+      implicit none
+      !
+      integer, value :: itw_in
+      integer, value :: npn_in
+      real*4,  value :: spw_xe01_in
+      real*4,  value :: spw_ye01_in
+      real*4,  value :: tspinup_fac_in
+      integer, value :: spw_nrows_in
+      integer, value :: spw_ncols_in
+      real*4,  value :: spw_radius_in
+      real*4,  value :: spw_merge_frac_in
+      real*4,  value :: dradspw_in
+      real*4,  value :: dphispw_in
+      real*4,  value :: pi_in
+      real*4,  value :: gapres_in
+      real*4,  value :: cosrot_in
+      real*4,  value :: sinrot_in
+      real*4,  value :: rhoa_in
+      real*4,  value :: rhow_in
+      logical, value :: crsgeo_in
+      logical, value :: wind_reduction_in
+      logical, value :: store_wind_in
+      logical, value :: patmos_in
+      logical, value :: do_prcp_in
+      logical, value :: init_wind_in
+      logical, value :: init_patm_in
+      logical, value :: init_prcp_in
+      real*4,  value :: waveage_in
+      !
+      integer :: nm, ip, ivm, iwa, idstspw, iphispw, idir, id
+      integer :: ind1(4), ind2(4)
+      real*4  :: x, y, dxe, dye, dstspw
+      real*4  :: di1, dj1, phispw
+      real*4  :: f(4)
+      real*4  :: wup, wvp, pcp, prp, vmag, cd, wa
+      real*4  :: merge_frac, omf
+      real*4  :: z0marine, z0l, fd, wdir, facint
+      !
+      nm = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (nm > npn_in) return
+      !
+      x = z_xz(nm)
+      y = z_yz(nm)
+      !
+      ! Distance from eye in metres.
+      !
+      if (crsgeo_in) then
+         dxe = (cos(spw_ye01_in * pi_in / 180.0) * 111111.0) * (x - spw_xe01_in)
+         dye = 111111.0 * (y - spw_ye01_in)
+      else
+         dxe = x - spw_xe01_in
+         dye = y - spw_ye01_in
+      endif
+      !
+      dstspw = sqrt(dxe**2 + dye**2)
+      !
+      ! Initialize meteo data when the corresponding background-meteo
+      ! source is absent. Mirrors CPU sibling lines 566-618.
+      !
+      if (itw_in == 1) then
+         !
+         if (init_wind_in) then
+            tauwu0(nm) = 0.0
+            tauwv0(nm) = 0.0
+            if (store_wind_in) then
+               windu0(nm) = 0.0
+               windv0(nm) = 0.0
+            endif
+         endif
+         !
+         if (init_patm_in) then
+            patm0(nm) = gapres_in
+         endif
+         !
+         if (init_prcp_in) then
+            prcp0(nm) = 0.0
+         endif
+         !
+      else
+         !
+         if (init_wind_in) then
+            tauwu1(nm) = 0.0
+            tauwv1(nm) = 0.0
+            if (store_wind_in) then
+               windu1(nm) = 0.0
+               windv1(nm) = 0.0
+            endif
+         endif
+         !
+         if (init_patm_in) then
+            patm1(nm) = gapres_in
+         endif
+         !
+         if (init_prcp_in) then
+            prcp1(nm) = 0.0
+         endif
+         !
+      endif
+      !
+      ! Out-of-spiderweb cells skip the merge.
+      !
+      if (dstspw > spw_radius_in) return
+      !
+      ! Row indices.
+      !
+      idstspw = max(int(dstspw / dradspw_in), 1)
+      ind1(1) = idstspw
+      ind1(2) = idstspw
+      ind1(3) = idstspw + 1
+      ind1(4) = idstspw + 1
+      if (ind1(3) > spw_nrows_in) return
+      dj1     = (dstspw - dradspw_in * idstspw) / dradspw_in
+      phispw  = 0.5 * pi_in - atan2(dye, dxe)
+      phispw  = modulo(phispw, 2.0 * pi_in)
+      !
+      ! Column indices.
+      !
+      iphispw = min(int(phispw / dphispw_in) + 1, spw_ncols_in)
+      ind2(1) = iphispw
+      ind2(2) = iphispw + 1
+      ind2(3) = iphispw + 1
+      ind2(4) = iphispw
+      if (ind2(2) > spw_ncols_in) ind2(2) = 1
+      if (ind2(3) > spw_ncols_in) ind2(3) = 1
+      di1     = (phispw - dphispw_in * (iphispw - 1)) / dphispw_in
+      !
+      ! Bilinear weights.
+      !
+      f(1) = (1.0 - di1) * (1.0 - dj1)
+      f(2) = (      di1) * (1.0 - dj1)
+      f(3) = (      di1) * (      dj1)
+      f(4) = (1.0 - di1) * (      dj1)
+      !
+      wup = 0.0
+      wvp = 0.0
+      pcp = 0.0
+      prp = 0.0
+      !
+      do ip = 1, 4
+         wup = wup + f(ip) * spw_wu01(ind1(ip), ind2(ip))
+         wvp = wvp + f(ip) * spw_wv01(ind1(ip), ind2(ip))
+         if (patmos_in) then
+            pcp = pcp + f(ip) * spw_pabs01(ind1(ip), ind2(ip))
+         endif
+         if (do_prcp_in) then
+            prp = prp + f(ip) * spw_prcp01(ind1(ip), ind2(ip))
+         endif
+      enddo
+      !
+      ! cd lookup (LGX wave-age branch when waveage > 0, else cdval).
+      !
+      vmag = sqrt(wup**2 + wvp**2)
+      !
+      if (waveage_in > 0.0) then
+         wa  = max(min(waveage_in, 1.99), 0.1001)
+         ivm = max(int(vmag / 2.0), 1)
+         iwa = int(wa / 0.1)
+         cd  = 0.001 * cdlgx(ivm, iwa)
+      else
+         cd  = cdval(int(vmag * 10) + 1)
+      endif
+      !
+      ! Merge frac: feathered transition between spw and background near
+      ! the spiderweb edge; spinup-scaled.
+      !
+      if (dstspw > spw_merge_frac_in * spw_radius_in) then
+         merge_frac = (1.0 / (1.0 - min(spw_merge_frac_in, 0.999))) * (spw_radius_in - dstspw) / spw_radius_in
+      else
+         merge_frac = 1.0
+      endif
+      merge_frac = merge_frac * tspinup_fac_in
+      !
+      ! Optional wind reduction over land (Westerink et al. 2008).
+      !
+      if (wind_reduction_in) then
+         z0marine = 0.001835 * cd * vmag**2
+         wdir = 270.0 - atan2(wvp, wup) * 180.0 / pi_in
+         if (wdir <  0.0  ) wdir = wdir + 360.0
+         if (wdir >= 360.0) wdir = wdir - 360.0
+         idir   = int(wdir / 30.0) + 1
+         facint = (wdir - (idir - 1) * 30.0) / 30.0
+         if (idir < 12) then
+            z0l = z0land(idir, nm) + (z0land(idir + 1, nm) - z0land(idir, nm)) * facint
+         else
+            z0l = z0land(  12, nm) + (z0land(       1, nm) - z0land(  12, nm)) * facint
+         endif
+         if (z0l > z0marine) then
+            id   = min(int(0.2 * z0l / z0marine) + 1, 101)
+            fd   = z0land_table(id)
+            vmag = fd * vmag
+            wup  = fd * wup
+            wvp  = fd * wvp
+         endif
+      endif
+      !
+      ! Final blend writes.
+      !
+      omf = 1.0 - merge_frac
+      !
+      if (itw_in == 1) then
+         !
+         tauwu0(nm) = omf * tauwu0(nm) + merge_frac * vmag * ( cosrot_in * wup + sinrot_in * wvp) * rhoa_in * cd / rhow_in
+         tauwv0(nm) = omf * tauwv0(nm) + merge_frac * vmag * (-sinrot_in * wup + cosrot_in * wvp) * rhoa_in * cd / rhow_in
+         !
+         if (patmos_in) then
+            patm0(nm) = omf * patm0(nm) + merge_frac * pcp
+         endif
+         !
+         if (do_prcp_in) then
+            prcp0(nm) = omf * prcp0(nm) + merge_frac * prp / (1000.0 * 3600.0)
+         endif
+         !
+         if (store_wind_in) then
+            windu0(nm) = omf * windu0(nm) + merge_frac * wup
+            windv0(nm) = omf * windv0(nm) + merge_frac * wvp
+         endif
+         !
+      else
+         !
+         tauwu1(nm) = omf * tauwu1(nm) + merge_frac * vmag * ( cosrot_in * wup + sinrot_in * wvp) * rhoa_in * cd / rhow_in
+         tauwv1(nm) = omf * tauwv1(nm) + merge_frac * vmag * (-sinrot_in * wup + cosrot_in * wvp) * rhoa_in * cd / rhow_in
+         !
+         if (patmos_in) then
+            patm1(nm) = omf * patm1(nm) + merge_frac * pcp
+         endif
+         !
+         if (do_prcp_in) then
+            prcp1(nm) = omf * prcp1(nm) + merge_frac * prp / (1000.0 * 3600.0)
+         endif
+         !
+         if (store_wind_in) then
+            windu1(nm) = omf * windu1(nm) + merge_frac * wup
+            windv1(nm) = omf * windv1(nm) + merge_frac * wvp
+         endif
+         !
+      endif
+      !
+   end subroutine k_spw_spatial
    !
 end module sfincs_meteo
