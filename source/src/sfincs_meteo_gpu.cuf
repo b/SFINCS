@@ -1358,7 +1358,7 @@ contains
    ! windu0/windv0/windu1/windv1 as appropriate) back to the host
    ! arrays. Needed so the bridge-IN block in update_meteo_forcing
    ! does not H2D-clobber the device writes with stale host values.
-   ! Will be removed by the bridge-trim issue.
+   ! Will be removed by the bridge-trim issue (SOR-740).
    ! -----------------------------------------------------------------
    subroutine update_spiderweb_data()
       !
@@ -1493,7 +1493,7 @@ contains
       ! patm0/patm1, prcp0/prcp1, windu0/windv0/windu1/windv1 as
       ! appropriate) in sync for downstream CPU consumers and to make
       ! the bridge-IN H2D copy in update_meteo_forcing a no-op.
-      ! Removed once the bridge-trim issue lands.
+      ! Removed once the bridge-trim issue (SOR-740) lands.
       !
       tauwu0_h = tauwu0
       tauwv0_h = tauwv0
