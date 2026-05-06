@@ -19,13 +19,16 @@ module sfincs_boundaries
    ! to cudaMemcpy at the assignment level.
    !
    use cudafor
+   use mpi
    use sfincs_data_device
    use sfincs_log
    use sfincs_error
    use sfincs_boundaries_io, only: io_read_boundary_data    => read_boundary_data, &
                                    io_find_boundary_indices => find_boundary_indices, &
                                    io_find_sfincs_cell      => find_sfincs_cell, &
-                                   io_clean_line            => clean_line
+                                   io_clean_line            => clean_line, &
+                                   io_interpolate_boundary_points => interpolate_boundary_points, &
+                                   io_interpolate_boundary_zsb    => interpolate_boundary_zsb
    !
    implicit none
    !
@@ -33,6 +36,20 @@ module sfincs_boundaries
    public :: read_boundary_data, find_boundary_indices, update_boundaries
    !
    integer, parameter :: TPB = 128   ! threads per block
+   !
+   ! Per-step host workbuf for the time-series-derived (kcs==2) boundary
+   ! water levels. Sized to the global boundary count `size(nmindbnd_h)`
+   ! on first call; the dimension is identical on every rank because
+   ! nmindbnd_h is the host-side global array allocated by
+   ! initialize_domain BEFORE partition_and_localize() runs. Rank 0
+   ! interpolates into the workbuf each step, the workbuf is
+   ! MPI_Bcast-ed to every rank, and each rank fans the workbuf into
+   ! its rank-local subset of zsb / zsb0.
+   !
+   real*4,  allocatable, save :: zsb_global_workbuf(:)
+   real*4,  allocatable, save :: zsb0_global_workbuf(:)
+   logical, allocatable, save :: bnd_is_local(:)
+   logical,              save :: bnd_first_call = .true.
    !
 contains
 
@@ -60,79 +77,32 @@ contains
 
    subroutine update_boundary_points(t)
    !
-   ! Update values at boundary points (host).
+   ! Time-interpolation of zs_bnd / zsi_bnd onto zst_bnd / zsit_bnd.
+   ! GPU sibling: rank 0 interpolates; the result is MPI_Bcast-ed to all
+   ! ranks. The interpolation depends only on bnd-file data (replicated
+   ! on every rank by read_boundary_data, which runs before partition),
+   ! so doing it on rank 0 and broadcasting eliminates any FP-reorder
+   ! divergence between ranks. MPI_Bcast on mpi_size==1 is a no-op.
    !
-   use sfincs_data
+   use sfincs_data, only: nbnd, zst_bnd, zsit_bnd, bzifile
    !
    implicit none
    !
-   integer ib, itb, itb0, itb1, ic
+   real*8, intent(in) :: t
    !
-   real*8 t
+   integer :: ierr
    !
-   real*4 zstb, tbfac, hs, tp, wd, tb
+   if (nbnd == 0) return
    !
-   if (nbnd == 0) return ! no boundary points
-   !
-   ! Interpolate boundary conditions in time
-   !
-   if (t_bnd(1) > (t - 1.0e-3)) then  ! use first time in boundary conditions
-      !
-      itb0 = 1
-      itb1 = 1
-      tb   = t_bnd(itb0)
-      !
-   elseif (t_bnd(ntbnd) < (t + 1.0e-3)) then  ! use last time in boundary conditions
-      !
-      itb0 = ntbnd
-      itb1 = ntbnd
-      tb   = t_bnd(itb0)
-      !
-   else
-      !
-      do itb = itbndlast, ntbnd ! Loop in time
-         if (t_bnd(itb) > (t + 1.0e-6)) then
-            itb0 = itb - 1
-            itb1 = itb
-            tb   = t
-            itbndlast = itb - 1
-            exit
-         endif
-      enddo
-      !
+   if (mpi_rank == 0) then
+      call io_interpolate_boundary_points(t)
    endif
    !
-   tbfac  = (tb - t_bnd(itb0)) / max(t_bnd(itb1) - t_bnd(itb0), 1.0e-6)
+   call mpi_bcast(zst_bnd, nbnd, MPI_REAL, 0, MPI_COMM_WORLD, ierr)
    !
-   do ib = 1, nbnd ! Loop along boundary points
-      !
-      ! Tide and surge
-      !
-      zstb = zs_bnd(ib, itb0) + (zs_bnd(ib, itb1) - zs_bnd(ib, itb0))*tbfac
-      !
-      ! Add astronomical tides
-      !
-      if (nr_tidal_components > 0) then
-         !
-         do ic = 1, nr_tidal_components
-            !
-            zstb = zstb + tidal_component_data(1, ic, ib) * cos(tidal_component_frequency(ic) * t - tidal_component_data(2, ic, ib))
-            !
-         enddo
-         !
-      endif
-      !
-      zst_bnd(ib) = zstb
-      !
-      if (bzifile(1:4) /= 'none') then
-         !
-         ! Incoming infragravity waves
-         !
-         zsit_bnd(ib) = zsi_bnd(ib, itb0) + (zsi_bnd(ib, itb1) - zsi_bnd(ib, itb0))*tbfac
-         !
-      endif
-       !
-   enddo
+   if (bzifile(1:4) /= 'none') then
+      call mpi_bcast(zsit_bnd, nbnd, MPI_REAL, 0, MPI_COMM_WORLD, ierr)
+   endif
    !
    end subroutine
 
@@ -141,149 +111,85 @@ contains
    !
    ! Update water level at boundary grid points (host).
    !
+   ! GPU sibling: rank 0 computes the kcs==2 boundary water levels into
+   ! zsb_global_workbuf / zsb0_global_workbuf (size = global boundary
+   ! count), the workbufs are MPI_Bcast-ed to every rank, and each rank
+   ! fans the workbuf into its rank-local subset of zsb / zsb0. The
+   ! kcs==5 (downstream river) and kcs==6 (Neumann) entries depend on
+   ! local model state (zs values inside this rank's slab) and so are
+   ! filled per-rank, gated by the rank-local ownership filter.
+   !
+   ! MPI_Bcast on mpi_size==1 is a no-op (rank 0 is its own communicator),
+   ! preserving the N=1 baseline bit-for-bit modulo any unavoidable FP
+   ! reordering from the helper extraction.
+   !
    use sfincs_data
    !
    implicit none
    !
-   integer ib, nmb, ibdr
+   real*8 :: t
+   real   :: dt
    !
-   real*8                            :: t
-   real                              :: dt
+   integer :: ib, nmb, ibdr, ierr
+   real*8  :: zst
    !
-   real*8 zst
-   real*4 zsetup
-   real*4 zig
-   real*4 zs0act
-   real*4 smfac
-   real*4 zs0smooth
-   logical :: has_bzi
+   call ensure_bnd_workbufs()
    !
-   has_bzi = (bzifile(1:4) /= 'none')
+   ! Compute kcs==2 boundary water levels into the workbuf on rank 0.
    !
-   ! Set water level in all boundary points on grid
-   ! This loop is done on the host.
+   if (mpi_rank == 0) then
+      call io_interpolate_boundary_zsb(t, zsb_global_workbuf, zsb0_global_workbuf)
+   endif
    !
-   !$omp parallel private ( ib, nmb, zst, zsetup, zig, smfac, zs0act, ibdr, zs0smooth ) if(ngbnd > 10000)
+   call mpi_bcast(zsb_global_workbuf,  size(zsb_global_workbuf),  MPI_REAL, 0, MPI_COMM_WORLD, ierr)
+   call mpi_bcast(zsb0_global_workbuf, size(zsb0_global_workbuf), MPI_REAL, 0, MPI_COMM_WORLD, ierr)
+   !
+   ! Assignment loop: fan workbuf into zsb / zsb0 (kcs==2) and fill the
+   ! kcs==5 / kcs==6 entries from local model state. Each rank applies
+   ! only to its rank-local subset of grid boundary points.
+   !
+   ! kcs = 1 : regular point
+   ! kcs = 2 : water level boundary point (workbuf)
+   ! kcs = 3 : outflow boundary point (set at initialization, no update)
+   ! kcs = 4 : wave maker point
+   ! kcs = 5 : river outflow point (dzs/dx = i)
+   ! kcs = 6 : lateral (coastal) boundary point (Neumann dzs/dx = 0.0)
+   !
+   !$omp parallel private ( ib, nmb, zst, ibdr ) if(ngbnd > 10000)
    !$omp do schedule(dynamic, 64)
    do ib = 1, ngbnd
       !
-      nmb = nmindbnd(ib)
+      if (.not. bnd_is_local(ib)) cycle
       !
-      ! kcs = 1 : regular point
-      ! kcs = 2 : water level boundary point
-      ! kcs = 3 : outflow boundary point (water levels were set at initialization, so no need to update them here)
-      ! kcs = 4 : wave maker point
-      ! kcs = 5 : river outflow point (dzs/dx = i)
-      ! kcs = 6 : lateral (coastal) boundary point (Neumann dzs/dx = 0.0)
+      nmb = nmindbnd(ib)
       !
       if (kcs(nmb) == 2) then
          !
-         ! Regular water level boundary point
-         !
-         ! Get water levels (surge + tide) from time series boundary conditions
-         !
-         if (nbnd > 1) then
-            !
-            ! Interpolation of nearby points
-            !
-            zst   = zst_bnd(ind1_bnd_gbp(ib)) * fac_bnd_gbp(ib) + zst_bnd(ind2_bnd_gbp(ib)) * (1.0 - fac_bnd_gbp(ib))
-            !
-         else
-            !
-            ! Just use the value of the one boundary point
-            !
-            zst   = zst_bnd(1)
-            !
-         endif
-         !
-         if (patmos .and. pavbnd>1.0) then
-            !
-            ! Barometric pressure correction
-            !
-            zst = zst + (pavbnd - patmb(ib)) / (rhow * 9.81)
-            !
-         endif
-         !
-         zsetup = 0.0
-         zig    = 0.0
-         !
-         ! Incoming IG waves from file (this will overrule IG signal computed before)
-         !
-         if (has_bzi) then
-            !
-            if (nbnd > 1) then
-               !
-               ! Interpolation of nearby points
-               !
-               zig = zsit_bnd(ind1_bnd_gbp(ib)) * fac_bnd_gbp(ib)  + zsit_bnd(ind2_bnd_gbp(ib)) * (1.0 - fac_bnd_gbp(ib))
-               !
-            else
-               !
-               ! Just use the value of the one boundary point
-               !
-               zig = zsit_bnd(1)
-               !
-            endif
-            !
-         endif
-         !
-         if (t < (tspinup - 1.0e-3)) then
-            !
-            smfac = 1.0 - (t - t0) / (tspinup - t0)
-            !
-            zs0act = zst + zsetup
-            call weighted_average(zini, zs0act, smfac, 1, zs0smooth)
-            zsb0(ib) = zs0smooth           ! Still water level at kcs=2 point
-            !
-            zs0act = zst + zsetup + zig
-            call weighted_average(zini, zs0act, smfac, 1, zs0smooth)
-            zsb(ib) = zs0smooth            ! Total water level at kcs=2 point
-            !
-         else
-            !
-            zsb0(ib) = zst + zsetup        ! Still water level at kcs=2 point
-            zsb(ib)  = zst + zsetup + zig  ! Total water level at kcs=2 point
-            !
-         endif
-         !
-         if (subgrid) then                  ! Check on waterlevels minimally equal to z_zmin
-            zsb0(ib) = max(zsb0(ib), subgrid_z_zmin(nmb))
-            zsb(ib)  = max(zsb(ib),  subgrid_z_zmin(nmb))
-         else                               ! Check on waterlevels minimally equal to zb
-            zsb0(ib) = max(zsb0(ib), zb(nmb))
-            zsb(ib)  = max(zsb(ib),  zb(nmb))
-         endif
+         zsb(ib)  = zsb_global_workbuf(ib)
+         zsb0(ib) = zsb0_global_workbuf(ib)
          !
       elseif (kcs(nmb) == 5) then
          !
-         ! Downstream river point
+         ! Downstream river point: water level inside model adjusted by slope.
          !
-         ! Get water levels from inside model, and adjust for slope.
+         ibdr = index_bdr_gbp(ib)
          !
-         ibdr = index_bdr_gbp(ib) ! index of the downstream boundary point that forces this grid boundary point ib
-         !
-         zst = zs(index_zsi_bdr(ibdr)) + dzs_bdr(ibdr) ! internal water level minus slope * distance
-         !
-         ! Make sure water level is not below bed level
+         zst = zs(index_zsi_bdr(ibdr)) + dzs_bdr(ibdr)
          !
          if (subgrid) then
-            !
             zst = max(zst, subgrid_z_zmin(nmb))
-            !
          else
-            !
             zst = max(zst, zb(nmb))
-            !
          endif
          !
-         zsb(ib) = zst
+         zsb(ib)  = zst
          zsb0(ib) = zst
          !
       elseif (kcs(nmb) == 6) then
          !
-         ! Lateral coastal (Neumann) boundary
-         !
-         ! Set water level at boundary point equal to water level inside model.
+         ! Lateral coastal (Neumann) boundary: water level at boundary equals
+         ! water level inside the model. zsb / zsb0 are not used here; flux
+         ! at kcuv=6 points is solved in sfincs_momentum.
          !
          zs(nmb) = zs(nmi_gbp(ib))
          !
@@ -292,6 +198,65 @@ contains
    enddo
    !$omp end do
    !$omp end parallel
+   !
+   end subroutine
+
+
+   subroutine ensure_bnd_workbufs()
+   !
+   ! Lazy first-call allocation of the per-step workbufs and the
+   ! rank-local boundary point ownership mask.
+   !
+   ! Workbuf size = size(nmindbnd_h) = global boundary count, identical
+   ! on every rank because nmindbnd_h is allocated by initialize_domain
+   ! before partition_and_localize.
+   !
+   ! bnd_is_local(ib) is .true. iff this rank owns the cell that grid
+   ! boundary point ib sits on. For mpi_size==1 every entry is .true..
+   ! For mpi_size>1 we derive the ownership mask from local_to_global
+   ! (persisted across partition_and_localize in sfincs_data_device):
+   ! invert it into a global-to-local cell map, then look up
+   ! nmindbnd_h(ib) for each ib. cell_part itself is not exposed beyond
+   ! partition_and_localize, but local_to_global is sufficient for this
+   ! lookup.
+   !
+   use sfincs_data, only: nmindbnd_h => nmindbnd, npn_h => np
+   !
+   implicit none
+   !
+   integer :: i, ib
+   integer, allocatable :: global_to_local_cell(:)
+   !
+   if (.not. bnd_first_call) return
+   !
+   allocate(zsb_global_workbuf (size(nmindbnd_h)))
+   allocate(zsb0_global_workbuf(size(nmindbnd_h)))
+   allocate(bnd_is_local       (size(nmindbnd_h)))
+   !
+   if (mpi_size == 1) then
+      !
+      bnd_is_local = .true.
+      !
+   else
+      !
+      ! Build inverse cell map: global cell index -> local index (0 if
+      ! not owned by this rank). One-time cost; deallocated below.
+      !
+      allocate(global_to_local_cell(npn_h))
+      global_to_local_cell = 0
+      do i = 1, npn_local
+         global_to_local_cell(local_to_global(i)) = i
+      enddo
+      !
+      do ib = 1, size(nmindbnd_h)
+         bnd_is_local(ib) = (global_to_local_cell(nmindbnd_h(ib)) /= 0)
+      enddo
+      !
+      deallocate(global_to_local_cell)
+      !
+   endif
+   !
+   bnd_first_call = .false.
    !
    end subroutine
 
