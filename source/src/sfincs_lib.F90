@@ -644,7 +644,16 @@ module sfincs_lib
             endif   
             !
          endif
-         !      
+         !
+#ifdef USE_CUDA
+         !
+         ! Synchronize halo-cell edge fluxes (q) and edge velocities (uv)
+         ! with neighbor ranks before compute_water_levels reads them, so
+         ! the continuity update sees the full set of incoming fluxes.
+         !
+         call halo_exchange_q_uv()
+#endif
+         !
          ! Update water levels
          !
          call compute_water_levels(t, dt, tloopcont)
