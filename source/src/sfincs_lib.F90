@@ -362,6 +362,9 @@ module sfincs_lib
    real*8                        :: tend !< end of update interval
    real*4                        :: dtchk !< dt to check for instability
    logical                       :: single_time_step
+#ifdef USE_CUDA
+   integer                       :: ierr_mpi
+#endif
    !
    ierr = 0
    !
@@ -409,6 +412,14 @@ module sfincs_lib
       ! New time step
       !
       nt = nt + 1
+#ifdef USE_CUDA
+      !
+      ! min_dt is the per-rank CFL-limited step from compute_fluxes; reduce
+      ! across ranks so every rank advances at the global minimum and stays
+      ! in lockstep for the halo exchanges below.
+      !
+      call mpi_allreduce(MPI_IN_PLACE, min_dt, 1, MPI_REAL, MPI_MIN, MPI_COMM_WORLD, ierr_mpi)
+#endif
       dt = alfa * min_dt ! min_dt was computed in sfincs_momentum.f90 without alfa
       dtchk = alfa * min_dt
       !
@@ -638,7 +649,15 @@ module sfincs_lib
          !
          call compute_water_levels(t, dt, tloopcont)
          !
-      endif   
+#ifdef USE_CUDA
+         !
+         ! Synchronize halo-cell water levels with neighbor ranks so the
+         ! next compute_fluxes sees fresh zs at rank-boundary edges.
+         !
+         call halo_exchange_zs()
+#endif
+         !
+      endif
       !
       ! OUTPUT
       !      

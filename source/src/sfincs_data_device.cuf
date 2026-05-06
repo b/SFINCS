@@ -340,7 +340,9 @@ module sfincs_data_device
    ! because SOR-708's halo_exchange uses them to translate the LOCAL indices
    ! stored in halo_send_local_idx back into GLOBAL indices, which are what
    ! the still-full-size device shadows are addressed by while AC #5/#6
-   ! deferral remains in effect (see sfincs_partition.cuf Phase 4 comment).
+   ! deferral remains in effect (see sfincs_partition.cuf Phase 4 comment;
+   ! SOR-755 lands the eventual Phase-4 shrink and connectivity renumber
+   ! that makes this translation step unnecessary).
    ! halo_recv_remote_idx already carries global indices on the receive side,
    ! so only the send side needs the translation. global_to_local /
    ! global_to_local_uv are not persisted: they are fully consumed inside
@@ -349,17 +351,32 @@ module sfincs_data_device
    integer, allocatable :: local_to_global(:)
    integer, allocatable :: local_to_global_uv(:)
    !
-   ! Pinned-host fallback / staging send-recv buffers. CUDA-aware MPI reads
-   ! the device-side state directly; these declarations exist so SOR-708
-   ! has a stable name to attach to if it needs pinned-host staging.
-   ! Allocation is deferred to SOR-708, which may also delete these
-   ! declarations if CUDA-aware MPI suffices.
+   ! Device-resident copy of local_to_global. The CUDA Fortran gather/scatter
+   ! kernels in halo_exchange_zs index halo_send_local_idx through this map
+   ! to translate the LOCAL halo index into the GLOBAL device-array index
+   ! while the AC #5/#6 Phase-4 shrink remains deferred to SOR-755.
    !
-   real, allocatable, pinned :: halo_send_buf_zs(:,:)
-   real, allocatable, pinned :: halo_recv_buf_zs(:,:)
-   real, allocatable, pinned :: halo_send_buf_q(:,:)
-   real, allocatable, pinned :: halo_recv_buf_q(:,:)
-   real, allocatable, pinned :: halo_send_buf_uv(:,:)
-   real, allocatable, pinned :: halo_recv_buf_uv(:,:)
+   integer, device, allocatable :: local_to_global_d(:)
+   ! local_to_global_uv_d is the uv-edge counterpart, declared here for
+   ! symmetry. It is consumed by SOR-709's halo_exchange_q_uv gather/scatter
+   ! kernels (this PR does not allocate it; SOR-709 wires the allocation +
+   ! copyin alongside the q/uv halo exchange body).
+   integer, device, allocatable :: local_to_global_uv_d(:)
+   !
+   ! Send/recv staging buffers for halo exchange. CUDA-aware MPI is
+   ! mandatory in this build (verified in partition_and_localize Phase 1b),
+   ! so these are device-resident; the gather kernel writes them, MPI
+   ! Isend/Irecv consume them as device pointers, and the scatter kernel
+   ! reads from them. Single-precision because the on-rank state arrays
+   ! that need exchange are themselves single-precision (q, uv) and the
+   ! double-precision zs payload is acceptable to demote at the 1e-3
+   ! relative tolerance the AC sets.
+   !
+   real, device, allocatable :: halo_send_buf_zs(:,:)
+   real, device, allocatable :: halo_recv_buf_zs(:,:)
+   real, device, allocatable :: halo_send_buf_q(:,:)
+   real, device, allocatable :: halo_recv_buf_q(:,:)
+   real, device, allocatable :: halo_send_buf_uv(:,:)
+   real, device, allocatable :: halo_recv_buf_uv(:,:)
    !
 end module sfincs_data_device
