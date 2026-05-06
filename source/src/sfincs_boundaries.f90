@@ -1,12 +1,35 @@
 module sfincs_boundaries
-
+   !
+   ! CPU sibling of source/src/sfincs_boundaries_gpu.cuf.
+   !
+   ! Body is structured to mirror the GPU sibling so the two files diff
+   ! cleanly: per-step interpolation goes through the shared helpers in
+   ! sfincs_boundaries_io (interpolate_boundary_points,
+   ! interpolate_boundary_zsb), boundary water levels flow through a
+   ! per-step workbuf, and the final assignment loop is the same shape.
+   ! The MPI_Bcast lines and the rank-local ownership filter that appear
+   ! in the GPU sibling are absent here: the CPU build does not link MPI
+   ! and is single-rank, so every grid boundary point is owned.
+   !
    use sfincs_log
    use sfincs_error
    use sfincs_boundaries_io, only: io_read_boundary_data    => read_boundary_data, &
                                    io_find_boundary_indices => find_boundary_indices, &
                                    io_find_sfincs_cell      => find_sfincs_cell, &
-                                   io_clean_line            => clean_line
-
+                                   io_clean_line            => clean_line, &
+                                   io_interpolate_boundary_points => interpolate_boundary_points, &
+                                   io_interpolate_boundary_zsb    => interpolate_boundary_zsb
+   !
+   implicit none
+   !
+   ! Per-step host workbuf for the time-series-derived (kcs==2) boundary
+   ! water levels. Sized to the global boundary count `size(nmindbnd)` on
+   ! first call and reused thereafter.
+   !
+   real*4, allocatable, save, private :: zsb_global_workbuf(:)
+   real*4, allocatable, save, private :: zsb0_global_workbuf(:)
+   logical,             save, private :: bnd_first_call = .true.
+   !
 contains
 
    subroutine read_boundary_data()
@@ -33,236 +56,98 @@ contains
 
    subroutine update_boundary_points(t)
    !
-   ! Update values at boundary points
+   ! Time-interpolation of zs_bnd / zsi_bnd onto zst_bnd / zsit_bnd.
+   ! CPU sibling: single-rank, no MPI; trampoline to the shared helper.
    !
-   use sfincs_data
+   use sfincs_data, only: nbnd
    !
    implicit none
    !
-   integer ib, itb, itb0, itb1, ic
+   real*8, intent(in) :: t
    !
-   real*8 t
+   if (nbnd == 0) return
    !
-   real*4 zstb, tbfac, hs, tp, wd, tb
-   !
-   if (nbnd == 0) return ! no boundary points
-   !
-   ! Interpolate boundary conditions in time
-   !
-   if (t_bnd(1) > (t - 1.0e-3)) then  ! use first time in boundary conditions
-      !
-      itb0 = 1
-      itb1 = 1
-      tb   = t_bnd(itb0)
-      !
-   elseif (t_bnd(ntbnd) < (t + 1.0e-3)) then  ! use last time in boundary conditions
-      !
-      itb0 = ntbnd
-      itb1 = ntbnd
-      tb   = t_bnd(itb0)
-      !
-   else
-      !
-      do itb = itbndlast, ntbnd ! Loop in time
-         if (t_bnd(itb) > (t + 1.0e-6)) then
-            itb0 = itb - 1
-            itb1 = itb
-            tb   = t
-            itbndlast = itb - 1
-            exit
-         endif
-      enddo
-      !
-   endif
-   !
-   tbfac  = (tb - t_bnd(itb0)) / max(t_bnd(itb1) - t_bnd(itb0), 1.0e-6)
-   !
-   do ib = 1, nbnd ! Loop along boundary points
-      !
-      ! Tide and surge
-      !
-      zstb = zs_bnd(ib, itb0) + (zs_bnd(ib, itb1) - zs_bnd(ib, itb0))*tbfac
-      !
-      ! Add astronomical tides
-      !
-      if (nr_tidal_components > 0) then
-         !
-         do ic = 1, nr_tidal_components
-            !
-            zstb = zstb + tidal_component_data(1, ic, ib) * cos(tidal_component_frequency(ic) * t - tidal_component_data(2, ic, ib))
-            !
-         enddo
-         !
-      endif
-      !
-      zst_bnd(ib) = zstb
-      !
-      if (bzifile(1:4) /= 'none') then
-         !
-         ! Incoming infragravity waves
-         !
-         zsit_bnd(ib) = zsi_bnd(ib, itb0) + (zsi_bnd(ib, itb1) - zsi_bnd(ib, itb0))*tbfac
-         !
-      endif
-       !
-   enddo
+   call io_interpolate_boundary_points(t)
    !
    end subroutine
 
 
    subroutine update_boundary_conditions(t, dt)
    !
-   ! Update water level at boundary grid points
+   ! Compute water level at boundary grid points.
+   !
+   ! Mirrors the GPU sibling's structural shape: a per-step workbuf holds
+   ! the kcs==2 (water-level) boundary values produced by the shared
+   ! helper; the assignment loop fans those out to zsb / zsb0 and fills
+   ! the kcs==5 (downstream river) and kcs==6 (Neumann) entries from
+   ! local model state. CPU build is single-rank, so every grid boundary
+   ! point is rank-local.
    !
    use sfincs_data
    !
    implicit none
    !
-   integer ib, nmb, ibdr
+   real*8 :: t
+   real   :: dt
    !
-   real*8                            :: t
-   real                              :: dt
+   integer :: ib, nmb, ibdr
+   real*8  :: zst
    !
-   real*8 zst
-   real*4 zsetup
-   real*4 zig
-   real*4 zs0act
-   real*4 smfac
-   real*4 zs0smooth
-   logical :: has_bzi
+   if (bnd_first_call) then
+      allocate(zsb_global_workbuf(size(nmindbnd)))
+      allocate(zsb0_global_workbuf(size(nmindbnd)))
+      bnd_first_call = .false.
+   endif
    !
-   has_bzi = (bzifile(1:4) /= 'none')
+   ! Compute kcs==2 boundary water levels into the workbuf.
    !
-   ! Set water level in all boundary points on grid
-   ! This loop is all done on the CPU
+   call io_interpolate_boundary_zsb(t, zsb_global_workbuf, zsb0_global_workbuf)
    !
-   !$omp parallel private ( ib, nmb, zst, zsetup, zig, smfac, zs0act, ibdr, zs0smooth ) if(ngbnd > 10000)
+   ! Assignment loop: fan workbuf into zsb / zsb0 (kcs==2) and fill the
+   ! kcs==5 / kcs==6 entries from local model state.
+   !
+   ! kcs = 1 : regular point
+   ! kcs = 2 : water level boundary point (workbuf)
+   ! kcs = 3 : outflow boundary point (set at initialization, no update)
+   ! kcs = 4 : wave maker point
+   ! kcs = 5 : river outflow point (dzs/dx = i)
+   ! kcs = 6 : lateral (coastal) boundary point (Neumann dzs/dx = 0.0)
+   !
+   !$omp parallel private ( ib, nmb, zst, ibdr ) if(ngbnd > 10000)
    !$omp do schedule(dynamic, 64)
    do ib = 1, ngbnd
       !
       nmb = nmindbnd(ib)
       !
-      ! kcs = 1 : regular point
-      ! kcs = 2 : water level boundary point
-      ! kcs = 3 : outflow boundary point (water levels were set at initialization, so no need to update them here)
-      ! kcs = 4 : wave maker point
-      ! kcs = 5 : river outflow point (dzs/dx = i)
-      ! kcs = 6 : lateral (coastal) boundary point (Neumann dzs/dx = 0.0)
-      !
       if (kcs(nmb) == 2) then
          !
-         ! Regular water level boundary point
-         !
-         ! Get water levels (surge + tide) from time series boundary conditions
-         !
-         if (nbnd > 1) then
-            !
-            ! Interpolation of nearby points
-            !
-            zst   = zst_bnd(ind1_bnd_gbp(ib)) * fac_bnd_gbp(ib) + zst_bnd(ind2_bnd_gbp(ib)) * (1.0 - fac_bnd_gbp(ib))
-            !
-         else
-            !
-            ! Just use the value of the one boundary point
-            !
-            zst   = zst_bnd(1)
-            !
-         endif
-         !
-         if (patmos .and. pavbnd>1.0) then
-            !
-            ! Barometric pressure correction
-            !
-            zst = zst + (pavbnd - patmb(ib)) / (rhow * 9.81)
-            !
-         endif
-         !
-         zsetup = 0.0
-         zig    = 0.0
-         !
-         ! Incoming IG waves from file (this will overrule IG signal computed before)
-         !
-         if (has_bzi) then
-            !
-            if (nbnd > 1) then
-               !
-               ! Interpolation of nearby points
-               !
-               zig = zsit_bnd(ind1_bnd_gbp(ib)) * fac_bnd_gbp(ib)  + zsit_bnd(ind2_bnd_gbp(ib)) * (1.0 - fac_bnd_gbp(ib))
-               !
-            else
-               !
-               ! Just use the value of the one boundary point
-               !
-               zig = zsit_bnd(1)
-               !
-            endif
-            !
-         endif
-         !
-         if (t < (tspinup - 1.0e-3)) then
-            !
-            smfac = 1.0 - (t - t0) / (tspinup - t0)
-            !
-            zs0act = zst + zsetup
-            call weighted_average(zini, zs0act, smfac, 1, zs0smooth)
-            zsb0(ib) = zs0smooth           ! Still water level at kcs=2 point
-            !
-            zs0act = zst + zsetup + zig
-            call weighted_average(zini, zs0act, smfac, 1, zs0smooth)
-            zsb(ib) = zs0smooth            ! Total water level at kcs=2 point
-            !
-         else
-            !
-            zsb0(ib) = zst + zsetup        ! Still water level at kcs=2 point
-            zsb(ib)  = zst + zsetup + zig  ! Total water level at kcs=2 point
-            !
-         endif
-         !
-         if (subgrid) then                  ! Check on waterlevels minimally equal to z_zmin
-            zsb0(ib) = max(zsb0(ib), subgrid_z_zmin(nmb))
-            zsb(ib)  = max(zsb(ib),  subgrid_z_zmin(nmb))
-         else                               ! Check on waterlevels minimally equal to zb
-            zsb0(ib) = max(zsb0(ib), zb(nmb))
-            zsb(ib)  = max(zsb(ib),  zb(nmb))
-         endif
+         zsb(ib)  = zsb_global_workbuf(ib)
+         zsb0(ib) = zsb0_global_workbuf(ib)
          !
       elseif (kcs(nmb) == 5) then
          !
-         ! Downstream river point
+         ! Downstream river point: water level inside model adjusted by slope.
          !
-         ! Get water levels from inside model, and adjust for slope.
+         ibdr = index_bdr_gbp(ib)
          !
-         ibdr = index_bdr_gbp(ib) ! index of the downstream boundary point that forces this grid boundary point ib
-         !
-         zst = zs(index_zsi_bdr(ibdr)) + dzs_bdr(ibdr) ! internal water level minus slope * distance
-         !
-         ! Make sure water level is not below bed level
+         zst = zs(index_zsi_bdr(ibdr)) + dzs_bdr(ibdr)
          !
          if (subgrid) then
-            !
             zst = max(zst, subgrid_z_zmin(nmb))
-            !
          else
-            !
             zst = max(zst, zb(nmb))
-            !
          endif
          !
-         zsb(ib) = zst
+         zsb(ib)  = zst
          zsb0(ib) = zst
          !
       elseif (kcs(nmb) == 6) then
          !
-         ! Lateral coastal (Neumann) boundary
+         ! Lateral coastal (Neumann) boundary: water level at boundary equals
+         ! water level inside the model. zsb / zsb0 are not used here; flux
+         ! at kcuv=6 points is solved in sfincs_momentum.
          !
-         ! Set water level at boundary point equal to water level inside model.
-         ! No need to set zsb and zsb0, as flux for this type of boundary is solved in sfincs_momentum.f90.
-         ! Lateral boundary u/v points have kcuv=6. They are skipped in update_boundary_fluxes.
-         !
-         ! TODO: OPENACC!!!!
-         !
-         zs(nmb) = zs(nmi_gbp(ib)) ! nm index of internal point. Technically there can be more than one internal point. This always uses the last point that was found.
+         zs(nmb) = zs(nmi_gbp(ib))
          !
       endif
       !

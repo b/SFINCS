@@ -714,4 +714,185 @@ contains
    !
    end function
 
+
+   subroutine interpolate_boundary_points(t)
+   !
+   ! Time-interpolation of zs_bnd (and zsi_bnd when bzi is active) onto
+   ! zst_bnd / zsit_bnd, for the nbnd points listed in the bnd file.
+   !
+   ! Shared body called by both sfincs_boundaries siblings: the GPU sibling
+   ! invokes it on rank 0 only and then MPI_Bcasts the resulting zst_bnd /
+   ! zsit_bnd to every rank; the CPU sibling calls it directly.
+   !
+   use sfincs_data
+   !
+   implicit none
+   !
+   real*8, intent(in) :: t
+   !
+   integer :: ib, itb, itb0, itb1, ic
+   real*4  :: zstb, tbfac, tb
+   !
+   if (nbnd == 0) return
+   !
+   if (t_bnd(1) > (t - 1.0e-3)) then
+      itb0 = 1
+      itb1 = 1
+      tb   = t_bnd(itb0)
+   elseif (t_bnd(ntbnd) < (t + 1.0e-3)) then
+      itb0 = ntbnd
+      itb1 = ntbnd
+      tb   = t_bnd(itb0)
+   else
+      do itb = itbndlast, ntbnd
+         if (t_bnd(itb) > (t + 1.0e-6)) then
+            itb0 = itb - 1
+            itb1 = itb
+            tb   = t
+            itbndlast = itb - 1
+            exit
+         endif
+      enddo
+   endif
+   !
+   tbfac = (tb - t_bnd(itb0)) / max(t_bnd(itb1) - t_bnd(itb0), 1.0e-6)
+   !
+   do ib = 1, nbnd
+      !
+      zstb = zs_bnd(ib, itb0) + (zs_bnd(ib, itb1) - zs_bnd(ib, itb0))*tbfac
+      !
+      if (nr_tidal_components > 0) then
+         do ic = 1, nr_tidal_components
+            zstb = zstb + tidal_component_data(1, ic, ib) * cos(tidal_component_frequency(ic) * t - tidal_component_data(2, ic, ib))
+         enddo
+      endif
+      !
+      zst_bnd(ib) = zstb
+      !
+      if (bzifile(1:4) /= 'none') then
+         zsit_bnd(ib) = zsi_bnd(ib, itb0) + (zsi_bnd(ib, itb1) - zsi_bnd(ib, itb0))*tbfac
+      endif
+      !
+   enddo
+   !
+   end subroutine
+
+
+   subroutine interpolate_boundary_zsb(t, zsb_out, zsb0_out)
+   !
+   ! Compute the per-grid-boundary-point water level workbuf for kcs==2
+   ! (water-level boundary) cells from the time-interpolated zst_bnd /
+   ! zsit_bnd plus the spatial weighting in ind1_bnd_gbp / ind2_bnd_gbp /
+   ! fac_bnd_gbp. Outputs are sized ngbnd; only kcs==2 entries are written
+   ! (kcs==5/6 are rank-local-state-dependent and filled by the caller).
+   !
+   ! Shared body called by both sfincs_boundaries siblings: GPU sibling
+   ! invokes on rank 0, then MPI_Bcasts zsb_out / zsb0_out to every rank.
+   !
+   use sfincs_data
+   !
+   implicit none
+   !
+   real*8, intent(in)  :: t
+   real*4, intent(out) :: zsb_out(:)
+   real*4, intent(out) :: zsb0_out(:)
+   !
+   integer :: ib, nmb
+   real*8  :: zst
+   real*4  :: zsetup
+   real*4  :: zig
+   real*4  :: zs0act
+   real*4  :: smfac
+   real*4  :: zs0smooth
+   logical :: has_bzi
+   !
+   has_bzi = (bzifile(1:4) /= 'none')
+   !
+   !$omp parallel private ( ib, nmb, zst, zsetup, zig, smfac, zs0act, zs0smooth ) if(ngbnd > 10000)
+   !$omp do schedule(dynamic, 64)
+   do ib = 1, ngbnd
+      !
+      nmb = nmindbnd(ib)
+      !
+      if (kcs(nmb) /= 2) cycle  ! kcs==5/6 are rank-local; caller fills.
+      !
+      if (nbnd > 1) then
+         zst = zst_bnd(ind1_bnd_gbp(ib)) * fac_bnd_gbp(ib) + zst_bnd(ind2_bnd_gbp(ib)) * (1.0 - fac_bnd_gbp(ib))
+      else
+         zst = zst_bnd(1)
+      endif
+      !
+      if (patmos .and. pavbnd > 1.0) then
+         zst = zst + (pavbnd - patmb(ib)) / (rhow * 9.81)
+      endif
+      !
+      zsetup = 0.0
+      zig    = 0.0
+      !
+      if (has_bzi) then
+         if (nbnd > 1) then
+            zig = zsit_bnd(ind1_bnd_gbp(ib)) * fac_bnd_gbp(ib) + zsit_bnd(ind2_bnd_gbp(ib)) * (1.0 - fac_bnd_gbp(ib))
+         else
+            zig = zsit_bnd(1)
+         endif
+      endif
+      !
+      if (t < (tspinup - 1.0e-3)) then
+         smfac = 1.0 - (t - t0) / (tspinup - t0)
+         zs0act = zst + zsetup
+         call weighted_average_io(zini, zs0act, smfac, 1, zs0smooth)
+         zsb0_out(ib) = zs0smooth
+         zs0act = zst + zsetup + zig
+         call weighted_average_io(zini, zs0act, smfac, 1, zs0smooth)
+         zsb_out(ib) = zs0smooth
+      else
+         zsb0_out(ib) = zst + zsetup
+         zsb_out(ib)  = zst + zsetup + zig
+      endif
+      !
+      if (subgrid) then
+         zsb0_out(ib) = max(zsb0_out(ib), subgrid_z_zmin(nmb))
+         zsb_out(ib)  = max(zsb_out(ib),  subgrid_z_zmin(nmb))
+      else
+         zsb0_out(ib) = max(zsb0_out(ib), zb(nmb))
+         zsb_out(ib)  = max(zsb_out(ib),  zb(nmb))
+      endif
+      !
+   enddo
+   !$omp end do
+   !$omp end parallel
+   !
+   end subroutine
+
+
+   subroutine weighted_average_io(val1, val2, fac, iopt, val3)
+   !
+   ! Local copy of weighted_average so the io helper is self-contained
+   ! (sibling modules call interpolate_boundary_zsb without depending on
+   ! the sibling's own weighted_average).
+   !
+   implicit none
+   !
+   integer, intent(in)  :: iopt
+   real*4,  intent(in)  :: val1
+   real*4,  intent(in)  :: val2
+   real*4,  intent(in)  :: fac
+   real*4,  intent(out) :: val3
+   !
+   real*4 :: u1, v1, u2, v2, u, v
+   !
+   if (iopt == 1) then
+      val3 = val1*fac + val2*(1.0 - fac)
+   else
+      u1 = cos(val1)
+      v1 = sin(val1)
+      u2 = cos(val2)
+      v2 = sin(val2)
+      u = u1*fac + u2*(1.0 - fac)
+      v = v1*fac + v2*(1.0 - fac)
+      val3 = atan2(v, u)
+   endif
+   !
+   end subroutine
+
 end module
