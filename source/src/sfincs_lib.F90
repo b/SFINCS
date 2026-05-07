@@ -181,6 +181,10 @@ module sfincs_lib
    !
    call read_structures()       ! Reads thd files and sets kcuv to zero where necessary
    !
+#ifdef USE_CUDA
+   call allocate_structure_device_shadows()
+#endif
+   !
    call read_boundary_data()    ! Reads bnd, bzs, etc files
    !
    call find_boundary_indices()

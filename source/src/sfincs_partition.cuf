@@ -163,7 +163,8 @@ module sfincs_partition
    !
    public  :: partition_and_localize, device_finalize, &
               halo_exchange_zs, halo_exchange_q_uv, &
-              device_to_host_for_output
+              device_to_host_for_output, &
+              allocate_structure_device_shadows
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
               build_halo_descriptors, &
@@ -409,6 +410,24 @@ contains
       !
    end subroutine partition_and_localize
    !
+   subroutine allocate_structure_device_shadows()
+      !
+      ! Pre-allocate the four structure-catalog device shadows so that the
+      ! per-step Copy-IN inside compute_fluxes_over_structures resolves to a
+      ! plain cudaMemcpy against correctly-sized device storage instead of
+      ! triggering CUDA Fortran's lazy auto-realloc-on-assignment path on
+      ! first call. Called from sfincs_lib immediately after read_structures()
+      ! has populated the host counterparts (which is after
+      ! partition_and_localize, so this site is the earliest point at which
+      ! the host arrays carry the right shape).
+      !
+      if (allocated(structure_uv_index_h))   then; allocate(structure_uv_index,   mold=structure_uv_index_h);   structure_uv_index   = structure_uv_index_h;   end if
+      if (allocated(structure_parameters_h)) then; allocate(structure_parameters, mold=structure_parameters_h); structure_parameters = structure_parameters_h; end if
+      if (allocated(structure_type_h))       then; allocate(structure_type,       mold=structure_type_h);       structure_type       = structure_type_h;       end if
+      if (allocated(structure_length_h))     then; allocate(structure_length,     mold=structure_length_h);     structure_length     = structure_length_h;     end if
+      !
+   end subroutine allocate_structure_device_shadows
+   !
    subroutine copyin_phase4_degenerate()
       !
       ! Mirror of the prior single-rank Phase 4 body. Every device shadow
@@ -488,10 +507,11 @@ contains
       if (allocated(wavemaker_nmu_h))     then; allocate(wavemaker_nmu,     mold=wavemaker_nmu_h);     wavemaker_nmu     = wavemaker_nmu_h;     end if
       if (allocated(wavemaker_ndm_h))     then; allocate(wavemaker_ndm,     mold=wavemaker_ndm_h);     wavemaker_ndm     = wavemaker_ndm_h;     end if
       if (allocated(wavemaker_num_h))     then; allocate(wavemaker_num,     mold=wavemaker_num_h);     wavemaker_num     = wavemaker_num_h;     end if
-      if (allocated(structure_uv_index_h))   then; allocate(structure_uv_index,   mold=structure_uv_index_h);   structure_uv_index   = structure_uv_index_h;   end if
-      if (allocated(structure_parameters_h)) then; allocate(structure_parameters, mold=structure_parameters_h); structure_parameters = structure_parameters_h; end if
-      if (allocated(structure_type_h))       then; allocate(structure_type,       mold=structure_type_h);       structure_type       = structure_type_h;       end if
-      if (allocated(structure_length_h))     then; allocate(structure_length,     mold=structure_length_h);     structure_length     = structure_length_h;     end if
+      ! Structure catalog shadows (structure_uv_index, structure_parameters,
+      ! structure_type, structure_length) are allocated by
+      ! allocate_structure_device_shadows after read_structures() populates the
+      ! host counterparts. They cannot be allocated here because read_structures
+      ! has not yet run at partition time.
       if (allocated(fwuv_h))    then; allocate(fwuv,    mold=fwuv_h);    fwuv    = fwuv_h;    end if
       if (allocated(tauwu_h))   then; allocate(tauwu,   mold=tauwu_h);   tauwu   = tauwu_h;   end if
       if (allocated(tauwv_h))   then; allocate(tauwv,   mold=tauwv_h);   tauwv   = tauwv_h;   end if
