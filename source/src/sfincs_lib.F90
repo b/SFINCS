@@ -149,11 +149,14 @@ module sfincs_lib
    !
    call system_clock(count0, count_rate, count_max)
    !
-#ifdef USE_CUDA
-   ! Bind the rank to its device and trigger the deferred-multi-rank guard
-   ! before any input is read, so a 2+ rank invocation aborts deterministically.
-   call partition_and_localize()
-#endif
+   ! NOTE (SOR-712): the prior pre-input partition_and_localize() call
+   ! used to fire a deferred-multi-rank guard before any input was read.
+   ! That guard has been replaced by an actual multi-rank implementation
+   ! (SOR-707 .. SOR-712), so the early call is obsolete: it allocates
+   ! gather_*/local_to_global state with npn_h=0 and then conflicts with
+   ! the post-initialize_domain call below ("ALLOCATE: array already
+   ! allocated"). MPI bootstrap and CUDA-aware MPI / cudaSetDevice run
+   ! during the single remaining call below.
    !
    call write_log('------ Preparing model simulation --------', 1)
    call write_log('', 1)
@@ -335,7 +338,17 @@ module sfincs_lib
    !
    call write_log('Initializing output ...', 0)
    !
+#ifdef USE_CUDA
+   ! Gate netCDF / binary output file creation on rank 0. Non-rank-0 ranks
+   ! still gather their device shadows in device_to_host_for_output() but
+   ! never touch the output writers, so their working directory contains
+   ! only sfincs.log (SOR-712 AC).
+   if (mpi_rank == 0) then
+      call initialize_output(tmapout, tmaxout, thisout, trstout)
+   end if
+#else
    call initialize_output(tmapout, tmaxout, thisout, trstout)
+#endif
    !
    ! Quadtree no longer needed, so deallocate (this is done in sfincs_domain.f90)
    ! 
@@ -676,11 +689,17 @@ module sfincs_lib
          !
 #ifdef USE_CUDA
          call device_to_host_for_output()
-#endif
+         ! Only rank 0 writes; device_to_host_for_output() above is a
+         ! collective and runs on every rank (SOR-712 Option A).
+         if (mpi_rank == 0) then
+            call write_output(tout, write_map, write_his, write_max, write_rst, ntmapout, ntmaxout, nthisout, tloopoutput)
+         end if
+#else
          call write_output(tout, write_map, write_his, write_max, write_rst, ntmapout, ntmaxout, nthisout, tloopoutput)
+#endif
          !
       endif
-      !      
+      !
       ! Stop loop in case of instabilities (make sure time step 'dtmin' does not get too small compared to 'uvmax' flow velocity)
       !
       if (dtchk < dtmin .and. nt > 1) then
@@ -695,8 +714,12 @@ module sfincs_lib
          !
 #ifdef USE_CUDA
          call device_to_host_for_output()
-#endif
+         if (mpi_rank == 0) then
+            call write_output(t, .true., .true., .true., .false., ntmapout + 1, ntmaxout, nthisout + 1, tloopoutput)
+         end if
+#else
          call write_output(t, .true., .true., .true., .false., ntmapout + 1, ntmaxout, nthisout + 1, tloopoutput)
+#endif
          !
          t = t1 + 1.0
          !
@@ -756,8 +779,14 @@ module sfincs_lib
    !
 #ifdef USE_CUDA
    call device_to_host_for_output()
-#endif
+   ! finalize_output writes the final max/his snapshot and closes any open
+   ! netCDF files; gate on rank 0 so non-rank-0 ranks produce no output.
+   if (mpi_rank == 0) then
+      call finalize_output(t, ntmaxout, tloopoutput, tmaxout)
+   end if
+#else
    call finalize_output(t, ntmaxout, tloopoutput, tmaxout)
+#endif
    !
 #ifdef USE_CUDA
    call device_finalize()
