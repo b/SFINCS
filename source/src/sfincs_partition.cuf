@@ -331,6 +331,61 @@ contains
          end block
       end if
       !
+      ! --- Phase 7: SnapWave gather/scatter metadata (SOR-711) --------------
+      ! Build per-rank gather metadata for the SnapWave coupling. The CPU
+      ! SnapWave solver runs on rank 0 against the full unpartitioned mesh,
+      ! so every dtwave step the rank-local slices of zs / windu / windv are
+      ! MPI_Gatherv-ed to rank 0 and the resulting fwuv is MPI_Scatterv-ed
+      ! back. Counts and displacements are needed on every rank (both sides
+      ! of the collectives use them); the per-rank flat local_to_global
+      ! permutation is only meaningful on rank 0. The mapping is fixed
+      ! across the run because the partition is fixed, so this set-up runs
+      ! once here. mpi_size == 1 produces a degenerate (identity) mapping
+      ! and the runtime gather/scatter degenerate to local copies.
+      !
+      allocate(gather_recvcounts(max(mpi_size, 1)))
+      allocate(gather_displacements(max(mpi_size, 1)))
+      allocate(gather_uv_recvcounts(max(mpi_size, 1)))
+      allocate(gather_uv_displacements(max(mpi_size, 1)))
+      call mpi_allgather(npn_local,  1, MPI_INTEGER, &
+                         gather_recvcounts,  1, MPI_INTEGER, &
+                         MPI_COMM_WORLD, ierr)
+      call mpi_allgather(npuv_local, 1, MPI_INTEGER, &
+                         gather_uv_recvcounts, 1, MPI_INTEGER, &
+                         MPI_COMM_WORLD, ierr)
+      block
+         integer :: r
+         gather_displacements(1)    = 0
+         gather_uv_displacements(1) = 0
+         do r = 2, mpi_size
+            gather_displacements(r)    = gather_displacements(r - 1)    + gather_recvcounts(r - 1)
+            gather_uv_displacements(r) = gather_uv_displacements(r - 1) + gather_uv_recvcounts(r - 1)
+         end do
+      end block
+      !
+      ! Per-rank local_to_global permutations: rank 0 receives every rank's
+      ! local_to_global(1:npn_local) into a flat npn_h-sized buffer in
+      ! gather_displacements order, so position k of the gathered data
+      ! buffer maps to global cell id gather_perrank_local_to_global(k).
+      ! Other ranks allocate a placeholder (MPI_Gatherv ignores the recv
+      ! buffer on non-root ranks).
+      !
+      if (mpi_rank == 0) then
+         allocate(gather_perrank_local_to_global   (max(npn_h,  1)))
+         allocate(gather_perrank_local_to_global_uv(max(npuv_h, 1)))
+      else
+         allocate(gather_perrank_local_to_global   (1))
+         allocate(gather_perrank_local_to_global_uv(1))
+      end if
+      call mpi_gatherv(local_to_global,    npn_local,  MPI_INTEGER, &
+                       gather_perrank_local_to_global, &
+                       gather_recvcounts, gather_displacements, MPI_INTEGER, &
+                       0, MPI_COMM_WORLD, ierr)
+      call mpi_gatherv(local_to_global_uv, npuv_local, MPI_INTEGER, &
+                       gather_perrank_local_to_global_uv, &
+                       gather_uv_recvcounts, gather_uv_displacements, MPI_INTEGER, &
+                       0, MPI_COMM_WORLD, ierr)
+      !
       ! Drop host-side temporaries. The state that needs to live past this
       ! routine is the device-resident catalog plus the halo descriptor
       ! arrays and local_to_global / local_to_global_uv (module scope in
@@ -1449,6 +1504,12 @@ contains
       if (allocated(halo_recv_buf_q))         deallocate(halo_recv_buf_q)
       if (allocated(halo_send_buf_uv))        deallocate(halo_send_buf_uv)
       if (allocated(halo_recv_buf_uv))        deallocate(halo_recv_buf_uv)
+      if (allocated(gather_recvcounts))                  deallocate(gather_recvcounts)
+      if (allocated(gather_displacements))               deallocate(gather_displacements)
+      if (allocated(gather_perrank_local_to_global))     deallocate(gather_perrank_local_to_global)
+      if (allocated(gather_uv_recvcounts))               deallocate(gather_uv_recvcounts)
+      if (allocated(gather_uv_displacements))            deallocate(gather_uv_displacements)
+      if (allocated(gather_perrank_local_to_global_uv))  deallocate(gather_perrank_local_to_global_uv)
       !
       call mpi_finalize(ierr)
       !
