@@ -13,8 +13,14 @@ module sfincs_continuity
    ! suffixed _d. CUDA Fortran translates `<dev> = <host>` (and vice-versa) to
    ! cudaMemcpy at the assignment level.
    !
-   ! The bridge is intentional and stays until consumer modules become
-   ! GPU-resident in later sub-epics; the bandwidth waste becomes harmless then.
+   ! Bridge-IN H2D copies for init-time arrays and previous-step on-device
+   ! writers have been retired (gpu-bridge-in-trim sub-epic). The two named
+   ! exclusions are zs (catalog C.3 — kcs==6 boundary cells get a per-step
+   ! host write in sfincs_boundaries_gpu.cuf:194) and qext (catalog C.1 —
+   ! BMI/XMI external injection between time steps). Bridge-OUT D2H copies
+   ! remain in place because downstream CPU consumers (netCDF / binary
+   ! output, BMI getters, snapwave coupling, host-side store_t_zsmax loop)
+   ! still read host arrays after each step.
    !
    use cudafor
    use sfincs_data_device
@@ -88,18 +94,7 @@ contains
          store_t_zsmax_h => store_t_zsmax, &
          huthresh_h => huthresh, &
          wavemaker_filter_time_h => wavemaker_filter_time, &
-         kcs_h => kcs, zs_h => zs, zb_h => zb, &
-         q_h => q, prcp_h => prcp, netprcp_h => netprcp, qext_h => qext, &
-         z_flags_iref_h => z_flags_iref, &
-         z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
-         z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
-         dxm_h => dxm, dxrinv_h => dxrinv, dyrinv_h => dyrinv, &
-         cell_area_m2_h => cell_area_m2, cell_area_h => cell_area, &
-         nmindsrc_h => nmindsrc, qtsrc_h => qtsrc, &
-         z_index_wavemaker_h => z_index_wavemaker, &
-         wavemaker_uvmean_h => wavemaker_uvmean, &
-         wavemaker_nmd_h => wavemaker_nmd, wavemaker_nmu_h => wavemaker_nmu, &
-         wavemaker_ndm_h => wavemaker_ndm, wavemaker_num_h => wavemaker_num, &
+         zs_h => zs, zb_h => zb, qext_h => qext, &
          zsm_h => zsm, zsmax_h => zsmax, maxzsm_h => maxzsm, &
          t_zsmax_h => t_zsmax
       !
@@ -123,49 +118,25 @@ contains
       !
       ! ------ Copy-IN: host -> device for kernel READ set ----------------
       !
-      kcs            = kcs_h
-      zs             = zs_h
-      zb             = zb_h
-      q              = q_h
-      z_flags_iref   = z_flags_iref_h
-      z_index_uv_md  = z_index_uv_md_h
-      z_index_uv_mu  = z_index_uv_mu_h
-      z_index_uv_nd  = z_index_uv_nd_h
-      z_index_uv_nu  = z_index_uv_nu_h
-      dxrinv         = dxrinv_h
-      dyrinv         = dyrinv_h
+      ! Init-time arrays (kcs, zb, z_flags_iref, z_index_uv_*, dxrinv,
+      ! dyrinv, dxm, cell_area_m2, cell_area, nmindsrc,
+      ! z_index_wavemaker, wavemaker_nmd/nmu/ndm/num) and previous-step
+      ! on-device writers (q, netprcp, prcp, qtsrc, wavemaker_uvmean,
+      ! zsm, maxzsm, zsmax) are already current device-side; their H2D
+      ! copies have been retired. The dtmaxout zsmax reset on host
+      ! (sfincs_output.f90:208) reaches the device via the bridge-IN at
+      ! sfincs_boundaries_gpu.cuf:339, which runs earlier in the step.
       !
-      if (crsgeo_h) then
-         dxm          = dxm_h
-         cell_area_m2 = cell_area_m2_h
-      else
-         cell_area    = cell_area_h
-      endif
+      ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
+      ! cells receive a per-step host write at
+      ! sfincs_boundaries_gpu.cuf:194 inside update_boundary_conditions).
       !
-      if (precip_h)    netprcp = netprcp_h
-      if (precip_h)    prcp    = prcp_h
-      if (use_qext_h)  qext    = qext_h
+      ! qext is retained per audit catalog Section C.1 (BMI/XMI external
+      ! discharge injection between SFINCS time steps).
       !
-      if (nsrcdrn_h > 0) then
-         nmindsrc = nmindsrc_h
-         qtsrc    = qtsrc_h
-      endif
+      zs = zs_h
       !
-      if (wavemaker_h) then
-         z_index_wavemaker = z_index_wavemaker_h
-         wavemaker_uvmean  = wavemaker_uvmean_h
-         wavemaker_nmd     = wavemaker_nmd_h
-         wavemaker_nmu     = wavemaker_nmu_h
-         wavemaker_ndm     = wavemaker_ndm_h
-         wavemaker_num     = wavemaker_num_h
-      endif
-      !
-      if (snapwave_h) then
-         zsm    = zsm_h
-         maxzsm = maxzsm_h
-      endif
-      !
-      if (store_maximum_waterlevel_h) zsmax = zsmax_h
+      if (use_qext_h)  qext = qext_h
       !
       ! ------ Discharges: small sequential update on a single thread -----
       !
@@ -234,23 +205,9 @@ contains
          huthresh_h => huthresh, &
          wavemaker_filter_time_h => wavemaker_filter_time, &
          dx_h => dx, dy_h => dy, &
-         kcs_h => kcs, zs_h => zs, zs0_h => zs0, zb_h => zb, &
-         q_h => q, prcp_h => prcp, netprcp_h => netprcp, qext_h => qext, &
-         z_flags_iref_h => z_flags_iref, &
-         z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
-         z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
-         dxm_h => dxm, dxrm_h => dxrm, dyrm_h => dyrm, &
-         cell_area_m2_h => cell_area_m2, cell_area_h => cell_area, &
-         nmindsrc_h => nmindsrc, qtsrc_h => qtsrc, &
-         z_index_wavemaker_h => z_index_wavemaker, &
-         wavemaker_uvmean_h => wavemaker_uvmean, &
-         wavemaker_nmd_h => wavemaker_nmd, wavemaker_nmu_h => wavemaker_nmu, &
-         wavemaker_ndm_h => wavemaker_ndm, wavemaker_num_h => wavemaker_num, &
+         zs_h => zs, zs0_h => zs0, qext_h => qext, &
          storage_volume_h => storage_volume, &
          subgrid_z_zmin_h => subgrid_z_zmin, &
-         subgrid_z_zmax_h => subgrid_z_zmax, &
-         subgrid_z_dep_h  => subgrid_z_dep, &
-         subgrid_z_volmax_h => subgrid_z_volmax, &
          z_volume_h => z_volume, zsderv_h => zsderv, &
          zsm_h => zsm, zsmax_h => zsmax, maxzsm_h => maxzsm, &
          t_zsmax_h => t_zsmax
@@ -275,66 +232,27 @@ contains
       !
       ! ------ Copy-IN ----------------------------------------------------
       !
-      kcs            = kcs_h
-      zs             = zs_h
-      zb             = zb_h
-      q              = q_h
-      z_flags_iref   = z_flags_iref_h
-      z_index_uv_md  = z_index_uv_md_h
-      z_index_uv_mu  = z_index_uv_mu_h
-      z_index_uv_nd  = z_index_uv_nd_h
-      z_index_uv_nu  = z_index_uv_nu_h
-      z_volume       = z_volume_h
+      ! Init-time arrays (kcs, zb, z_flags_iref, z_index_uv_*, dxrm,
+      ! dyrm, dxm, cell_area_m2, cell_area, nmindsrc,
+      ! z_index_wavemaker, wavemaker_nmd/nmu/ndm/num, subgrid_z_zmin,
+      ! subgrid_z_zmax, subgrid_z_dep, subgrid_z_volmax) and
+      ! previous-step on-device writers (q, z_volume, netprcp, prcp,
+      ! qtsrc, wavemaker_uvmean, storage_volume, zs0, zsderv, zsm,
+      ! maxzsm, zsmax) are already current device-side; their H2D
+      ! copies have been retired. The dtmaxout zsmax reset on host
+      ! (sfincs_output.f90:208) reaches the device via the bridge-IN at
+      ! sfincs_boundaries_gpu.cuf:339, which runs earlier in the step.
       !
-      if (use_quadtree_h .or. crsgeo_h) then
-         dxrm = dxrm_h
-         dyrm = dyrm_h
-      endif
-      if (crsgeo_h) then
-         dxm          = dxm_h
-         cell_area_m2 = cell_area_m2_h
-      else
-         cell_area    = cell_area_h
-      endif
+      ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
+      ! cells receive a per-step host write at
+      ! sfincs_boundaries_gpu.cuf:194 inside update_boundary_conditions).
       !
-      if (precip_h)    netprcp = netprcp_h
-      if (precip_h)    prcp    = prcp_h
-      if (use_qext_h)  qext    = qext_h
+      ! qext is retained per audit catalog Section C.1 (BMI/XMI external
+      ! discharge injection between SFINCS time steps).
       !
-      if (nsrcdrn_h > 0) then
-         nmindsrc = nmindsrc_h
-         qtsrc    = qtsrc_h
-      endif
+      zs = zs_h
       !
-      if (wavemaker_h) then
-         z_index_wavemaker = z_index_wavemaker_h
-         wavemaker_uvmean  = wavemaker_uvmean_h
-         wavemaker_nmd     = wavemaker_nmd_h
-         wavemaker_nmu     = wavemaker_nmu_h
-         wavemaker_ndm     = wavemaker_ndm_h
-         wavemaker_num     = wavemaker_num_h
-      endif
-      !
-      if (use_storage_volume_h) storage_volume = storage_volume_h
-      !
-      if (wiggle_suppression_h) then
-         zs0    = zs0_h
-         zsderv = zsderv_h
-      endif
-      !
-      ! Subgrid Z-tables are always allocated when subgrid==.true.
-      !
-      subgrid_z_zmin   = subgrid_z_zmin_h
-      subgrid_z_zmax   = subgrid_z_zmax_h
-      subgrid_z_dep    = subgrid_z_dep_h
-      subgrid_z_volmax = subgrid_z_volmax_h
-      !
-      if (snapwave_h) then
-         zsm    = zsm_h
-         maxzsm = maxzsm_h
-      endif
-      !
-      if (store_maximum_waterlevel_h) zsmax = zsmax_h
+      if (use_qext_h)  qext = qext_h
       !
       ! ------ Discharges -------------------------------------------------
       !
@@ -405,11 +323,7 @@ contains
          store_maximum_flux_h => store_maximum_flux, &
          store_twet_h => store_twet, &
          twet_threshold_h => twet_threshold, &
-         kcs_h => kcs, zs_h => zs, zb_h => zb, &
-         q_h => q, uv_h => uv, &
-         z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
-         z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
-         subgrid_z_zmin_h => subgrid_z_zmin, &
+         zs_h => zs, &
          vmax_h => vmax, qmax_h => qmax, twet_h => twet
       !
       implicit none
@@ -421,20 +335,20 @@ contains
       !
       ! ------ Copy-IN ----------------------------------------------------
       !
-      kcs           = kcs_h
-      zs            = zs_h
-      q             = q_h
-      uv            = uv_h
-      z_index_uv_md = z_index_uv_md_h
-      z_index_uv_mu = z_index_uv_mu_h
-      z_index_uv_nd = z_index_uv_nd_h
-      z_index_uv_nu = z_index_uv_nu_h
+      ! Init-time arrays (kcs, zb, z_index_uv_*, subgrid_z_zmin) and
+      ! previous-step on-device writers (q, uv) are already current
+      ! device-side; their H2D copies have been retired.
       !
-      if (subgrid_h) then
-         subgrid_z_zmin = subgrid_z_zmin_h
-      else
-         zb             = zb_h
-      endif
+      ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
+      ! cells receive a per-step host write at
+      ! sfincs_boundaries_gpu.cuf:194 inside update_boundary_conditions).
+      !
+      ! vmax / qmax / twet are retained because the dtmaxout reset cycle
+      ! in sfincs_output.f90 (lines 213, 218, 228) writes their host
+      ! aliases to default values each output interval, and no other
+      ! per-step GPU bridge-IN propagates that reset to the device.
+      !
+      zs = zs_h
       !
       if (store_maximum_velocity_h) vmax = vmax_h
       if (store_maximum_flux_h)     qmax = qmax_h
