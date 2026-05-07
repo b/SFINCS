@@ -122,10 +122,8 @@ contains
       ! dyrinv, dxm, cell_area_m2, cell_area, nmindsrc,
       ! z_index_wavemaker, wavemaker_nmd/nmu/ndm/num) and previous-step
       ! on-device writers (q, netprcp, prcp, qtsrc, wavemaker_uvmean,
-      ! zsm, maxzsm, zsmax) are already current device-side; their H2D
-      ! copies have been retired. The dtmaxout zsmax reset on host
-      ! (sfincs_output.f90:208) reaches the device via the bridge-IN at
-      ! sfincs_boundaries_gpu.cuf:339, which runs earlier in the step.
+      ! zsm, maxzsm) are already current device-side; their H2D
+      ! copies have been retired.
       !
       ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
       ! cells receive a per-step host write at
@@ -134,9 +132,22 @@ contains
       ! qext is retained per audit catalog Section C.1 (BMI/XMI external
       ! discharge injection between SFINCS time steps).
       !
+      ! zsmax is retained because the dtmaxout reset cycle in
+      ! sfincs_output.f90:208 writes the host alias to a default value at
+      ! each output interval. The OpenACC build propagates that reset via
+      ! `!$acc update device(zsmax)` at sfincs_output.f90:209, but the
+      ! CUDA Fortran build treats that directive as a no-op. The
+      ! bridge-IN at sfincs_boundaries_gpu.cuf:339 only runs when
+      ! `boundaries_in_mask` is true; closed-domain models without
+      ! boundary cells skip it entirely, so the host reset must reach
+      ! the device here. Same conservative rationale as vmax/qmax/twet
+      ! in compute_store_variables.
+      !
       zs = zs_h
       !
       if (use_qext_h)  qext = qext_h
+      !
+      if (store_maximum_waterlevel_h) zsmax = zsmax_h
       !
       ! ------ Discharges: small sequential update on a single thread -----
       !
@@ -238,10 +249,8 @@ contains
       ! subgrid_z_zmax, subgrid_z_dep, subgrid_z_volmax) and
       ! previous-step on-device writers (q, z_volume, netprcp, prcp,
       ! qtsrc, wavemaker_uvmean, storage_volume, zs0, zsderv, zsm,
-      ! maxzsm, zsmax) are already current device-side; their H2D
-      ! copies have been retired. The dtmaxout zsmax reset on host
-      ! (sfincs_output.f90:208) reaches the device via the bridge-IN at
-      ! sfincs_boundaries_gpu.cuf:339, which runs earlier in the step.
+      ! maxzsm) are already current device-side; their H2D copies have
+      ! been retired.
       !
       ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
       ! cells receive a per-step host write at
@@ -250,9 +259,22 @@ contains
       ! qext is retained per audit catalog Section C.1 (BMI/XMI external
       ! discharge injection between SFINCS time steps).
       !
+      ! zsmax is retained because the dtmaxout reset cycle in
+      ! sfincs_output.f90:208 writes the host alias to a default value at
+      ! each output interval. The OpenACC build propagates that reset via
+      ! `!$acc update device(zsmax)` at sfincs_output.f90:209, but the
+      ! CUDA Fortran build treats that directive as a no-op. The
+      ! bridge-IN at sfincs_boundaries_gpu.cuf:339 only runs when
+      ! `boundaries_in_mask` is true; closed-domain models without
+      ! boundary cells skip it entirely, so the host reset must reach
+      ! the device here. Same conservative rationale as vmax/qmax/twet
+      ! in compute_store_variables.
+      !
       zs = zs_h
       !
       if (use_qext_h)  qext = qext_h
+      !
+      if (store_maximum_waterlevel_h) zsmax = zsmax_h
       !
       ! ------ Discharges -------------------------------------------------
       !
