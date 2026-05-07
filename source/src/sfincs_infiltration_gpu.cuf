@@ -9,11 +9,18 @@ module sfincs_infiltration
    ! the CPU sibling). update_infiltration_map is a host-side dispatcher that
    ! launches one dedicated kernel per inftype branch.
    !
-   ! Bridge-IN copies host -> device for the union of all per-branch READ sets
-   ! at the top of update_infiltration_map; Bridge-OUT copies device -> host
-   ! for the union of all per-branch WRITE sets at the end. Both legs are
-   ! required during the staging period because unported per-step modules read
-   ! and write only host arrays.
+   ! The per-step bridge-IN block has been trimmed (gpu-bridge-in-trim,
+   ! SOR-784): every kernel-read array that is init-time-only (mesh /
+   ! geometry / infiltration parameter fields populated once at startup)
+   ! or written on-device the previous step with no host writer in between
+   ! has been dropped because its device shadow is already up-to-date. The
+   ! single retained bridge-IN is `zs = zs_h`, kept because
+   ! update_boundary_conditions writes zs_h(nmb) on host for kcs==6
+   ! (Neumann) cells (catalog Section C.3).
+   !
+   ! Bridge-OUT copies device -> host for the union of all per-branch WRITE
+   ! sets at the end of update_infiltration_map; this leg is unchanged and
+   ! still required for downstream CPU consumers (output, BMI getters).
    !
    use cudafor
    use sfincs_data_device
@@ -43,7 +50,6 @@ contains
          horton_kr_kd_h => horton_kr_kd, &
          store_cumulative_precipitation_h => store_cumulative_precipitation, &
          qinfmap_h => qinfmap, &
-         qinffield_h => qinffield, &
          cuminf_h => cuminf, &
          scs_rain_h => scs_rain, &
          scs_Se_h => scs_Se, &
@@ -51,25 +57,14 @@ contains
          scs_F1_h => scs_F1, &
          scs_S1_h => scs_S1, &
          rain_T1_h => rain_T1, &
-         ksfield_h => ksfield, &
          GA_head_h => GA_head, &
          GA_sigma_h => GA_sigma, &
-         GA_sigma_max_h => GA_sigma_max, &
          GA_F_h => GA_F, &
-         GA_Lu_h => GA_Lu, &
-         inf_kr_h => inf_kr, &
          horton_kd_h => horton_kd, &
          horton_fc_h => horton_fc, &
          horton_f0_h => horton_f0, &
-         prcp_h => prcp, &
-         cumprcp_h => cumprcp, &
          netprcp_h => netprcp, &
-         z_volume_h => z_volume, &
-         zs_h => zs, &
-         zb_h => zb, &
-         cell_area_m2_h => cell_area_m2, &
-         cell_area_h => cell_area, &
-         z_flags_iref_h => z_flags_iref
+         zs_h => zs
       !
       implicit none
       !
@@ -85,40 +80,18 @@ contains
       !
       call system_clock(count0, count_rate, count_max)
       !
-      ! ------ Copy-IN: host -> device (union of all branches' READ sets) ----
+      ! ------ Copy-IN: host -> device (single retained bridge-IN) -----------
       !
-      qinffield    = qinffield_h
-      prcp         = prcp_h
-      cumprcp      = cumprcp_h
-      ksfield      = ksfield_h
-      GA_sigma_max = GA_sigma_max_h
-      GA_Lu        = GA_Lu_h
-      inf_kr       = inf_kr_h
-      z_volume     = z_volume_h
-      zs           = zs_h
-      zb           = zb_h
-      cell_area_m2 = cell_area_m2_h
-      cell_area    = cell_area_h
-      z_flags_iref = z_flags_iref_h
+      ! zs is bridged-IN because update_boundary_conditions writes zs_h(nmb)
+      ! on host for kcs==6 (Neumann) cells before update_infiltration_map
+      ! runs (catalog Section C.3, conservative default). All other catalog
+      ! arrays previously copied in here are either init-time-only (their
+      ! device shadow is populated once and never touched on host again) or
+      ! written on-device the previous step by an earlier per-step GPU
+      ! routine (e.g. update_meteo_forcing for prcp/cumprcp/netprcp), so
+      ! their device shadows are already up-to-date.
       !
-      ! Read-modify-write arrays: also need their current host values copied in
-      ! so kernels see prior step's results.
-      !
-      qinfmap      = qinfmap_h
-      cuminf       = cuminf_h
-      netprcp      = netprcp_h
-      scs_rain     = scs_rain_h
-      scs_Se       = scs_Se_h
-      scs_P1       = scs_P1_h
-      scs_F1       = scs_F1_h
-      scs_S1       = scs_S1_h
-      rain_T1      = rain_T1_h
-      GA_head      = GA_head_h
-      GA_sigma     = GA_sigma_h
-      GA_F         = GA_F_h
-      horton_kd    = horton_kd_h
-      horton_fc    = horton_fc_h
-      horton_f0    = horton_f0_h
+      zs = zs_h
       !
       blocks = (npn_local + TPB - 1) / TPB
       !
