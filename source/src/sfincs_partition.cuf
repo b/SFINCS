@@ -168,7 +168,19 @@ module sfincs_partition
               build_local_index_maps, &
               build_halo_descriptors, &
               copyin_phase4_degenerate, &
-              sort_indices_by_key, qsort_recursive
+              sort_indices_by_key, qsort_recursive, &
+              gather_to_rank0_in_global_order, &
+              gather_to_rank0_real4, gather_to_rank0_real8
+   !
+   ! SOR-712: per-array gather of the rank-local slice of a device shadow
+   ! into rank 0's full-size global host array. The two MPI types we need
+   ! are real(4) (the bulk of the catalog) and real(8) (zs, z_volume); the
+   ! 'kind' string selects the cell- vs uv-indexed partition descriptors.
+   !
+   interface gather_to_rank0_in_global_order
+      module procedure :: gather_to_rank0_real4
+      module procedure :: gather_to_rank0_real8
+   end interface gather_to_rank0_in_global_order
    !
 contains
    !
@@ -1709,49 +1721,243 @@ contains
    subroutine device_to_host_for_output()
       !
       ! Pull every device-resident state array consumed by the netCDF / binary
-      ! output writers back to its host counterpart, so that subsequent
-      ! write_output(...) calls on rank 0 see fresh state. Single-rank only;
-      ! multi-rank gather is SOR-712's job. Each arr_h = arr_d generates a
-      ! synchronous cudaMemcpy(DeviceToHost) on the default stream.
+      ! output writers back to rank 0's full-size global host array, so that
+      ! the subsequent write_output(...) call on rank 0 sees the FULL global
+      ! state in original cell ordering.
+      !
+      ! Per array (cell- or uv-indexed): each rank packs its rank-local slice
+      ! from the device shadow into a host workbuf, MPI_Gatherv-s to rank 0,
+      ! and rank 0 permutes the rank-contiguous gathered buffer back to the
+      ! original global cell ordering using gather_perrank_local_to_global
+      ! (or _uv). For mpi_size == 1 the helper short-circuits to a direct
+      ! arr_h = arr_d D2H copy (the gather/permutation are degenerate).
+      !
+      ! This is a collective; every rank must enter so the MPI_Gatherv calls
+      ! are matched. The rank-0 gating of write_output happens in the caller
+      ! (sfincs_lib.F90), AFTER this routine returns.
       !
       ! --- Hydrodynamic state -----------------------------------------------
       !
-      if (allocated(zs_h)             .and. allocated(zs))             zs_h             = zs
-      if (allocated(q_h)              .and. allocated(q))              q_h              = q
-      if (allocated(uv_h)             .and. allocated(uv))             uv_h             = uv
-      if (allocated(uvmean_h)         .and. allocated(uvmean))         uvmean_h         = uvmean
-      if (allocated(zsmax_h)          .and. allocated(zsmax))          zsmax_h          = zsmax
-      if (allocated(maxzsm_h)         .and. allocated(maxzsm))         maxzsm_h         = maxzsm
-      if (allocated(qmax_h)           .and. allocated(qmax))           qmax_h           = qmax
-      if (allocated(vmax_h)           .and. allocated(vmax))           vmax_h           = vmax
-      if (allocated(twet_h)           .and. allocated(twet))           twet_h           = twet
-      if (allocated(zsm_h)            .and. allocated(zsm))            zsm_h            = zsm
-      if (allocated(z_volume_h)       .and. allocated(z_volume))       z_volume_h       = z_volume
-      if (allocated(storage_volume_h) .and. allocated(storage_volume)) storage_volume_h = storage_volume
+      if (allocated(zs_h)             .and. allocated(zs))             call gather_to_rank0_in_global_order(zs,             zs_h,             'cell')
+      if (allocated(q_h)              .and. allocated(q))              call gather_to_rank0_in_global_order(q,              q_h,              'uv')
+      if (allocated(uv_h)             .and. allocated(uv))             call gather_to_rank0_in_global_order(uv,             uv_h,             'uv')
+      if (allocated(zsmax_h)          .and. allocated(zsmax))          call gather_to_rank0_in_global_order(zsmax,          zsmax_h,          'cell')
+      if (allocated(maxzsm_h)         .and. allocated(maxzsm))         call gather_to_rank0_in_global_order(maxzsm,         maxzsm_h,         'cell')
+      if (allocated(qmax_h)           .and. allocated(qmax))           call gather_to_rank0_in_global_order(qmax,           qmax_h,           'cell')
+      if (allocated(vmax_h)           .and. allocated(vmax))           call gather_to_rank0_in_global_order(vmax,           vmax_h,           'cell')
+      if (allocated(twet_h)           .and. allocated(twet))           call gather_to_rank0_in_global_order(twet,           twet_h,           'cell')
+      if (allocated(zsm_h)            .and. allocated(zsm))            call gather_to_rank0_in_global_order(zsm,            zsm_h,            'cell')
+      if (allocated(z_volume_h)       .and. allocated(z_volume))       call gather_to_rank0_in_global_order(z_volume,       z_volume_h,       'cell')
+      if (allocated(storage_volume_h) .and. allocated(storage_volume)) call gather_to_rank0_in_global_order(storage_volume, storage_volume_h, 'cell')
+      !
+      ! uvmean is sized nkcuv2 (boundary U/V cell count), not npn_h or
+      ! npuv_h, so neither the cell nor uv gather descriptors apply. The
+      ! boundary forcing broadcast (SOR-710) keeps every rank's uvmean in
+      ! sync with rank 0's, so a plain D2H on rank 0 gives the right value
+      ! for restart output. Other ranks skip the copy; the host array is
+      ! unused there.
+      !
+      if (mpi_rank == 0) then
+         if (allocated(uvmean_h) .and. allocated(uvmean)) uvmean_h = uvmean
+      end if
       !
       ! --- Meteo ------------------------------------------------------------
       !
-      if (allocated(windu_h)          .and. allocated(windu))          windu_h          = windu
-      if (allocated(windv_h)          .and. allocated(windv))          windv_h          = windv
-      if (allocated(windmax_h)        .and. allocated(windmax))        windmax_h        = windmax
-      if (allocated(patm_h)           .and. allocated(patm))           patm_h           = patm
-      if (allocated(prcp_h)           .and. allocated(prcp))           prcp_h           = prcp
-      if (allocated(cumprcp_h)        .and. allocated(cumprcp))        cumprcp_h        = cumprcp
-      if (allocated(netprcp_h)        .and. allocated(netprcp))        netprcp_h        = netprcp
+      if (allocated(windu_h)          .and. allocated(windu))          call gather_to_rank0_in_global_order(windu,          windu_h,          'cell')
+      if (allocated(windv_h)          .and. allocated(windv))          call gather_to_rank0_in_global_order(windv,          windv_h,          'cell')
+      if (allocated(windmax_h)        .and. allocated(windmax))        call gather_to_rank0_in_global_order(windmax,        windmax_h,        'cell')
+      if (allocated(patm_h)           .and. allocated(patm))           call gather_to_rank0_in_global_order(patm,           patm_h,           'cell')
+      if (allocated(prcp_h)           .and. allocated(prcp))           call gather_to_rank0_in_global_order(prcp,           prcp_h,           'cell')
+      if (allocated(cumprcp_h)        .and. allocated(cumprcp))        call gather_to_rank0_in_global_order(cumprcp,        cumprcp_h,        'cell')
+      if (allocated(netprcp_h)        .and. allocated(netprcp))        call gather_to_rank0_in_global_order(netprcp,        netprcp_h,        'cell')
       !
       ! --- Infiltration -----------------------------------------------------
       !
-      if (allocated(qinfmap_h)        .and. allocated(qinfmap))        qinfmap_h        = qinfmap
-      if (allocated(cuminf_h)         .and. allocated(cuminf))         cuminf_h         = cuminf
-      if (allocated(scs_Se_h)         .and. allocated(scs_Se))         scs_Se_h         = scs_Se
-      if (allocated(GA_sigma_h)       .and. allocated(GA_sigma))       GA_sigma_h       = GA_sigma
-      if (allocated(GA_F_h)           .and. allocated(GA_F))           GA_F_h           = GA_F
-      if (allocated(rain_T1_h)        .and. allocated(rain_T1))        rain_T1_h        = rain_T1
+      if (allocated(qinfmap_h)        .and. allocated(qinfmap))        call gather_to_rank0_in_global_order(qinfmap,        qinfmap_h,        'cell')
+      if (allocated(cuminf_h)         .and. allocated(cuminf))         call gather_to_rank0_in_global_order(cuminf,         cuminf_h,         'cell')
+      if (allocated(scs_Se_h)         .and. allocated(scs_Se))         call gather_to_rank0_in_global_order(scs_Se,         scs_Se_h,         'cell')
+      if (allocated(GA_sigma_h)       .and. allocated(GA_sigma))       call gather_to_rank0_in_global_order(GA_sigma,       GA_sigma_h,       'cell')
+      if (allocated(GA_F_h)           .and. allocated(GA_F))           call gather_to_rank0_in_global_order(GA_F,           GA_F_h,           'cell')
+      if (allocated(rain_T1_h)        .and. allocated(rain_T1))        call gather_to_rank0_in_global_order(rain_T1,        rain_T1_h,        'cell')
       !
       ! --- Discharges / drains ----------------------------------------------
+      !
+      ! qtsrc is sized by source-point count, replicated identically on every
+      ! rank from the input file, so a plain D2H reproduces the correct
+      ! global state without a gather.
       !
       if (allocated(qtsrc_h)          .and. allocated(qtsrc))          qtsrc_h          = qtsrc
       !
    end subroutine device_to_host_for_output
+   !
+   subroutine gather_to_rank0_real4(arr_d, arr_h, kind)
+      !
+      ! Real(4) cell- or uv-indexed gather. See gather_to_rank0_real8 for
+      ! the algorithm; this is the single-precision specialisation.
+      !
+      real(4), device,  intent(in)    :: arr_d(:)
+      real(4),          intent(inout) :: arr_h(:)
+      character(len=*), intent(in)    :: kind
+      !
+      integer :: ierr, i, k, n_local, total
+      real(4), allocatable          :: workbuf(:), recvbuf(:)
+      real(4), device, allocatable  :: workbuf_d(:)
+      !
+      ! mpi_size == 1 fast path: rank 0 already owns every cell; the gather
+      ! and permutation degenerate to a contiguous copy. Skip the workbuf +
+      ! collective overhead and emit a single cudaMemcpy(DeviceToHost),
+      ! preserving the pre-multi-rank baseline (SOR-705) bit-identically.
+      !
+      if (mpi_size == 1) then
+         arr_h = arr_d
+         return
+      end if
+      !
+      if (kind == 'cell') then
+         n_local = npn_local
+      else
+         n_local = npuv_local
+      end if
+      !
+      ! Step 1: pack the rank-local slice on the device, then D2H into a
+      ! host workbuf sized n_local. Going through a device-side pack avoids
+      ! a full-array D2H that would copy npn_h - n_local stale entries.
+      !
+      allocate(workbuf_d(max(n_local, 1)))
+      if (kind == 'cell') then
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n_local
+            workbuf_d(i) = arr_d(local_to_global_d(i))
+         end do
+      else
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n_local
+            workbuf_d(i) = arr_d(local_to_global_uv_d(i))
+         end do
+      end if
+      allocate(workbuf(max(n_local, 1)))
+      workbuf = workbuf_d
+      deallocate(workbuf_d)
+      !
+      ! Step 2: MPI_Gatherv to rank 0. Non-root ranks ignore the recv buffer
+      ! but still allocate a placeholder so the dummy argument is associated.
+      !
+      if (kind == 'cell') then
+         total = sum(gather_recvcounts)
+      else
+         total = sum(gather_uv_recvcounts)
+      end if
+      if (mpi_rank == 0) then
+         allocate(recvbuf(max(total, 1)))
+      else
+         allocate(recvbuf(1))
+      end if
+      if (kind == 'cell') then
+         call mpi_gatherv(workbuf, n_local, MPI_REAL, &
+                          recvbuf, gather_recvcounts, gather_displacements, MPI_REAL, &
+                          0, MPI_COMM_WORLD, ierr)
+      else
+         call mpi_gatherv(workbuf, n_local, MPI_REAL, &
+                          recvbuf, gather_uv_recvcounts, gather_uv_displacements, MPI_REAL, &
+                          0, MPI_COMM_WORLD, ierr)
+      end if
+      !
+      ! Step 3: rank 0 permutes the rank-contiguous flat buffer back to the
+      ! original global cell ordering. Position k in the flat buffer holds
+      ! the value of global cell gather_perrank_local_to_global(k) (or _uv).
+      !
+      if (mpi_rank == 0) then
+         if (kind == 'cell') then
+            do k = 1, total
+               arr_h(gather_perrank_local_to_global(k)) = recvbuf(k)
+            end do
+         else
+            do k = 1, total
+               arr_h(gather_perrank_local_to_global_uv(k)) = recvbuf(k)
+            end do
+         end if
+      end if
+      !
+      deallocate(workbuf, recvbuf)
+      !
+   end subroutine gather_to_rank0_real4
+   !
+   subroutine gather_to_rank0_real8(arr_d, arr_h, kind)
+      !
+      ! Real(8) cell- or uv-indexed gather. Mirror of gather_to_rank0_real4
+      ! with MPI_DOUBLE_PRECISION and double-precision workbuf / recvbuf.
+      ! The catalog has only two real(8) entries (zs, z_volume), both cell-
+      ! indexed, but the helper accepts 'uv' for symmetry.
+      !
+      real(8), device,  intent(in)    :: arr_d(:)
+      real(8),          intent(inout) :: arr_h(:)
+      character(len=*), intent(in)    :: kind
+      !
+      integer :: ierr, i, k, n_local, total
+      real(8), allocatable          :: workbuf(:), recvbuf(:)
+      real(8), device, allocatable  :: workbuf_d(:)
+      !
+      if (mpi_size == 1) then
+         arr_h = arr_d
+         return
+      end if
+      !
+      if (kind == 'cell') then
+         n_local = npn_local
+      else
+         n_local = npuv_local
+      end if
+      !
+      allocate(workbuf_d(max(n_local, 1)))
+      if (kind == 'cell') then
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n_local
+            workbuf_d(i) = arr_d(local_to_global_d(i))
+         end do
+      else
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n_local
+            workbuf_d(i) = arr_d(local_to_global_uv_d(i))
+         end do
+      end if
+      allocate(workbuf(max(n_local, 1)))
+      workbuf = workbuf_d
+      deallocate(workbuf_d)
+      !
+      if (kind == 'cell') then
+         total = sum(gather_recvcounts)
+      else
+         total = sum(gather_uv_recvcounts)
+      end if
+      if (mpi_rank == 0) then
+         allocate(recvbuf(max(total, 1)))
+      else
+         allocate(recvbuf(1))
+      end if
+      if (kind == 'cell') then
+         call mpi_gatherv(workbuf, n_local, MPI_DOUBLE_PRECISION, &
+                          recvbuf, gather_recvcounts, gather_displacements, MPI_DOUBLE_PRECISION, &
+                          0, MPI_COMM_WORLD, ierr)
+      else
+         call mpi_gatherv(workbuf, n_local, MPI_DOUBLE_PRECISION, &
+                          recvbuf, gather_uv_recvcounts, gather_uv_displacements, MPI_DOUBLE_PRECISION, &
+                          0, MPI_COMM_WORLD, ierr)
+      end if
+      !
+      if (mpi_rank == 0) then
+         if (kind == 'cell') then
+            do k = 1, total
+               arr_h(gather_perrank_local_to_global(k)) = recvbuf(k)
+            end do
+         else
+            do k = 1, total
+               arr_h(gather_perrank_local_to_global_uv(k)) = recvbuf(k)
+            end do
+         end if
+      end if
+      !
+      deallocate(workbuf, recvbuf)
+      !
+   end subroutine gather_to_rank0_real8
    !
 end module sfincs_partition
