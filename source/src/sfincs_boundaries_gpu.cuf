@@ -18,6 +18,22 @@ module sfincs_boundaries
    ! are suffixed _d. CUDA Fortran translates `<dev> = <host>` and vice-versa
    ! to cudaMemcpy at the assignment level.
    !
+   ! Per-step bridge-IN trim (gpu-bridge-in-trim, SOR-785): inside
+   ! update_boundary_fluxes, every kernel-read array that is init-time-only
+   ! (mesh / mask / boundary index catalogs, geometry, subgrid tables,
+   ! ibuvdir) or written on-device the previous step with no host writer
+   ! in between (q, uv, uvmean, z_volume, zsmax) has had its `<dev> =
+   ! <host>` line dropped because the device shadow is already current.
+   ! Three named retentions:
+   !   zsb / zsb0 : update_boundary_conditions runs on host immediately
+   !     before update_boundary_fluxes every step and writes
+   !     zsb_h(ib) / zsb0_h(ib) (lines 168-169) per catalog Section C.2.
+   !   zs         : update_boundary_conditions also writes zs_h(nmb) on
+   !     host for kcs==6 (Neumann lateral) cells (line 194) per catalog
+   !     Section C.3 -- conservative default.
+   ! The bridge-OUT (D2H) block at the end of update_boundary_fluxes is
+   ! unchanged and still required for downstream CPU consumers.
+   !
    use cudafor
    use mpi
    use sfincs_data_device
@@ -272,18 +288,11 @@ contains
       subgrid_nlevels_h => subgrid_nlevels, subgrid_h => subgrid, &
       store_maximum_waterlevel_h => store_maximum_waterlevel, &
       store_t_zsmax_h => store_t_zsmax, t_zsmax_h => t_zsmax, &
-      kcs_h => kcs, kcuv_h => kcuv, &
+      kcs_h => kcs, &
       zs_h => zs, q_h => q, uv_h => uv, &
       uvmean_h => uvmean, zsmax_h => zsmax, &
-      zb_h => zb, zbuv_h => zbuv, z_volume_h => z_volume, &
-      zsb_h => zsb, zsb0_h => zsb0, ibuvdir_h => ibuvdir, &
-      index_kcuv2_h => index_kcuv2, nmikcuv2_h => nmikcuv2, &
-      nmbkcuv2_h => nmbkcuv2, ibkcuv2_h => ibkcuv2, &
-      subgrid_uv_zmin_h => subgrid_uv_zmin, &
-      subgrid_uv_zmax_h => subgrid_uv_zmax, &
-      subgrid_uv_havg_h => subgrid_uv_havg, &
-      subgrid_uv_havg_zmax_h => subgrid_uv_havg_zmax, &
-      subgrid_z_zmin_h => subgrid_z_zmin
+      zsb_h => zsb, zsb0_h => zsb0, &
+      nmbkcuv2_h => nmbkcuv2
    !
    implicit none
    !
@@ -305,38 +314,21 @@ contains
    facrel            = 1.0 - min(dt / btrelax_h, 1.0)
    !
    ! ------ Copy-IN: host -> device for kernel READ set ------------------
-   ! Mirrors the !$acc parallel present(...) list of the original CPU
-   ! sibling (lines 941-950 of pre-extraction sfincs_boundaries.f90).
-   ! Bridge contract: refresh device shadows so unported per-step modules
-   ! that wrote only host arrays in the prior step do not stale-read here.
+   ! Per audit catalog (gpu-bridge-in-trim, SOR-785): bridge-IN H2D copies
+   ! for init-time-only catalog/mesh/geometry/subgrid arrays (Section A)
+   ! and for arrays kept current on-device by the previous step's GPU
+   ! kernels with no per-step host writer (Section B) have been dropped.
+   ! Three retentions:
+   !   zsb / zsb0 : per-step host writer in update_boundary_conditions
+   !     (this same module, sfincs_boundaries_gpu.cuf:168-169) -- catalog
+   !     Section C.2.
+   !   zs         : per-step host writer in update_boundary_conditions
+   !     (sfincs_boundaries_gpu.cuf:194) for kcs==6 cells -- catalog
+   !     Section C.3, conservative default.
    !
-   index_kcuv2          = index_kcuv2_h
-   nmikcuv2             = nmikcuv2_h
-   nmbkcuv2             = nmbkcuv2_h
-   ibkcuv2              = ibkcuv2_h
-   kcuv                 = kcuv_h
-   kcs                  = kcs_h
-   zs                   = zs_h
-   q                    = q_h
-   uv                   = uv_h
-   uvmean               = uvmean_h
-   zb                   = zb_h
-   zbuv                 = zbuv_h
-   zsb                  = zsb_h
-   zsb0                 = zsb0_h
-   ibuvdir              = ibuvdir_h
-   !
-   if (allocated(z_volume_h)) z_volume = z_volume_h
-   !
-   if (subgrid_h) then
-      subgrid_uv_zmin      = subgrid_uv_zmin_h
-      subgrid_uv_zmax      = subgrid_uv_zmax_h
-      subgrid_uv_havg      = subgrid_uv_havg_h
-      subgrid_uv_havg_zmax = subgrid_uv_havg_zmax_h
-      subgrid_z_zmin       = subgrid_z_zmin_h
-   endif
-   !
-   if (store_maximum_waterlevel_h) zsmax = zsmax_h
+   zs   = zs_h
+   zsb  = zsb_h
+   zsb0 = zsb0_h
    !
    ! ------ Main per-boundary-point kernel -------------------------------
    !
