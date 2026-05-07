@@ -16,15 +16,20 @@ module sfincs_discharges
    ! are imported bare. CUDA Fortran translates `<dev> = <host>` (and the
    ! reverse) into cudaMemcpy at the assignment level.
    !
-   ! The kernel performs full bidirectional bridging every step, per the
-   ! staging-period contract: device shadows of the read set
-   ! (zs, zb, z_volume, nmindsrc, qtsrc, drainage_type, drainage_params) are
-   ! refreshed from host before launch; the write set (qtsrc only) is
-   ! published back to host after sync so unported per-step modules read fresh
-   ! data. qext is intentionally NOT in the write set: this kernel does not
-   ! write qext, and clobbering host qext would lose xmipy's BMI input
-   ! (sfincs_continuity_gpu owns the qext bridge). The bandwidth waste is
-   ! intentional and disappears once every per-step module is GPU-resident.
+   ! Post-trim bridge state: the only per-step bridge-IN retained is
+   ! `zs = zs_h`, because `update_boundary_conditions` writes
+   ! `zs_h(nmb)` for kcs==6 (Neumann lateral) cells on the host between
+   ! bridge-OUT and the next bridge-IN (catalog C.3). Every other
+   ! formerly-bridged read-set member is either init-time-only (zb,
+   ! nmindsrc, drainage_type, drainage_params, drainage_distance) or
+   ! written on-device the previous step with no per-step host writer
+   ! (qtsrc, z_volume, drainage_status, drainage_fraction_open) and so
+   ! is now persistent on the device. qtsrc is the kernel's only
+   ! published write set and is bridged out so unported per-step
+   ! modules read fresh data. qext is intentionally NOT in the write
+   ! set: this kernel does not write qext, and clobbering host qext
+   ! would lose xmipy's BMI input (sfincs_continuity_gpu owns the qext
+   ! bridge).
    !
    ! Auxiliary arrays needed only by drainage gates (drainage_status,
    ! drainage_distance, drainage_fraction_open) and by the source time-series
@@ -41,8 +46,11 @@ module sfincs_discharges
    public :: read_discharges, update_discharges
    !
    ! Module-private device shadows. Lazily allocated on the first update call
-   ! once nsrc/ndrn are known. tsrc/qsrc are static after read_discharges so
-   ! we copy them in only once; drainage_* are bridged every step.
+   ! once nsrc/ndrn are known and populated once from host inside the
+   ! `.not. allocated(...)` guards. After first allocation they are
+   ! device-resident: drainage_distance is genuinely static; drainage_status
+   ! and drainage_fraction_open are written on-device by k_drainage and
+   ! published to host via the post-kernel bridge-OUT.
    !
    real*4,    device, allocatable :: tsrc_d(:)
    real*4,    device, allocatable :: qsrc_d(:,:)
@@ -74,9 +82,7 @@ contains
          tsrc_h => tsrc, qsrc_h => qsrc, &
          subgrid_h => subgrid, structure_relax_h => structure_relax, g_h => g, &
          qtsrc_h => qtsrc, &
-         z_volume_h => z_volume, zs_h => zs, zb_h => zb, &
-         nmindsrc_h => nmindsrc, &
-         drainage_type_h => drainage_type, drainage_params_h => drainage_params, &
+         zs_h => zs, &
          drainage_status_h => drainage_status, &
          drainage_distance_h => drainage_distance, &
          drainage_fraction_open_h => drainage_fraction_open
@@ -97,14 +103,6 @@ contains
       !
       src_active = (nsrc_h > 0)
       drn_active = (ndrn_h > 0)
-      !
-      ! ----------------------------------------------------------------
-      ! Bridge-IN qtsrc once for both kernels (drainage reads qtsrc(jin)
-      ! produced by the previous step; source interp writes qtsrc(1:nsrc)).
-      ! ----------------------------------------------------------------
-      if (src_active .or. drn_active) then
-         qtsrc = qtsrc_h
-      endif
       !
       ! ----------------------------------------------------------------
       ! Section 1: source-time interpolation.
@@ -150,31 +148,28 @@ contains
          !
          if (.not. allocated(drainage_status_d)) then
             allocate(drainage_status_d, mold=drainage_status_h)
+            drainage_status_d = drainage_status_h
          endif
          if (.not. allocated(drainage_distance_d)) then
             allocate(drainage_distance_d, mold=drainage_distance_h)
+            drainage_distance_d = drainage_distance_h
          endif
          if (.not. allocated(drainage_fraction_open_d)) then
             allocate(drainage_fraction_open_d, mold=drainage_fraction_open_h)
+            drainage_fraction_open_d = drainage_fraction_open_h
          endif
          !
-         ! ------ Bridge-IN read set (canonical from the pre-port acc
-         ! present(...) directive: z_volume, zs, zb, nmindsrc, qtsrc,
-         ! drainage_type, drainage_params; plus drainage state
-         ! shadows used by gate types 4 and 5) ----------------------
+         ! ------ Bridge-IN: only `zs = zs_h` is retained, because
+         ! `update_boundary_conditions` writes `zs_h(nmb)` for kcs==6
+         ! (Neumann lateral) cells between bridge-OUT and the next
+         ! bridge-IN (catalog C.3). Every other formerly-bridged
+         ! read-set member is now device-resident: zb / nmindsrc /
+         ! drainage_type / drainage_params / drainage_distance are
+         ! init-time-only; z_volume / drainage_status /
+         ! drainage_fraction_open are written on-device the previous
+         ! step with no per-step host writer.
          !
-         zs              = zs_h
-         zb              = zb_h
-         if (subgrid_h) then
-            z_volume = z_volume_h
-         endif
-         nmindsrc        = nmindsrc_h
-         drainage_type   = drainage_type_h
-         drainage_params = drainage_params_h
-         !
-         drainage_status_d        = drainage_status_h
-         drainage_distance_d      = drainage_distance_h
-         drainage_fraction_open_d = drainage_fraction_open_h
+         zs = zs_h
          !
          ! ------ Kernel launch ------------------------------------
          !
