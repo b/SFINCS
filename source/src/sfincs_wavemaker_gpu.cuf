@@ -8,13 +8,15 @@ module sfincs_wavemaker
    ! update_wavemaker_fluxes is reimplemented here as a CUDA kernel that
    ! operates on device-resident state declared by sfincs_data_device.
    !
-   ! IO routines (initialize_wavemakers) continue to populate host arrays
-   ! (wavemaker_index_uv, wavemaker_idir, wavemaker_uvmean, ...). Per step,
-   ! update_wavemaker_fluxes refreshes the device shadows from those host
-   ! arrays at launch (bridge-IN) and publishes the kernel writes back to
-   ! host at completion (bridge-OUT). The bridge is wasted bandwidth once
-   ! every per-step module is GPU-resident but is required for correctness
-   ! during the staging period.
+   ! IO routines (initialize_wavemakers) populate host arrays
+   ! (wavemaker_index_uv, wavemaker_idir, wavemaker_uvmean, ...) once at
+   ! init; the per-step bridge-IN H2D copies for catalog arrays have been
+   ! retired (gpu-bridge-in-trim). Per step, update_wavemaker_fluxes still
+   ! refreshes zs from host (kcs==6 boundary points have a per-step host
+   ! writer) and the per-call forcing time-series temporaries that mirror
+   ! the CPU sibling's local allocatables. Kernel writes are still
+   ! published to host at completion (bridge-OUT) for downstream CPU
+   ! consumers (output, BMI getters).
    !
    use cudafor
    use sfincs_log
@@ -80,26 +82,10 @@ contains
          wavemaker_forcing_tp_ig_h => wavemaker_forcing_tp_ig, &
          wavemaker_forcing_setup_h => wavemaker_forcing_setup, &
          subgrid_nlevels_h => subgrid_nlevels, &
-         zs_h => zs, zb_h => zb, zbuv_h => zbuv, &
-         hm0_h => hm0, hm0_ig_h => hm0_ig, &
+         zs_h => zs, &
          q_h => q, &
-         subgrid_z_zmax_h => subgrid_z_zmax, &
-         subgrid_z_zmin_h => subgrid_z_zmin, &
-         subgrid_uv_zmin_h => subgrid_uv_zmin, &
-         subgrid_uv_zmax_h => subgrid_uv_zmax, &
-         subgrid_uv_havg_h => subgrid_uv_havg, &
-         subgrid_uv_nrep_h => subgrid_uv_nrep, &
-         subgrid_uv_havg_zmax_h => subgrid_uv_havg_zmax, &
          wavemaker_uvmean_h => wavemaker_uvmean, &
-         wavemaker_uvtrend_h => wavemaker_uvtrend, &
-         wavemaker_idir_h => wavemaker_idir, &
-         wavemaker_angfac_h => wavemaker_angfac, &
-         wavemaker_index_uv_h => wavemaker_index_uv, &
-         wavemaker_index_nmi_h => wavemaker_index_nmi, &
-         wavemaker_index_nmb_h => wavemaker_index_nmb, &
-         wavemaker_index_wmfp1_h => wavemaker_index_wmfp1, &
-         wavemaker_index_wmfp2_h => wavemaker_index_wmfp2, &
-         wavemaker_fac_wmfp_h => wavemaker_fac_wmfp
+         wavemaker_uvtrend_h => wavemaker_uvtrend
       use sfincs_snapwave, only: snapwave_tpmean, snapwave_tpigmean
       !
       implicit none
@@ -251,43 +237,22 @@ contains
       !
       ! ===== Layer 2: copy-IN host -> device for kernel READ set ==========
       !
-      ! Refresh device shadows of arrays the kernel reads. Required during
-      ! the staging period because unported per-step modules write only
-      ! host arrays and leave device shadows stale.
+      ! Catalog bridge-IN copies have been retired (gpu-bridge-in-trim):
+      ! every previously bridged array is either init-time-only or kept
+      ! up-to-date on-device by the previous step's kernel writer with no
+      ! per-step host writer in between. zs is retained because kcs==6
+      ! Neumann lateral boundary points have a per-step host writer
+      ! (catalog Section C.3); under USE_CUDA the actual writer at
+      ! sfincs_boundaries_gpu.cuf:194 is on-device, but we keep zs = zs_h
+      ! as the conservative default.
       !
-      ! q is also bridged-IN: the kernel only writes the wavemaker uv-face
-      ! subset, but the copy-OUT step below replaces the entire device q
-      ! into host q. Without this bridge-IN the non-wavemaker entries on
-      ! the device would be stale and the copy-OUT would clobber the host
-      ! q values just written by compute_fluxes.
+      ! The wavemaker_forcing_*_t_d allocations below are per-call
+      ! temporaries derived from the host-side time-interpolation results
+      ! computed earlier in this routine; they are NOT catalog bridge-IN
+      ! and remain intact.
       !
-      q    = q_h
-      zs   = zs_h
-      zb   = zb_h
-      zbuv = zbuv_h
-      if (allocated(hm0_h))    hm0    = hm0_h
-      if (allocated(hm0_ig_h)) hm0_ig = hm0_ig_h
-      if (subgrid_h) then
-         subgrid_z_zmax       = subgrid_z_zmax_h
-         subgrid_z_zmin       = subgrid_z_zmin_h
-         subgrid_uv_zmin      = subgrid_uv_zmin_h
-         subgrid_uv_zmax      = subgrid_uv_zmax_h
-         subgrid_uv_havg      = subgrid_uv_havg_h
-         subgrid_uv_nrep      = subgrid_uv_nrep_h
-         subgrid_uv_havg_zmax = subgrid_uv_havg_zmax_h
-      endif
-      wavemaker_uvmean    = wavemaker_uvmean_h
-      wavemaker_uvtrend   = wavemaker_uvtrend_h
-      wavemaker_idir      = wavemaker_idir_h
-      wavemaker_angfac    = wavemaker_angfac_h
-      wavemaker_index_uv  = wavemaker_index_uv_h
-      wavemaker_index_nmi = wavemaker_index_nmi_h
-      wavemaker_index_nmb = wavemaker_index_nmb_h
+      zs = zs_h
       if (wavemaker_timeseries_h) then
-         wavemaker_index_wmfp1 = wavemaker_index_wmfp1_h
-         wavemaker_index_wmfp2 = wavemaker_index_wmfp2_h
-         wavemaker_fac_wmfp    = wavemaker_fac_wmfp_h
-         !
          allocate(wavemaker_forcing_hm0_ig_t_d(wavemaker_nr_forcing_points_h))
          allocate(wavemaker_forcing_setup_t_d(wavemaker_nr_forcing_points_h))
          wavemaker_forcing_hm0_ig_t_d = wavemaker_forcing_hm0_ig_t
