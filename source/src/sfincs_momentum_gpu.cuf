@@ -11,14 +11,24 @@ module sfincs_momentum
    ! suffixed _h via USE-rename; device-side `use sfincs_data_device` arrays
    ! keep their bare names. CUDA Fortran translates `<dev> = <host>` (and
    ! vice versa) to cudaMemcpy at the assignment level. The per-step bridge-IN
-   ! block has been retired (gpu-bridge-in-trim, SOR-782): every kernel-read
-   ! array is either init-time-only (mesh / index / geometry / friction /
+   ! block has been trimmed (gpu-bridge-in-trim, SOR-782): every kernel-read
+   ! array that is init-time-only (mesh / index / geometry / friction /
    ! static initial state, populated once by partition_and_localize) or
-   ! written on-device the previous step with no host writer in between, so
-   ! its device shadow is already up-to-date. The single retained bridge-IN
-   ! is `zs = zs_h`, kept because update_boundary_conditions writes
-   ! zs_h(nmb) on host for kcs==6 (Neumann) cells before compute_fluxes runs
-   ! (catalog Section C.3). Bridge-OUT (D2H) below is unchanged.
+   ! written on-device the previous step with no host writer in between has
+   ! been dropped because its device shadow is already up-to-date. Two
+   ! bridge-IN copies are retained:
+   !   * `zs = zs_h` — update_boundary_conditions writes zs_h(nmb) on host
+   !     for kcs==6 (Neumann) cells before compute_fluxes runs
+   !     (catalog Section C.3).
+   !   * `uv = uv_h` — when nonhydrostatic is on, compute_nonhydrostatic
+   !     (sfincs_nonhydrostatic.f90:665) writes uv(ipuv) on host every step
+   !     between compute_fluxes calls (sfincs_lib.F90:633 then 659). The
+   !     downstream gpu-cuf bridge-IN sites for uv (compute_store_variables,
+   !     update_boundary_fluxes) are gated and do not run in all
+   !     configurations, so the next compute_fluxes must publish the host
+   !     uv to device unconditionally (catalog Section B.1, per-step host
+   !     writer found → KEEP).
+   ! Bridge-OUT (D2H) below is unchanged.
    !
    use cudafor
    use iso_fortran_env, only: int32
@@ -99,19 +109,24 @@ contains
       !
       ! ------ Copy-IN: host -> device for kernel READ set ------------------
       !
-      ! After gpu-bridge-in-trim (SOR-782), the only retained per-step H2D
-      ! copy is `zs = zs_h`, kept because update_boundary_conditions in
-      ! sfincs_boundaries_gpu.cuf:194 writes zs(nmb) on host for kcs==6
-      ! (Neumann lateral) cells before compute_fluxes runs. All other
-      ! kernel-read arrays are init-time-only (partition_and_localize
-      ! populates the device shadows once) or were written on-device the
-      ! previous step and bridged-OUT to host without any intervening
-      ! per-step host writer (q, uv, zb, zbuv, zbuvmx, kfuv, kcs, kcuv,
-      ! tauwu, tauwv, patm, fwuv, mesh / index / geometry / friction
-      ! arrays, subgrid tables, etc.). See PR description for the full
-      ! per-array tally.
+      ! After gpu-bridge-in-trim (SOR-782), two per-step H2D copies remain:
+      !   * `zs = zs_h` — update_boundary_conditions writes zs(nmb) on host
+      !     for kcs==6 (Neumann lateral) cells before compute_fluxes runs
+      !     (sfincs_boundaries_gpu.cuf:194).
+      !   * `uv = uv_h` — compute_nonhydrostatic writes uv(ipuv) on host
+      !     between compute_fluxes calls (sfincs_nonhydrostatic.f90:665);
+      !     downstream uv bridge-IN sites are conditional, so this copy
+      !     publishes the post-NH host uv to device unconditionally.
+      ! All other kernel-read arrays are init-time-only
+      ! (partition_and_localize populates the device shadows once) or were
+      ! written on-device the previous step and bridged-OUT to host without
+      ! any intervening per-step host writer (q, zb, zbuv, zbuvmx, kfuv,
+      ! kcs, kcuv, tauwu, tauwv, patm, fwuv, mesh / index / geometry /
+      ! friction arrays, subgrid tables, etc.). See PR description for the
+      ! full per-array tally.
       !
       zs = zs_h
+      uv = uv_h
       !
       ! ------ Seed q0/uv0 from q/uv (covers full 1..npuv+ncuv range) -------
       !
