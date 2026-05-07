@@ -5,14 +5,15 @@ module sfincs_meteo
    ! Shadows the CPU module's public surface using native CUDA Fortran kernels
    ! that operate on device-resident state declared by sfincs_data_device.
    !
-   ! IO routines (read_meteo_data, update_spiderweb_data, update_amuv_data,
-   ! update_amp_data, update_ampr_data) are re-exported from sfincs_meteo_io.
-   ! Those helpers continue to write host-side staging arrays (tauwu0/tauwu1,
-   ! patm0/patm1, prcp0/prcp1, windu0/windu1, ...). The per-step kernels
-   ! refresh the device shadows from those host arrays at launch (bridge-IN)
-   ! and publish the writes back to host at completion (bridge-OUT). The
-   ! bridge is wasted bandwidth once every per-step module is GPU-resident
-   ! but is required for correctness during the staging period.
+   ! Init-time IO (read_meteo_data) is re-exported from sfincs_meteo_io.
+   ! The four meteo-cadence spatial-interp routines (update_spiderweb_data,
+   ! update_amuv_data, update_amp_data, update_ampr_data) are GPU-native
+   ! and write the staging arrays (tauwu0/1, tauwv0/1, patm0/1, prcp0/1,
+   ! windu0/1, windv0/1) device-resident — no H2D refresh needed. The
+   ! per-step update_meteo_forcing still bridges previous-step results
+   ! (tauwu/tauwv/windu/windv/patm/prcp) in from host because the
+   ! bridge-OUT publishes those to host every step for downstream CPU
+   ! consumers (netCDF output, BMI getters, snapwave coupling).
    !
    use cudafor
    use sfincs_data_device
@@ -54,15 +55,10 @@ contains
          pavbnd_h => pavbnd, ngbnd_h => ngbnd, &
          wndfile_h => wndfile, prcpfile_h => prcpfile, &
          tauwu_h => tauwu, tauwv_h => tauwv, &
-         tauwu0_h => tauwu0, tauwv0_h => tauwv0, &
-         tauwu1_h => tauwu1, tauwv1_h => tauwv1, &
          windu_h => windu, windv_h => windv, &
-         windu0_h => windu0, windv0_h => windv0, &
-         windu1_h => windu1, windv1_h => windv1, &
          windmax_h => windmax, &
-         patm_h => patm, patm0_h => patm0, patm1_h => patm1, &
-         patmb_h => patmb, &
-         prcp_h => prcp, prcp0_h => prcp0, prcp1_h => prcp1, &
+         patm_h => patm, patmb_h => patmb, &
+         prcp_h => prcp, &
          cumprcp_h => cumprcp, netprcp_h => netprcp, &
          z_volume_h => z_volume, zs_h => zs, zb_h => zb, &
          nmindbnd_h => nmindbnd
@@ -102,18 +98,18 @@ contains
          !
          ! ------ Copy-IN: host -> device for kernel READ set ----------------
          !
+         ! Staging arrays tauwu0/1, tauwv0/1, windu0/1, windv0/1, patm0/1,
+         ! prcp0/1 are now produced device-resident by the GPU
+         ! update_*_data kernels — no H2D needed. The previous-step
+         ! tauwu/tauwv/windu/windv/patm/prcp values consumed by
+         ! k_meteo_time_interp's spinup-merge branch still need refresh
+         ! from host since the post-step CPU consumers (netCDF output,
+         ! BMI, snapwave) write them via the bridge-OUT.
+         !
          if (wind_h) then
-            tauwu0 = tauwu0_h
-            tauwv0 = tauwv0_h
-            tauwu1 = tauwu1_h
-            tauwv1 = tauwv1_h
             tauwu  = tauwu_h
             tauwv  = tauwv_h
             if (store_wind_h) then
-               windu0 = windu0_h
-               windv0 = windv0_h
-               windu1 = windu1_h
-               windv1 = windv1_h
                windu  = windu_h
                windv  = windv_h
                if (store_wind_max_h) windmax = windmax_h
@@ -121,14 +117,10 @@ contains
          endif
          !
          if (patmos_h) then
-            patm0 = patm0_h
-            patm1 = patm1_h
             patm  = patm_h
          endif
          !
          if (precip_h) then
-            prcp0   = prcp0_h
-            prcp1   = prcp1_h
             prcp    = prcp_h
             netprcp = netprcp_h
             if (store_cumulative_precipitation_h) cumprcp = cumprcp_h
@@ -581,15 +573,6 @@ contains
    !     amp_patm01 onto each cell, writing patm0/patm1.
    ! cudaDeviceSynchronize() between snapshot and spatial because the
    ! spatial kernel reads amp_patm01 written by snapshot.
-   !
-   ! After both halves complete, a D2H staging block publishes the
-   ! device-resident patm0/patm1 back to the host arrays. This is needed
-   ! during the staging period because (a) the still-CPU
-   ! update_spiderweb_data reads host patm0/patm1 as a merge base, and
-   ! (b) the bridge-IN block in update_meteo_forcing would otherwise
-   ! H2D-clobber the device writes with stale host values. The D2H block
-   ! drops once all four spatial-interp kernels are GPU-resident and the
-   ! bridge-trim issue lands.
    ! -----------------------------------------------------------------
    subroutine update_amp_data()
       !
@@ -600,8 +583,7 @@ contains
                              amp_x_llcorner_h => amp_x_llcorner, &
                              amp_y_llcorner_h => amp_y_llcorner, &
                              amp_times_h => amp_times, &
-                             gapres_h => gapres, &
-                             patm0_h => patm0, patm1_h => patm1
+                             gapres_h => gapres
       !
       implicit none
       !
@@ -668,14 +650,6 @@ contains
          istat = cudaDeviceSynchronize()
          !
       enddo
-      !
-      ! D2H staging — keep host patm0/patm1 in sync for downstream CPU
-      ! consumers (still-CPU update_spiderweb_data merge base) and to
-      ! make the bridge-IN H2D copy in update_meteo_forcing a no-op.
-      ! Removed once SOR-740 (bridge-trim integration) lands.
-      !
-      patm0_h = patm0
-      patm1_h = patm1
       !
    end subroutine update_amp_data
    !
@@ -806,14 +780,6 @@ contains
    !     ampr_pr01 onto each cell, writing prcp0/prcp1 in m/s.
    ! cudaDeviceSynchronize() between snapshot and spatial because the
    ! spatial kernel reads ampr_pr01 written by snapshot.
-   !
-   ! After both halves complete, a D2H staging block publishes the
-   ! device-resident prcp0/prcp1 back to the host arrays. Needed during
-   ! the staging period so (a) the still-CPU update_spiderweb_data
-   ! reads host prcp0/prcp1 as a merge base, and (b) the bridge-IN H2D
-   ! in update_meteo_forcing does not clobber the device writes with
-   ! stale host values. The D2H block drops once the bridge-trim issue
-   ! lands.
    ! -----------------------------------------------------------------
    subroutine update_ampr_data()
       !
@@ -824,8 +790,7 @@ contains
                              ampr_x_llcorner_h => ampr_x_llcorner, &
                              ampr_y_llcorner_h => ampr_y_llcorner, &
                              ampr_times_h => ampr_times, &
-                             ampr_block_h => ampr_block, &
-                             prcp0_h => prcp0, prcp1_h => prcp1
+                             ampr_block_h => ampr_block
       !
       implicit none
       !
@@ -899,14 +864,6 @@ contains
          istat = cudaDeviceSynchronize()
          !
       enddo
-      !
-      ! D2H staging — keep host prcp0/prcp1 in sync for downstream CPU
-      ! consumers (still-CPU update_spiderweb_data merge base) and to
-      ! make the bridge-IN H2D copy in update_meteo_forcing a no-op.
-      ! Removed once SOR-740 lands.
-      !
-      prcp0_h = prcp0
-      prcp1_h = prcp1
       !
    end subroutine update_ampr_data
    !
@@ -1040,15 +997,6 @@ contains
    !     branch does not write wind components, matching CPU sibling).
    ! cudaDeviceSynchronize() between snapshot and spatial because the
    ! spatial kernel reads amuv_wu01/amuv_wv01 written by snapshot.
-   !
-   ! After both halves complete, a D2H staging block publishes the
-   ! device-resident tauwu0/tauwv0/tauwu1/tauwv1 (and windu0/windv0/
-   ! windu1/windv1 when store_wind) back to the host arrays. Needed
-   ! during the staging period because (a) the still-CPU
-   ! update_spiderweb_data reads host tauwu0/tauwv0/... as a merge
-   ! base, and (b) the bridge-IN block in update_meteo_forcing would
-   ! otherwise H2D-clobber device writes with stale host values.
-   ! Drops once SOR-739 (bridge-trim) lands.
    ! -----------------------------------------------------------------
    subroutine update_amuv_data()
       !
@@ -1062,11 +1010,7 @@ contains
                              waveage_h => waveage, radstr_h => radstr, &
                              store_wind_h => store_wind, &
                              rhoa_h => rhoa, rhow_h => rhow, &
-                             cosrot_h => cosrot, sinrot_h => sinrot, &
-                             tauwu0_h => tauwu0, tauwv0_h => tauwv0, &
-                             tauwu1_h => tauwu1, tauwv1_h => tauwv1, &
-                             windu0_h => windu0, windv0_h => windv0, &
-                             windu1_h => windu1, windv1_h => windv1
+                             cosrot_h => cosrot, sinrot_h => sinrot
       !
       implicit none
       !
@@ -1136,23 +1080,6 @@ contains
          istat = cudaDeviceSynchronize()
          !
       enddo
-      !
-      ! D2H staging — keep host tauwu0/tauwv0/tauwu1/tauwv1 (and the
-      ! wind components when store_wind) in sync for downstream CPU
-      ! consumers (still-CPU update_spiderweb_data merge base) and to
-      ! make the bridge-IN H2D copy in update_meteo_forcing a no-op.
-      ! Removed once SOR-739 (bridge-trim) lands.
-      !
-      tauwu0_h = tauwu0
-      tauwv0_h = tauwv0
-      tauwu1_h = tauwu1
-      tauwv1_h = tauwv1
-      if (store_wind_h) then
-         windu0_h = windu0
-         windv0_h = windv0
-         windu1_h = windu1
-         windv1_h = windv1
-      endif
       !
    end subroutine update_amuv_data
    !
@@ -1352,13 +1279,6 @@ contains
    !     unconditionally before the radius check.
    ! cudaDeviceSynchronize() between snapshot and spatial because the
    ! spatial kernel reads the *01 scratches written by snapshot.
-   !
-   ! After both halves complete, a D2H staging block publishes
-   ! tauwu0/tauwv0/tauwu1/tauwv1 (plus patm0/patm1, prcp0/prcp1,
-   ! windu0/windv0/windu1/windv1 as appropriate) back to the host
-   ! arrays. Needed so the bridge-IN block in update_meteo_forcing
-   ! does not H2D-clobber the device writes with stale host values.
-   ! Will be removed by the bridge-trim issue (SOR-740).
    ! -----------------------------------------------------------------
    subroutine update_spiderweb_data()
       !
@@ -1384,13 +1304,7 @@ contains
                              ampfile_h => ampfile, &
                              netampfile_h => netampfile, &
                              amprfile_h => amprfile, &
-                             netamprfile_h => netamprfile, &
-                             tauwu0_h => tauwu0, tauwv0_h => tauwv0, &
-                             tauwu1_h => tauwu1, tauwv1_h => tauwv1, &
-                             windu0_h => windu0, windv0_h => windv0, &
-                             windu1_h => windu1, windv1_h => windv1, &
-                             patm0_h => patm0, patm1_h => patm1, &
-                             prcp0_h => prcp0, prcp1_h => prcp1
+                             netamprfile_h => netamprfile
       !
       implicit none
       !
@@ -1488,34 +1402,6 @@ contains
          istat = cudaDeviceSynchronize()
          !
       enddo
-      !
-      ! D2H staging — keep host tauwu0/tauwv0/tauwu1/tauwv1 (and
-      ! patm0/patm1, prcp0/prcp1, windu0/windv0/windu1/windv1 as
-      ! appropriate) in sync for downstream CPU consumers and to make
-      ! the bridge-IN H2D copy in update_meteo_forcing a no-op.
-      ! Removed once the bridge-trim issue (SOR-740) lands.
-      !
-      tauwu0_h = tauwu0
-      tauwv0_h = tauwv0
-      tauwu1_h = tauwu1
-      tauwv1_h = tauwv1
-      !
-      if (patmos_h) then
-         patm0_h = patm0
-         patm1_h = patm1
-      endif
-      !
-      if (do_prcp) then
-         prcp0_h = prcp0
-         prcp1_h = prcp1
-      endif
-      !
-      if (store_wind_h) then
-         windu0_h = windu0
-         windv0_h = windv0
-         windu1_h = windu1
-         windv1_h = windv1
-      endif
       !
    end subroutine update_spiderweb_data
    !
