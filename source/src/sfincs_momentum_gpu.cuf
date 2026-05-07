@@ -10,9 +10,15 @@ module sfincs_momentum
    ! Bridge convention (gpu-foundation): host-side `use sfincs_data` arrays are
    ! suffixed _h via USE-rename; device-side `use sfincs_data_device` arrays
    ! keep their bare names. CUDA Fortran translates `<dev> = <host>` (and
-   ! vice versa) to cudaMemcpy at the assignment level. This bridge stays in
-   ! place until the surrounding modules (continuity, etc.) become GPU
-   ! resident, at which point the bandwidth waste becomes harmless.
+   ! vice versa) to cudaMemcpy at the assignment level. The per-step bridge-IN
+   ! block has been retired (gpu-bridge-in-trim, SOR-782): every kernel-read
+   ! array is either init-time-only (mesh / index / geometry / friction /
+   ! static initial state, populated once by partition_and_localize) or
+   ! written on-device the previous step with no host writer in between, so
+   ! its device shadow is already up-to-date. The single retained bridge-IN
+   ! is `zs = zs_h`, kept because update_boundary_conditions writes
+   ! zs_h(nmb) on host for kcs==6 (Neumann) cells before compute_fluxes runs
+   ! (catalog Section C.3). Bridge-OUT (D2H) below is unchanged.
    !
    use cudafor
    use iso_fortran_env, only: int32
@@ -76,44 +82,8 @@ contains
          snapwave_h => snapwave, &
          q_h => q, q0_h => q0, uv_h => uv, uv0_h => uv0, &
          timestep_analysis_required_timestep_h => timestep_analysis_required_timestep, &
-         kcs_h => kcs, kfuv_h => kfuv, kcuv_h => kcuv, &
-         zs_h => zs, zb_h => zb, zbuv_h => zbuv, zbuvmx_h => zbuvmx, &
-         zsderv_h => zsderv, &
-         z_flags_iref_h => z_flags_iref, &
-         uv_flags_iref_h => uv_flags_iref, &
-         uv_flags_type_h => uv_flags_type, &
-         uv_flags_dir_h => uv_flags_dir, &
-         mask_adv_h => mask_adv, &
-         ibuvdir_h => ibuvdir, uvmean_h => uvmean, &
-         z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
-         z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
-         uv_index_z_nm_h => uv_index_z_nm, uv_index_z_nmu_h => uv_index_z_nmu, &
-         uv_index_u_nmd_h => uv_index_u_nmd, uv_index_u_nmu_h => uv_index_u_nmu, &
-         uv_index_u_ndm_h => uv_index_u_ndm, uv_index_u_num_h => uv_index_u_num, &
-         uv_index_v_ndm_h => uv_index_v_ndm, uv_index_v_ndmu_h => uv_index_v_ndmu, &
-         uv_index_v_nm_h => uv_index_v_nm, uv_index_v_nmu_h => uv_index_v_nmu, &
-         cuv_index_uv_h => cuv_index_uv, cuv_index_uv1_h => cuv_index_uv1, &
-         cuv_index_uv2_h => cuv_index_uv2, &
-         dxminv_h => dxminv, dxrinv_h => dxrinv, dyrinv_h => dyrinv, &
-         dxm2inv_h => dxm2inv, dxr2inv_h => dxr2inv, dyr2inv_h => dyr2inv, &
-         dxrinvc_h => dxrinvc, dyrinvc_h => dyrinvc, &
-         dxm_h => dxm, dxrm_h => dxrm, dyrm_h => dyrm, &
-         cell_area_m2_h => cell_area_m2, cell_area_h => cell_area, &
-         gn2uv_h => gn2uv, fcorio2d_h => fcorio2d, &
-         storage_volume_h => storage_volume, &
-         nuvisc_h => nuvisc, x73_h => x73, gnapp2_h => gnapp2, &
-         z_volume_h => z_volume, &
-         subgrid_uv_zmin_h => subgrid_uv_zmin, &
-         subgrid_uv_zmax_h => subgrid_uv_zmax, &
-         subgrid_uv_havg_h => subgrid_uv_havg, &
-         subgrid_uv_nrep_h => subgrid_uv_nrep, &
-         subgrid_uv_pwet_h => subgrid_uv_pwet, &
-         subgrid_uv_havg_zmax_h => subgrid_uv_havg_zmax, &
-         subgrid_uv_nrep_zmax_h => subgrid_uv_nrep_zmax, &
-         subgrid_uv_fnfit_h => subgrid_uv_fnfit, &
-         subgrid_uv_navg_w_h => subgrid_uv_navg_w, &
-         tauwu_h => tauwu, tauwv_h => tauwv, &
-         patm_h => patm, fwuv_h => fwuv
+         kfuv_h => kfuv, &
+         zs_h => zs
       !
       implicit none
       !
@@ -127,103 +97,21 @@ contains
       !
       call system_clock(count0, count_rate, count_max)
       !
-      ! ------ Copy-IN: host -> device for kernel READ set (criterion 6) ----
+      ! ------ Copy-IN: host -> device for kernel READ set ------------------
       !
-      ! Catalog mirrors are pre-allocated by partition_and_localize. CUDA
-      ! Fortran translates `<dev> = <host>` to cudaMemcpy at the assignment
-      ! level. Bridges are always-allocated unless the corresponding host
-      ! array is conditionally allocated, in which case `allocated(...)` on
-      ! the host side is the gate.
+      ! After gpu-bridge-in-trim (SOR-782), the only retained per-step H2D
+      ! copy is `zs = zs_h`, kept because update_boundary_conditions in
+      ! sfincs_boundaries_gpu.cuf:194 writes zs(nmb) on host for kcs==6
+      ! (Neumann lateral) cells before compute_fluxes runs. All other
+      ! kernel-read arrays are init-time-only (partition_and_localize
+      ! populates the device shadows once) or were written on-device the
+      ! previous step and bridged-OUT to host without any intervening
+      ! per-step host writer (q, uv, zb, zbuv, zbuvmx, kfuv, kcs, kcuv,
+      ! tauwu, tauwv, patm, fwuv, mesh / index / geometry / friction
+      ! arrays, subgrid tables, etc.). See PR description for the full
+      ! per-array tally.
       !
-      kcs           = kcs_h
-      kfuv          = kfuv_h
-      kcuv          = kcuv_h
-      zs            = zs_h
-      zb            = zb_h
-      zbuv          = zbuv_h
-      zbuvmx        = zbuvmx_h
-      q             = q_h
-      uv            = uv_h
-      z_flags_iref  = z_flags_iref_h
-      uv_flags_iref = uv_flags_iref_h
-      uv_flags_type = uv_flags_type_h
-      uv_flags_dir  = uv_flags_dir_h
-      z_index_uv_md = z_index_uv_md_h
-      z_index_uv_nd = z_index_uv_nd_h
-      z_index_uv_mu = z_index_uv_mu_h
-      z_index_uv_nu = z_index_uv_nu_h
-      uv_index_z_nm = uv_index_z_nm_h
-      uv_index_z_nmu = uv_index_z_nmu_h
-      uv_index_u_nmd = uv_index_u_nmd_h
-      uv_index_u_nmu = uv_index_u_nmu_h
-      uv_index_u_ndm = uv_index_u_ndm_h
-      uv_index_u_num = uv_index_u_num_h
-      uv_index_v_ndm = uv_index_v_ndm_h
-      uv_index_v_ndmu = uv_index_v_ndmu_h
-      uv_index_v_nm  = uv_index_v_nm_h
-      uv_index_v_nmu = uv_index_v_nmu_h
-      dxrinv        = dxrinv_h
-      dyrinv        = dyrinv_h
-      dxr2inv       = dxr2inv_h
-      dyr2inv       = dyr2inv_h
-      gn2uv         = gn2uv_h
-      nuvisc        = nuvisc_h
-      x73           = x73_h
-      !
-      if (crsgeo_h) then
-         dxminv       = dxminv_h
-         dxm2inv      = dxm2inv_h
-         dxm          = dxm_h
-         cell_area_m2 = cell_area_m2_h
-         fcorio2d     = fcorio2d_h
-      else
-         cell_area    = cell_area_h
-      endif
-      !
-      if (use_quadtree_h) then
-         dxrinvc = dxrinvc_h
-         dyrinvc = dyrinvc_h
-      endif
-      !
-      if (use_quadtree_h .or. crsgeo_h) then
-         dxrm = dxrm_h
-         dyrm = dyrm_h
-      endif
-      !
-      if (ncuv_h > 0) then
-         cuv_index_uv  = cuv_index_uv_h
-         cuv_index_uv1 = cuv_index_uv1_h
-         cuv_index_uv2 = cuv_index_uv2_h
-      endif
-      !
-      if (allocated(mask_adv_h))   mask_adv = mask_adv_h
-      if (allocated(zsderv_h))     zsderv   = zsderv_h
-      if (allocated(ibuvdir_h))    ibuvdir  = ibuvdir_h
-      if (allocated(uvmean_h))     uvmean   = uvmean_h
-      if (allocated(z_volume_h))   z_volume = z_volume_h
-      if (allocated(storage_volume_h)) storage_volume = storage_volume_h
-      if (allocated(gnapp2_h))     gnapp2   = gnapp2_h
-      !
-      if (subgrid_h) then
-         subgrid_uv_zmin      = subgrid_uv_zmin_h
-         subgrid_uv_zmax      = subgrid_uv_zmax_h
-         subgrid_uv_havg      = subgrid_uv_havg_h
-         subgrid_uv_nrep      = subgrid_uv_nrep_h
-         subgrid_uv_pwet      = subgrid_uv_pwet_h
-         subgrid_uv_havg_zmax = subgrid_uv_havg_zmax_h
-         subgrid_uv_nrep_zmax = subgrid_uv_nrep_zmax_h
-         subgrid_uv_fnfit     = subgrid_uv_fnfit_h
-         subgrid_uv_navg_w    = subgrid_uv_navg_w_h
-      endif
-      !
-      if (wind_h) then
-         tauwu = tauwu_h
-         tauwv = tauwv_h
-      endif
-      !
-      if (patmos_h) patm = patm_h
-      !
-      if (snapwave_h) fwuv = fwuv_h
+      zs = zs_h
       !
       ! ------ Seed q0/uv0 from q/uv (covers full 1..npuv+ncuv range) -------
       !
