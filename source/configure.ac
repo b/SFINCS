@@ -41,6 +41,11 @@ AC_ARG_ENABLE([cuda],
    AS_HELP_STRING([--enable-cuda], [Build with CUDA Fortran (requires nvfortran)]),
    [enable_cuda=$enableval], [enable_cuda=no])
 
+dnl optional fast-math mode for the CUDA build: drops -Kieee for max performance
+AC_ARG_ENABLE([fast-math],
+   AS_HELP_STRING([--enable-fast-math], [Drop -Kieee from CUDA FCFLAGS for max performance; only valid with --enable-cuda]),
+   [enable_fast_math=$enableval], [enable_fast_math=no])
+
 AM_CONDITIONAL([USE_CUDA], [test "x$enable_cuda" = "xyes"])
 
 AS_IF([test "x$enable_cuda" = "xyes"], [
@@ -48,12 +53,23 @@ AS_IF([test "x$enable_cuda" = "xyes"], [
    # Verify nvfortran
    AS_IF([test "$FC" = "nvfortran" -o -n "`echo $FC | grep nvfortran`"], [],
       [AC_MSG_ERROR([--enable-cuda requires FC=nvfortran])])
-   # Append CUDA flags. -Kieee disables the non-IEEE shortcuts that `-fast`
-   # enables (FMA contraction, denormal flushing, reciprocal approximations,
-   # reassociation), so nvfortran's float arithmetic matches gfortran's
-   # default IEEE-strict behavior. Required for CPU/GPU numeric agreement.
-   FCFLAGS="$FCFLAGS -cuda -gpu=cc86,cc80,cc90 -Kieee -DUSE_CUDA"
+   # Gate -Kieee on the fast-math switch. -Kieee disables the non-IEEE
+   # shortcuts that `-fast` enables (FMA contraction, denormal flushing,
+   # reciprocal approximations, reassociation), so nvfortran's float
+   # arithmetic matches gfortran's default IEEE-strict behavior. Required
+   # for CPU/GPU numeric agreement under the validation harness; dropped
+   # via --enable-fast-math when the user opts into max performance.
+   AS_IF([test "x$enable_fast_math" = "xyes"],
+      [cuda_ieee_flag=""; cuda_mode_msg="fast-math (-Kieee dropped)"],
+      [cuda_ieee_flag="-Kieee"; cuda_mode_msg="IEEE-strict (-Kieee)"])
+   AC_MSG_NOTICE([CUDA build mode: $cuda_mode_msg])
+   FCFLAGS="$FCFLAGS -cuda -gpu=cc86,cc80,cc90 $cuda_ieee_flag -DUSE_CUDA"
 ])
+
+dnl Cross-flag guard: --enable-fast-math is only meaningful with --enable-cuda.
+dnl Lives outside both AS_IF blocks above so it fires regardless of flag order.
+AS_IF([test "x$enable_fast_math" = "xyes" -a "x$enable_cuda" != "xyes"],
+   [AC_MSG_ERROR([--enable-fast-math requires --enable-cuda])])
 
 dnl MPI detection for CUDA builds (NVHPC HPC-X provides mpifort wrapping nvfortran).
 dnl Gated on --enable-cuda so CPU builds never invoke mpifort.
