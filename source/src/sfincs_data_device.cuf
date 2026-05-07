@@ -379,4 +379,29 @@ module sfincs_data_device
    real, device, allocatable :: halo_send_buf_uv(:,:)
    real, device, allocatable :: halo_recv_buf_uv(:,:)
    !
+   ! SnapWave gather/scatter metadata (SOR-711). Populated once at startup
+   ! by partition_and_localize and consumed every dtwave interval inside
+   ! sfincs_snapwave_gpu.cuf::update_wave_field. The SnapWave solver itself
+   ! stays CPU on rank 0 (out of scope for the gpu-multi-gpu sub-epic), so
+   ! each rank packs its rank-local slice of zs / windu / windv into a
+   ! contiguous send buffer (in local_to_global(1:npn_local) order) and
+   ! MPI_Gatherv-es to rank 0; rank 0 unpacks into its full-size global host
+   ! arrays via gather_perrank_local_to_global, runs the solver, then packs
+   ! its full-size fwuv into a per-rank-ordered send buffer for an
+   ! MPI_Scatterv that returns each rank's owned uv slice.
+   !
+   ! Counts and displacements live on every rank (both sides of the
+   ! collective need them); the perrank_local_to_global flat permutation
+   ! is only meaningful on rank 0 (other ranks allocate a placeholder).
+   ! Position k in the flat perrank array gives the global cell / uv id
+   ! that the k-th element of the gathered flat data buffer corresponds to,
+   ! so unpack and pre-scatter pack are single linear loops over k.
+   !
+   integer, allocatable :: gather_recvcounts(:)
+   integer, allocatable :: gather_displacements(:)
+   integer, allocatable :: gather_perrank_local_to_global(:)
+   integer, allocatable :: gather_uv_recvcounts(:)
+   integer, allocatable :: gather_uv_displacements(:)
+   integer, allocatable :: gather_perrank_local_to_global_uv(:)
+   !
 end module sfincs_data_device

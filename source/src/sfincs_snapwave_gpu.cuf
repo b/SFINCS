@@ -23,6 +23,7 @@ module sfincs_snapwave
    ! except the first.
    !
    use cudafor
+   use mpi
    use sfincs_log
    use sfincs_error
    use sfincs_snapwave_init
@@ -34,7 +35,14 @@ module sfincs_snapwave
       windv_dev  => windv, &
       fwuv_dev   => fwuv, &
       hm0_dev    => hm0, &
-      hm0_ig_dev => hm0_ig
+      hm0_ig_dev => hm0_ig, &
+      mpi_rank, mpi_size, &
+      npn_local, npuv_local, &
+      local_to_global, local_to_global_uv, &
+      gather_recvcounts, gather_displacements, &
+      gather_perrank_local_to_global, &
+      gather_uv_recvcounts, gather_uv_displacements, &
+      gather_perrank_local_to_global_uv
    !
    implicit none
    !
@@ -69,6 +77,24 @@ contains
    integer   :: ip, nm, nmu, idir
    real*8    :: t
    !
+   ! ===== gpu-multi-gpu (SOR-711) ===========================================
+   ! Multi-rank gather/scatter scratch buffers. The CPU SnapWave solver runs
+   ! against the full unpartitioned mesh on rank 0 only; under mpi_size > 1
+   ! every rank contributes its rank-local slice of zs / windu / windv via
+   ! MPI_Gatherv, rank 0 unpacks into its full-size host arrays, runs the
+   ! solver, then MPI_Scatterv-s the resulting fwuv slices back. Buffers
+   ! sized for owned cells / uv on each rank, plus a flat npn_h / npuv_h
+   ! receive (rank 0) / send (rank 0) view used during pack/unpack.
+   !
+   real*4,    dimension(:), allocatable       :: gather_send_zs
+   real*4,    dimension(:), allocatable       :: gather_send_windu
+   real*4,    dimension(:), allocatable       :: gather_send_windv
+   real*4,    dimension(:), allocatable       :: gather_recv_flat
+   real*4,    dimension(:), allocatable       :: scatter_send_flat
+   real*4,    dimension(:), allocatable       :: scatter_recv_fwuv
+   integer   :: i, k, ierr
+   integer   :: total_npn_gathered, total_npuv_gathered
+   !
    call system_clock(count0, count_rate, count_max)
    !
    ! ===== Bridge-IN: D2H copies of arrays the host loops below read =====
@@ -76,7 +102,10 @@ contains
    ! Refresh host-side SFINCS state from the device shadows so the host
    ! loops computing snapwave_depth / snapwave_u10 / snapwave_u10dir see
    ! fresh values produced by GPU kernels earlier in the step. zsm is
-   ! only read when a wavemaker is active (see CPU sibling).
+   ! only read when a wavemaker is active (see CPU sibling). Under
+   ! mpi_size > 1 the rank-local slice is still authoritative on each
+   ! rank's device shadow; the gather below assembles rank 0's full-size
+   ! global view from those slices.
    !
    zs    = zs_dev
    if (wavemaker) then
@@ -86,6 +115,74 @@ contains
       windu = windu_dev
       windv = windv_dev
    endif
+   !
+   ! ===== Multi-rank gather: rank-local slices -> rank 0 global host =====
+   !
+   ! Per AC #2 / AC #3 of SOR-711: each rank packs its owned cells (in
+   ! local_to_global(1:npn_local) order) into a contiguous send buffer,
+   ! MPI_Gatherv-s to rank 0, and rank 0 scatters the gathered flat buffer
+   ! back into its full-size host arrays at the global cell positions
+   ! recorded by gather_perrank_local_to_global. mpi_size == 1 short-
+   ! circuits the entire block: rank 0 already owns everything, the
+   ! bridge-IN above already populated the global host arrays, and the
+   ! existing solver path runs unchanged.
+   !
+   if (mpi_size > 1) then
+      total_npn_gathered = sum(gather_recvcounts)
+      allocate(gather_send_zs(max(npn_local, 1)))
+      do i = 1, npn_local
+         gather_send_zs(i) = real(zs(local_to_global(i)), kind=4)
+      end do
+      if (mpi_rank == 0) then
+         allocate(gather_recv_flat(max(total_npn_gathered, 1)))
+      else
+         allocate(gather_recv_flat(1))
+      end if
+      call mpi_gatherv(gather_send_zs, npn_local, MPI_REAL, &
+                       gather_recv_flat, gather_recvcounts, gather_displacements, MPI_REAL, &
+                       0, MPI_COMM_WORLD, ierr)
+      if (mpi_rank == 0) then
+         do k = 1, total_npn_gathered
+            zs(gather_perrank_local_to_global(k)) = real(gather_recv_flat(k), kind=8)
+         end do
+      end if
+      deallocate(gather_send_zs)
+      !
+      if (wind .and. snapwavewind) then
+         allocate(gather_send_windu(max(npn_local, 1)))
+         allocate(gather_send_windv(max(npn_local, 1)))
+         do i = 1, npn_local
+            gather_send_windu(i) = windu(local_to_global(i))
+            gather_send_windv(i) = windv(local_to_global(i))
+         end do
+         call mpi_gatherv(gather_send_windu, npn_local, MPI_REAL, &
+                          gather_recv_flat, gather_recvcounts, gather_displacements, MPI_REAL, &
+                          0, MPI_COMM_WORLD, ierr)
+         if (mpi_rank == 0) then
+            do k = 1, total_npn_gathered
+               windu(gather_perrank_local_to_global(k)) = gather_recv_flat(k)
+            end do
+         end if
+         call mpi_gatherv(gather_send_windv, npn_local, MPI_REAL, &
+                          gather_recv_flat, gather_recvcounts, gather_displacements, MPI_REAL, &
+                          0, MPI_COMM_WORLD, ierr)
+         if (mpi_rank == 0) then
+            do k = 1, total_npn_gathered
+               windv(gather_perrank_local_to_global(k)) = gather_recv_flat(k)
+            end do
+         end if
+         deallocate(gather_send_windu, gather_send_windv)
+      end if
+      deallocate(gather_recv_flat)
+   end if
+   !
+   ! ===== CPU SnapWave solver path: rank 0 only =========================
+   !
+   ! The unparallelised CPU solver runs against the full global mesh on
+   ! rank 0. Other ranks skipped to the scatter step below; their fwuv
+   ! gets filled by the scatter that follows.
+   !
+   if (mpi_rank == 0) then
    !
    allocate(fwx0(np))
    allocate(fwy0(np))
@@ -277,16 +374,61 @@ contains
       !
    enddo
    !
+   end if ! mpi_rank == 0
+   !
+   ! ===== Multi-rank scatter: rank 0 fwuv -> rank-local slices ==========
+   !
+   ! Per AC #5 / AC #7 of SOR-711: fwuv is uv-indexed (declared real*4
+   ! dimension(npuv) in sfincs_data and assigned at fwuv(ip) where ip
+   ! ranges 1..npuv in the loop above), so the scatter uses the uv
+   ! mapping arrays. Rank 0 packs its full-size fwuv into a per-rank
+   ! ordered send buffer (position k -> global uv id
+   ! gather_perrank_local_to_global_uv(k)); MPI_Scatterv distributes
+   ! npuv_local-sized slices to each rank; each rank unpacks into its
+   ! host fwuv at the global uv positions recorded in
+   ! local_to_global_uv(1:npuv_local). mpi_size == 1 short-circuits as
+   ! with the gather above.
+   !
+   if (mpi_size > 1) then
+      total_npuv_gathered = sum(gather_uv_recvcounts)
+      if (mpi_rank == 0) then
+         allocate(scatter_send_flat(max(total_npuv_gathered, 1)))
+         do k = 1, total_npuv_gathered
+            scatter_send_flat(k) = fwuv(gather_perrank_local_to_global_uv(k))
+         end do
+      else
+         allocate(scatter_send_flat(1))
+      end if
+      allocate(scatter_recv_fwuv(max(npuv_local, 1)))
+      call mpi_scatterv(scatter_send_flat, gather_uv_recvcounts, gather_uv_displacements, MPI_REAL, &
+                        scatter_recv_fwuv, npuv_local, MPI_REAL, &
+                        0, MPI_COMM_WORLD, ierr)
+      do i = 1, npuv_local
+         fwuv(local_to_global_uv(i)) = scatter_recv_fwuv(i)
+      end do
+      deallocate(scatter_send_flat, scatter_recv_fwuv)
+   end if
+   !
    ! ===== Bridge-OUT: H2D copies of arrays consumed by GPU kernels =====
    !
-   ! fwuv : read by the GPU momentum kernel.
+   ! fwuv : read by the GPU momentum kernel. Every rank publishes its
+   !        rank-local slice (post-scatter, the global uv positions
+   !        owned by this rank carry fresh values; non-owned positions
+   !        carry stale data that other ranks' halo exchanges and own
+   !        bridge-OUTs override on the device side as usual under the
+   !        full-size-shadow regime).
    ! hm0 / hm0_ig : read by k_wavemaker_fluxes in sfincs_wavemaker_gpu.cuf.
-   ! Without these copies, GPU kernels would observe stale device shadows
-   ! on every step except the first.
+   !        Only rank 0 has fresh values for these arrays (no scatter is
+   !        defined for them in SOR-711's scope: it covers fwuv only).
+   !        Other ranks therefore skip the H2D so they do not publish
+   !        stale host data on top of whatever is already on their
+   !        device shadow.
    !
    fwuv_dev   = fwuv
-   hm0_dev    = hm0
-   hm0_ig_dev = hm0_ig
+   if (mpi_rank == 0) then
+      hm0_dev    = hm0
+      hm0_ig_dev = hm0_ig
+   end if
    !
    call system_clock(count1, count_rate, count_max)
    tloop = tloop + 1.0*(count1 - count0)/count_rate
