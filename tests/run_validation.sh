@@ -77,7 +77,7 @@ populate_run_dir() {
         case "$base" in
             README.md|fetch.sh) ;;
             sfincs.inp) cp -- "$entry" "$run_dir/$base" ;;
-            *) ln -sf -- "$entry" "$run_dir/$base" ;;
+            *) ln -srf -- "$entry" "$run_dir/$base" ;;
         esac
     done
 }
