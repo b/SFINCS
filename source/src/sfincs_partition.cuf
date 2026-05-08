@@ -46,6 +46,10 @@ module sfincs_partition
       subgrid_z_dep_h => subgrid_z_dep, subgrid_z_volmax_h => subgrid_z_volmax, &
       z_index_uv_md_h => z_index_uv_md, z_index_uv_nd_h => z_index_uv_nd, &
       z_index_uv_mu_h => z_index_uv_mu, z_index_uv_nu_h => z_index_uv_nu, &
+      z_index_uv_md1_h => z_index_uv_md1, z_index_uv_md2_h => z_index_uv_md2, &
+      z_index_uv_mu1_h => z_index_uv_mu1, z_index_uv_mu2_h => z_index_uv_mu2, &
+      z_index_uv_nd1_h => z_index_uv_nd1, z_index_uv_nd2_h => z_index_uv_nd2, &
+      z_index_uv_nu1_h => z_index_uv_nu1, z_index_uv_nu2_h => z_index_uv_nu2, &
       uv_index_z_nm_h => uv_index_z_nm, uv_index_z_nmu_h => uv_index_z_nmu, &
       uv_index_u_nmd_h => uv_index_u_nmd, uv_index_u_nmu_h => uv_index_u_nmu, &
       uv_index_u_ndm_h => uv_index_u_ndm, uv_index_u_num_h => uv_index_u_num, &
@@ -868,18 +872,38 @@ contains
       ! same neighbor walk; here we only need the receive flags because
       ! they are what defines local_to_global's halo region.
       !
-      if (mpi_size > 1 .and. allocated(z_index_uv_md_h) .and. &
-          allocated(z_index_uv_nd_h) .and. allocated(z_index_uv_mu_h) .and. &
-          allocated(z_index_uv_nu_h) .and. allocated(uv_index_z_nm_h) .and. &
-          allocated(uv_index_z_nmu_h)) then
+      ! For cross-refinement-level quadtree edges we MUST enumerate the
+      ! split *_md1/md2/mu1/mu2/nd1/nd2/nu1/nu2 arrays rather than the
+      ! collapsed *_md/_mu/_nd/_nu arrays. When a coarse cell has finer
+      ! neighbors on a side, sfincs_domain assigns the collapsed slot to
+      ! a "combined" cuv_index_uv pseudo-index that lies outside the
+      ! 1..npuv range, so the coarse-owning rank skips that slot and
+      ! never sees the cross-level halo cells / edges. The fine-owning
+      ! rank, in contrast, walks each fine cell's md1/mu1/nd1/nu1 (which
+      ! is a real iuv) and enumerates the cross-level edge -- producing
+      ! send/recv counts that the coarse rank does not match. The split
+      ! arrays always store real iuv values and are populated on both
+      ! sides of every cross-level edge, so walking them recovers
+      ! send/recv symmetry on the cross-rank quadtree boundary.
+      !
+      if (mpi_size > 1 .and. allocated(z_index_uv_md1_h) .and. &
+          allocated(z_index_uv_md2_h) .and. &
+          allocated(z_index_uv_mu1_h) .and. allocated(z_index_uv_mu2_h) .and. &
+          allocated(z_index_uv_nd1_h) .and. allocated(z_index_uv_nd2_h) .and. &
+          allocated(z_index_uv_nu1_h) .and. allocated(z_index_uv_nu2_h) .and. &
+          allocated(uv_index_z_nm_h) .and. allocated(uv_index_z_nmu_h)) then
          do nm = 1, npn_h
             if (cell_part(nm) /= mpi_rank) cycle
-            do edge_slot = 1, 4
+            do edge_slot = 1, 8
                select case (edge_slot)
-                  case (1); iuv = z_index_uv_md_h(nm)
-                  case (2); iuv = z_index_uv_nd_h(nm)
-                  case (3); iuv = z_index_uv_mu_h(nm)
-                  case (4); iuv = z_index_uv_nu_h(nm)
+                  case (1); iuv = z_index_uv_md1_h(nm)
+                  case (2); iuv = z_index_uv_md2_h(nm)
+                  case (3); iuv = z_index_uv_nd1_h(nm)
+                  case (4); iuv = z_index_uv_nd2_h(nm)
+                  case (5); iuv = z_index_uv_mu1_h(nm)
+                  case (6); iuv = z_index_uv_mu2_h(nm)
+                  case (7); iuv = z_index_uv_nu1_h(nm)
+                  case (8); iuv = z_index_uv_nu2_h(nm)
                end select
                if (iuv <= 0 .or. iuv > npuv_h) cycle
                nm_a = uv_index_z_nm_h(iuv)
@@ -1119,12 +1143,16 @@ contains
          !
          do nm = 1, npn_h
             if (cell_part(nm) /= mpi_rank) cycle
-            do edge_slot = 1, 4
+            do edge_slot = 1, 8
                select case (edge_slot)
-                  case (1); iuv = z_index_uv_md_h(nm)
-                  case (2); iuv = z_index_uv_nd_h(nm)
-                  case (3); iuv = z_index_uv_mu_h(nm)
-                  case (4); iuv = z_index_uv_nu_h(nm)
+                  case (1); iuv = z_index_uv_md1_h(nm)
+                  case (2); iuv = z_index_uv_md2_h(nm)
+                  case (3); iuv = z_index_uv_nd1_h(nm)
+                  case (4); iuv = z_index_uv_nd2_h(nm)
+                  case (5); iuv = z_index_uv_mu1_h(nm)
+                  case (6); iuv = z_index_uv_mu2_h(nm)
+                  case (7); iuv = z_index_uv_nu1_h(nm)
+                  case (8); iuv = z_index_uv_nu2_h(nm)
                end select
                if (iuv <= 0 .or. iuv > npuv_h) cycle
                nm_a = uv_index_z_nm_h(iuv)
@@ -1212,12 +1240,16 @@ contains
             !
             do nm = 1, npn_h
                if (cell_part(nm) /= mpi_rank) cycle
-               do edge_slot = 1, 4
+               do edge_slot = 1, 8
                   select case (edge_slot)
-                     case (1); iuv = z_index_uv_md_h(nm)
-                     case (2); iuv = z_index_uv_nd_h(nm)
-                     case (3); iuv = z_index_uv_mu_h(nm)
-                     case (4); iuv = z_index_uv_nu_h(nm)
+                     case (1); iuv = z_index_uv_md1_h(nm)
+                     case (2); iuv = z_index_uv_md2_h(nm)
+                     case (3); iuv = z_index_uv_nd1_h(nm)
+                     case (4); iuv = z_index_uv_nd2_h(nm)
+                     case (5); iuv = z_index_uv_mu1_h(nm)
+                     case (6); iuv = z_index_uv_mu2_h(nm)
+                     case (7); iuv = z_index_uv_nu1_h(nm)
+                     case (8); iuv = z_index_uv_nu2_h(nm)
                   end select
                   if (iuv <= 0 .or. iuv > npuv_h) cycle
                   nm_a = uv_index_z_nm_h(iuv)
