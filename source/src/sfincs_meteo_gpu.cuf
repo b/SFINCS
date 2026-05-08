@@ -9,11 +9,19 @@ module sfincs_meteo
    ! The four meteo-cadence spatial-interp routines (update_spiderweb_data,
    ! update_amuv_data, update_amp_data, update_ampr_data) are GPU-native
    ! and write the staging arrays (tauwu0/1, tauwv0/1, patm0/1, prcp0/1,
-   ! windu0/1, windv0/1) device-resident — no H2D refresh needed. The
-   ! per-step update_meteo_forcing still bridges previous-step results
-   ! (tauwu/tauwv/windu/windv/patm/prcp) in from host because the
-   ! bridge-OUT publishes those to host every step for downstream CPU
-   ! consumers (netCDF output, BMI getters, snapwave coupling).
+   ! windu0/1, windv0/1) device-resident — no H2D refresh needed.
+   !
+   ! Per-step update_meteo_forcing keeps the bridge-OUT (device → host) of
+   ! the meteo state arrays (tauwu/tauwv/windu/windv/windmax/patm/patmb/
+   ! prcp/netprcp/cumprcp) so downstream CPU consumers (netCDF output, BMI
+   ! getters, snapwave coupling) see fresh values. The matching bridge-IN
+   ! H2D copies have been retired (per audit catalog gpu-bridge-in-trim,
+   ! SOR-787): with no per-step host writer mutating these arrays between
+   ! the previous-step bridge-OUT and the next-step kernel, the device
+   ! shadow already holds the correct value. The single retained bridge-IN
+   ! is `zs = zs_h`, kept under the catalog Section C.3 caveat
+   ! (update_boundary_conditions in sfincs_boundaries_gpu.cuf:210 writes
+   ! zs(nmb) host-side for kcs==6 Neumann boundary cells).
    !
    use cudafor
    use sfincs_data_device
@@ -60,8 +68,7 @@ contains
          patm_h => patm, patmb_h => patmb, &
          prcp_h => prcp, &
          cumprcp_h => cumprcp, netprcp_h => netprcp, &
-         z_volume_h => z_volume, zs_h => zs, zb_h => zb, &
-         nmindbnd_h => nmindbnd
+         zs_h => zs
       !
       implicit none
       !
@@ -98,38 +105,22 @@ contains
          !
          ! ------ Copy-IN: host -> device for kernel READ set ----------------
          !
-         ! Staging arrays tauwu0/1, tauwv0/1, windu0/1, windv0/1, patm0/1,
-         ! prcp0/1 are now produced device-resident by the GPU
-         ! update_*_data kernels — no H2D needed. The previous-step
-         ! tauwu/tauwv/windu/windv/patm/prcp values consumed by
-         ! k_meteo_time_interp's spinup-merge branch still need refresh
-         ! from host since the post-step CPU consumers (netCDF output,
-         ! BMI, snapwave) write them via the bridge-OUT.
+         ! Per audit catalog (gpu-bridge-in-trim, SOR-787): bridge-IN H2D
+         ! copies for the meteo state arrays (tauwu/tauwv/windu/windv/
+         ! windmax/patm/prcp/netprcp/cumprcp -- catalog Section B.3) have
+         ! been dropped. These arrays are pure-write or RMW from the
+         ! kernel's perspective and the matching device-side values are
+         ! already correct from the previous step (bridge-OUT publishes
+         ! them to host; nothing else mutates the host alias between
+         ! steps). Bridge-INs for z_volume (B.1) and zb (A.6 init-time)
+         ! have likewise been dropped.
          !
-         if (wind_h) then
-            tauwu  = tauwu_h
-            tauwv  = tauwv_h
-            if (store_wind_h) then
-               windu  = windu_h
-               windv  = windv_h
-               if (store_wind_max_h) windmax = windmax_h
-            endif
-         endif
+         ! Retained: zs = zs_h, under the catalog Section C.3 caveat --
+         ! update_boundary_conditions (sfincs_boundaries_gpu.cuf:210)
+         ! writes zs(nmb) host-side for kcs==6 (Neumann lateral) cells.
          !
-         if (patmos_h) then
-            patm  = patm_h
-         endif
-         !
-         if (precip_h) then
-            prcp    = prcp_h
-            netprcp = netprcp_h
-            if (store_cumulative_precipitation_h) cumprcp = cumprcp_h
-            if (subgrid_h) then
-               z_volume = z_volume_h
-            else
-               zs = zs_h
-               zb = zb_h
-            endif
+         if (precip_h .and. .not. subgrid_h) then
+            zs = zs_h
          endif
          !
          ! ------ Per-cell time interpolation kernel -------------------------
@@ -150,7 +141,10 @@ contains
          !
          if (patmos_h .and. pavbnd_h > 0.0) then
             !
-            nmindbnd = nmindbnd_h
+            ! nmindbnd is init-time-only (catalog Section A.1); the device
+            ! shadow is populated by copyin_phase4_degenerate and never
+            ! written on host between steps -- bridge-IN dropped per
+            ! SOR-787.
             !
             bnd_blocks = (ngbnd_h + TPB - 1) / TPB
             call k_meteo_patmb<<<bnd_blocks, TPB>>>(ngbnd_h)
@@ -305,9 +299,10 @@ contains
       !
       ptmp = (tprcpv(itp - 1) * (1.0 - twfac) + tprcpv(itp) * twfac) / (1000 * 3600)
       !
-      ! Copy-IN cumprcp if used (read-modify-write pattern)
-      !
-      if (store_cumulative_precipitation_h) cumprcp = cumprcp_h
+      ! cumprcp bridge-IN dropped per audit catalog (gpu-bridge-in-trim,
+      ! SOR-787, Section B.3): the device shadow holds the previous step's
+      ! value (this kernel's RMW; bridge-OUT publishes to host but no host
+      ! writer mutates cumprcp_h between steps).
       !
       blocks = (npn_local + TPB - 1) / TPB
       !
@@ -327,15 +322,13 @@ contains
    end subroutine update_precipitation_from_timeseries
    !
    ! -----------------------------------------------------------------
-   ! Per-step host dispatcher to IO trampolines that read meteo data
-   ! and (in the case of update_spiderweb_data) interpolate spatially
-   ! onto the SFINCS grid into host-side staging arrays.
-   !
-   ! Mirrors the CPU sibling lines 305-352. The per-cell interpolation
-   ! work for spiderweb is performed inside update_spiderweb_data
-   ! (writing to host arrays tauwu0/tauwu1, patm0/patm1, prcp0/prcp1,
-   ! windu0/windu1); update_meteo_forcing then refreshes the device
-   ! shadows from those host arrays via bridge-IN before time-interp.
+   ! Per-step host dispatcher to the GPU spatial-interp routines that
+   ! read meteo data and (for spiderweb) interpolate onto the SFINCS
+   ! grid. Mirrors the CPU sibling lines 305-352. The per-cell
+   ! interpolation work writes the staging arrays (tauwu0/tauwu1,
+   ! patm0/patm1, prcp0/prcp1, windu0/windu1) device-resident, so
+   ! update_meteo_forcing's per-step time-interp kernel reads them
+   ! directly from the device shadow without a bridge-IN.
    ! -----------------------------------------------------------------
    subroutine update_meteo_fields(t, tloop)
       !
