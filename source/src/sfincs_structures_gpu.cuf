@@ -14,11 +14,23 @@ module sfincs_structures
    ! Bridge convention (gpu-foundation): host-side `use sfincs_data` arrays
    ! are suffixed _h via USE-rename; device-side `use sfincs_data_device`
    ! arrays are bare. CUDA Fortran translates `<dev> = <host>` (and
-   ! vice-versa) to cudaMemcpy at the assignment level. The kernel's
-   ! READ set is refreshed from host before launch (bridge-IN) and the
-   ! WRITE set is published back to host after sync (bridge-OUT) so
-   ! unported CPU per-step modules (continuity etc., until ported) read
-   ! fresh data. Both legs are required during the staging period.
+   ! vice-versa) to cudaMemcpy at the assignment level.
+   !
+   ! Per-step bridge-IN trim (gpu-bridge-in-trim, SOR-788): inside
+   ! compute_fluxes_over_structures, every kernel-read array that is
+   ! init-time-only (the structure catalog `structure_uv_index`,
+   ! `structure_parameters`, `structure_type`, `structure_length` --
+   ! catalog Section A.3, populated by `allocate_structure_device_shadows`
+   ! at sfincs_partition.cuf:413+ after `read_structures()`; and the mesh
+   ! index arrays `uv_index_z_nm`, `uv_index_z_nmu` -- catalog Section A.1)
+   ! or written on-device the previous step with no per-step host writer
+   ! in between (`q`, `uv` -- catalog Section B.1) has had its
+   ! `<dev> = <host>` line dropped because the device shadow is already
+   ! current. The single retained bridge-IN is `zs = zs_h`, under the
+   ! catalog Section C.3 caveat: `update_boundary_conditions` in
+   ! sfincs_boundaries_gpu.cuf:210 writes `zs(nmb)` host-side for kcs==6
+   ! (Neumann lateral) boundary cells. The bridge-OUT (D2H) of `q` and
+   ! `uv` is unchanged and still required for downstream CPU consumers.
    !
    use cudafor
    use sfincs_data_device
@@ -52,13 +64,7 @@ contains
       !
       use sfincs_data, only: &
          nrstructures_h => nrstructures, &
-         zs_h => zs, q_h => q, uv_h => uv, &
-         structure_uv_index_h => structure_uv_index, &
-         uv_index_z_nm_h => uv_index_z_nm, &
-         uv_index_z_nmu_h => uv_index_z_nmu, &
-         structure_parameters_h => structure_parameters, &
-         structure_type_h => structure_type, &
-         structure_length_h => structure_length
+         zs_h => zs, q_h => q, uv_h => uv
       !
       implicit none
       !
@@ -81,15 +87,24 @@ contains
       !
       ! ------ Copy-IN: host -> device for kernel READ set ----------------
       !
-      zs                   = zs_h
-      q                    = q_h
-      uv                   = uv_h
-      structure_uv_index   = structure_uv_index_h
-      uv_index_z_nm        = uv_index_z_nm_h
-      uv_index_z_nmu       = uv_index_z_nmu_h
-      structure_parameters = structure_parameters_h
-      structure_type       = structure_type_h
-      structure_length     = structure_length_h
+      ! Per audit catalog (gpu-bridge-in-trim, SOR-788): bridge-IN H2D
+      ! copies for the structure catalog (structure_uv_index,
+      ! structure_parameters, structure_type, structure_length --
+      ! Section A.3, populated once by allocate_structure_device_shadows)
+      ! and the mesh index arrays (uv_index_z_nm, uv_index_z_nmu --
+      ! Section A.1) have been dropped: these are init-time-only and the
+      ! device shadows are already current. Bridge-INs for q and uv
+      ! (Section B.1) have likewise been dropped: the previous step's
+      ! GPU kernels (compute_fluxes, update_wavemaker_fluxes,
+      ! update_boundary_fluxes) write q and uv device-side and there is
+      ! no per-step host writer between those bridge-OUTs and the next
+      ! call to compute_fluxes_over_structures.
+      !
+      ! Retained: zs = zs_h, under the catalog Section C.3 caveat --
+      ! update_boundary_conditions (sfincs_boundaries_gpu.cuf:210) writes
+      ! zs(nmb) host-side for kcs==6 (Neumann lateral) cells.
+      !
+      zs = zs_h
       !
       ! ------ One thread per structure-face entry ------------------------
       !
