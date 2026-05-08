@@ -20,7 +20,8 @@ autoreconf -ivf
     FC=nvfortran F77=nvfortran \
     FCFLAGS="-O3 -fast -DSIZEOF_PTRDIFF_T=999" \
     --disable-shared \
-    --prefix="$PREFIX"
+    --prefix="$PREFIX" \
+    "$@"
 
 # Single-threaded by design — Automake does not encode Fortran .mod dependencies.
 make

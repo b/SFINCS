@@ -1,2 +1,5 @@
 # Run artifacts produced by tests/run_validation.sh — never tracked.
 runs/
+
+# Run artifacts produced by tests/run_benchmarks.sh — never tracked.
+runs_bench/

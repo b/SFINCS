@@ -32,6 +32,7 @@ exec docker run --rm $TTY_FLAG \
     -e OPAL_PREFIX="$HPCX" \
     -e PATH="$HPCX/bin:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/compilers/bin:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     -e LD_LIBRARY_PATH="$HPCX/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/math_libs/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/cuda/lib64" \
+    -e SFINCS_PREFIX="${SFINCS_PREFIX:-}" \
     -v "$REPO_ROOT":/work \
     -w /work \
     "$IMAGE" "$@"

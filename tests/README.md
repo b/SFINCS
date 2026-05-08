@@ -161,8 +161,90 @@ The following are explicitly **not** covered by this harness:
 - **Continuous integration** — the harness is dev-only. There is no GitHub
   Actions workflow, no TeamCity job, no automated runner that invokes
   `tests/run_validation.sh`.
-- **Performance benchmarking** — wall-time and throughput are not measured
-  or compared; only `zsmax` correctness is.
+- **Performance benchmarking** — `run_validation.sh` measures correctness
+  only. A separate harness, `tests/run_benchmarks.sh`, measures wall-time
+  and peak memory across the CPU, GPU IEEE-strict, and GPU fast-math
+  builds; see the **Performance benchmarking** section below.
 - **Non-hydrostatic, bathtub, or SnapWave-on-GPU configurations** — none
   of the three cases enable these, so the harness does not validate
   them. They remain CPU-only paths.
+
+## Performance benchmarking
+
+`tests/run_benchmarks.sh` is the companion harness that measures
+wall-time and peak resident memory across three SFINCS builds, on the
+same three test cases the validation harness uses. Run from the repo
+root:
+
+```sh
+tests/run_benchmarks.sh
+```
+
+It builds three configurations into separate prefixes:
+
+- **`cpu`** — `source/install_cpu/bin/sfincs`, gfortran CPU baseline,
+  `OMP_NUM_THREADS=1` for determinism.
+- **`gpu_kieee`** — `source/install_cuda_kieee/bin/sfincs`, nvfortran with
+  `-Kieee` (the default; matches CPU floating-point semantics).
+- **`gpu_fastmath`** — `source/install_cuda_fastmath/bin/sfincs`,
+  nvfortran with `--enable-fast-math` (drops `-Kieee`, permitting FMA
+  contraction, denormal flushing, reciprocal approximations, and
+  reassociation).
+
+Each build's binary is run on every case under `tests/cases/` (3 cases ×
+3 builds = 9 runs) under `tests/runs_bench/<case>/<config>/`,
+wall-clock-timed via `/usr/bin/time -v`. Each GPU configuration is run
+twice and only the second timing is recorded so first-run JIT / driver
+init / page-cache costs do not pollute the steady-state measurement.
+GPU runs are pinned to GPU 0 via `CUDA_VISIBLE_DEVICES=0`.
+
+After all runs, each GPU run's `zsmax` is diffed against the CPU
+baseline using `tests/scripts/diff_zsmax.py` against a loose threshold
+of `1e-3`. The benchmark cares about **speedup**; the strict `1e-4`
+correctness gate stays the validation harness's job. The fast-math
+configuration is *expected* to drift from CPU at roughly the `1e-4`
+level — that's the whole point of the comparison.
+
+Output is two-fold:
+
+- **Stdout.** A `BENCH-SUMMARY case=... config=... wall=... speedup=...
+  ratio=... verdict=...` line per `(case, build)` pair (parseable via
+  grep, in the spirit of `run_validation.sh`'s `RESULT case=...` line),
+  followed by a fixed-width summary table.
+- **`tests/runs_bench/summary.json`.** Machine-readable summary with one
+  object per `(case, build)` pair containing: `case`, `config`,
+  `wall_clock_seconds`, `peak_memory_mb`, `max_abs_diff_zsmax` (`null`
+  for `cpu`), `max_zsmax_ref` (`null` for `cpu`), `ratio_vs_ref` (`null`
+  for `cpu`), `verdict` (`PASS` / `FAIL` / `ERROR`), and
+  `speedup_vs_cpu` (`null` for `cpu`, else `cpu_wall / config_wall`).
+
+Exit code: 0 iff all 9 runs completed without error AND every GPU run's
+`ratio_vs_ref < 1e-3`. Otherwise 1.
+
+Optional flags:
+
+- `--skip-build` — reuse existing binaries from a prior run.
+- `--skip-fetch` — skip per-case `fetch.sh` (only `case_production`
+  fetches inputs).
+
+Per-row detail (`sfincs.log`, `sfincs_map.nc`, `time.txt`) lands under
+`tests/runs_bench/<case>/<config>/` for inspection.
+
+### Memory measurement caveat
+
+Peak memory is captured by `/usr/bin/time -v` on the host. For the CPU
+build this is the sfincs process's resident set size. For GPU builds,
+sfincs runs inside a container launched via `docker run`, so the host
+RSS captured by `/usr/bin/time -v` is the docker client process — a
+coarse host-side overhead indicator, not the in-container sfincs RSS or
+the GPU's VRAM. For meaningful GPU memory measurements, observe with
+`nvidia-smi` separately; that's out of scope for this harness.
+
+### Comparability caveat
+
+Wall-time numbers are dev-box-specific. They are not comparable across
+machines, and they are not comparable across SFINCS versions (a kernel
+rewrite can shift the steady-state cost in either direction). Treat
+each invocation as a "what does the port buy on THIS box, TODAY"
+snapshot — not a tracked metric. There is no continuous-benchmarking
+runner, no historical store, no perf-regression alerting.
