@@ -7,12 +7,12 @@ non-trivial change to either build, before opening a PR.
 ## Purpose
 
 `tests/run_validation.sh` builds the CPU and GPU SFINCS binaries, then runs
-each of the three test cases under `tests/cases/` in three configurations —
-the CPU baseline, GPU under `mpirun -n 1`, and GPU under `mpirun -n 2` — and
-diffs each GPU run's `zsmax` against the CPU baseline using
+each test case under `tests/cases/` in three configurations — the CPU
+baseline, GPU under `mpirun -n 1`, and GPU under `mpirun -n 2` — and diffs
+each GPU run's `zsmax` against the CPU baseline using
 `tests/scripts/diff_zsmax.py`. The harness gates each (case × GPU rank
 count) pair on `max(|zsmax_gpu - zsmax_cpu|) / max(zsmax_cpu) < 1e-4` after
-24 simulated hours, producing six PASS/FAIL/ERROR verdicts in total.
+24 simulated hours, producing two PASS/FAIL/ERROR verdicts per case.
 **Bit-exact agreement between CPU and GPU is explicitly NOT a goal**: the
 two builds use different compilers (gfortran vs. nvfortran), different
 floating-point reductions, and different parallel decompositions, so
@@ -91,6 +91,14 @@ PASS, otherwise 1.
   structure, 24-hour run. Inputs are downloaded by
   `tests/cases/case_production/fetch.sh` on first run.
 
+- **`case_snapwave`** — a 30 x 30 single-level quadtree mesh at 200 m
+  spacing under a single-harmonic M2 tide, 24-hour run, with the
+  SFINCS-SnapWave coupling enabled. The western column is both the
+  SFINCS water-level boundary and the SnapWave wave boundary, fed by a
+  single SnapWave support point with monochromatic wave conditions.
+  Isolates the SnapWave coupling path; no subgrid, no spiderweb, no
+  infiltration, no structures.
+
 ## Where artifacts land
 
 Each (case, configuration) pair stages its inputs into a clean directory
@@ -165,9 +173,12 @@ The following are explicitly **not** covered by this harness:
   only. A separate harness, `tests/run_benchmarks.sh`, measures wall-time
   and peak memory across the CPU, GPU IEEE-strict, and GPU fast-math
   builds; see the **Performance benchmarking** section below.
-- **Non-hydrostatic, bathtub, or SnapWave-on-GPU configurations** — none
-  of the three cases enable these, so the harness does not validate
-  them. They remain CPU-only paths.
+- **Non-hydrostatic and bathtub configurations** — none of the cases
+  enable these, so the harness does not validate them. They remain
+  CPU-only paths. (SnapWave is exercised by `case_snapwave`; the
+  SnapWave solver itself runs on the host even in the GPU build, but
+  the bridge that hands fields between SFINCS and SnapWave is GPU code
+  the harness now diffs.)
 
 ## Performance benchmarking
 
