@@ -230,6 +230,22 @@ Optional flags:
 Per-row detail (`sfincs.log`, `sfincs_map.nc`, `time.txt`) lands under
 `tests/runs_bench/<case>/<config>/` for inspection.
 
+### Quick smoke check
+
+After all three binaries have been built once and `case_production`
+inputs have been fetched, the cheapest way to re-confirm the bench
+still passes end-to-end is:
+
+```sh
+tests/run_benchmarks.sh --skip-build --skip-fetch
+```
+
+This skips both the multi-minute autotools/nvfortran builds and the
+`case_production` archive fetch, re-runs all 9 (case × config) pairs
+against the existing `source/install_*/bin/sfincs` binaries, and
+re-generates `tests/runs_bench/summary.json`. Exit code semantics are
+unchanged (0 iff `OVERALL: PASS`).
+
 ### Memory measurement caveat
 
 Peak memory is captured by `/usr/bin/time -v` on the host. For the CPU
