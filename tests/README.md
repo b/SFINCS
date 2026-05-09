@@ -106,6 +106,18 @@ PASS, otherwise 1.
   `sfincs_wavemaker_gpu.cuf` kernel) in isolation: no subgrid, no
   quadtree, no SnapWave coupling, no incident-wave forcing.
 
+- **`case_prod_regular_tide`** — a 500 x 500 regular grid at 50 m
+  spacing (~ 250 k total cells, ~ 168 k active wet cells) under a
+  multi-component tidal water-level boundary (M2 + M4 + a +0.3 m mean
+  sea-level constant), 24-hour run. Inputs are synthetic and
+  re-generated deterministically from the case's `generate.py`. The
+  production-scale tier of the matrix: large enough that per-step GPU
+  kernel work dominates launch overhead, so the benchmark harness can
+  report a meaningful CPU-vs-GPU speedup. Isolates the regular-grid +
+  tide-boundary path: no subgrid, no quadtree, no meteo, no
+  infiltration, no structures, no discharges, no wavemakers, no
+  SnapWave.
+
 ## Where artifacts land
 
 Each (case, configuration) pair stages its inputs into a clean directory
