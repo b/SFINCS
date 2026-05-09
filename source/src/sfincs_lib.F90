@@ -211,6 +211,10 @@ module sfincs_lib
       !
       call initialize_wavemakers()
       !
+#ifdef USE_CUDA
+      call allocate_wavemaker_device_shadows()
+#endif
+      !
    endif
    !
    if (bathtub) then
