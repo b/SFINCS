@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Tests for diff_zsmax.py.
 
-Exercises every acceptance criterion from SOR-744. Designed to run with the
-project's standard `python3 -m unittest` invocation; no external test runner
-required. Synthetic netCDF files are produced inside a temp dir using xarray.
+Exercises every acceptance criterion from SOR-744 plus the FillValue-aware
+comparison from SOR-845. Designed to run with the project's standard
+`python3 -m unittest` invocation; no external test runner required.
+Synthetic netCDF files are produced inside a temp dir using xarray.
 """
 
 import os
@@ -16,10 +17,13 @@ import tempfile
 import unittest
 
 import numpy as np
-import xarray as xr
+import netCDF4 as nc
 
 
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "diff_zsmax.py")
+
+# Match SFINCS's source/src/sfincs_ncoutput.F90 FILL_VALUE = -99999.0
+FILL_VALUE = -99999.0
 
 RESULT_RE = re.compile(
     r"^RESULT case=(?P<case>\S+) ref=(?P<ref>\S+) cand=(?P<cand>\S+) "
@@ -28,11 +32,25 @@ RESULT_RE = re.compile(
 )
 
 
-def write_zsmax(path, values, var="zsmax"):
-    arr = np.asarray(values, dtype=np.float64)
-    ds = xr.Dataset({var: (("y", "x"), arr)})
-    ds.to_netcdf(path)
-    ds.close()
+def write_zsmax(path, values, var="zsmax", fill=FILL_VALUE):
+    """Write a SFINCS-style zsmax netCDF: float32 with `_FillValue` set, mirroring
+    sfincs_ncoutput.F90 (FILL_VALUE = -99999.0). Uses netCDF4 directly with
+    auto-mask disabled so any NaN values pass through to the file as-is
+    (xarray's encoder converts NaN -> fill, which would defeat the
+    NaN-in-valid-cell error path)."""
+    arr = np.asarray(values, dtype=np.float32)
+    ds = nc.Dataset(path, "w")
+    try:
+        ds.createDimension("y", arr.shape[0])
+        ds.createDimension("x", arr.shape[1])
+        kwargs = {}
+        if fill is not None:
+            kwargs["fill_value"] = np.float32(fill)
+        v = ds.createVariable(var, "f4", ("y", "x"), **kwargs)
+        v.set_auto_mask(False)
+        v[:] = arr
+    finally:
+        ds.close()
 
 
 def run_script(*args, env=None):
@@ -82,9 +100,9 @@ class DiffZsmaxTests(unittest.TestCase):
         cd = self.case_dir("case_pass_n1")
         ref = os.path.join(cd, "ref_map.nc")
         cand = os.path.join(cd, "cand_map.nc")
-        write_zsmax(ref, [[0.0, 1.0], [2.0, 3.0]])
+        write_zsmax(ref, [[0.5, 1.0], [2.0, 3.0]])
         shutil.copyfile(ref, cand)
-        proc = run_script("--reference", ref, "--candidate", cand, "--threshold", "1e-12")
+        proc = run_script("--reference", ref, "--candidate", cand, "--threshold", "1e-6")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         r = parse_result(proc.stdout)
         self.assertEqual(r["verdict"], "PASS")
@@ -104,7 +122,7 @@ class DiffZsmaxTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         r = parse_result(proc.stdout)
         self.assertEqual(r["verdict"], "FAIL")
-        self.assertAlmostEqual(float(r["ratio"]), 0.01, places=10)
+        self.assertAlmostEqual(float(r["ratio"]), 0.01, places=5)
 
     def test_strict_inequality_at_threshold_is_fail(self):
         cd = self.case_dir("case_boundary")
@@ -163,7 +181,7 @@ class DiffZsmaxTests(unittest.TestCase):
         shutil.copyfile(ref, cand)
         proc = run_script(
             "--reference", ref, "--candidate", cand,
-            "--threshold", "1e-12", "--zsmax-var", "zsmax_alt",
+            "--threshold", "1e-6", "--zsmax-var", "zsmax_alt",
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         r = parse_result(proc.stdout)
@@ -181,6 +199,9 @@ class DiffZsmaxTests(unittest.TestCase):
         self.assertIn("(1, 3)", proc.stderr)
 
     def test_nan_in_reference_is_error(self):
+        # NaN in a non-FillValue cell is still a hard error: SFINCS encodes
+        # masked-out cells as -99999, so a NaN that survives masking is a real
+        # bug rather than a legitimate dry-cell marker.
         cd = self.case_dir("case_nan_ref")
         ref = os.path.join(cd, "ref_map.nc")
         cand = os.path.join(cd, "cand_map.nc")
@@ -246,6 +267,63 @@ class DiffZsmaxTests(unittest.TestCase):
         write_zsmax(cand, [[1.0]])
         proc = run_script("--reference", ref, "--candidate", cand)
         self.assertNotEqual(proc.returncode, 0)
+
+    # --- FillValue-aware comparison (SOR-845) -------------------------------
+
+    def test_fillvalue_cells_excluded_from_diff_when_either_side_masked(self):
+        # FillValue on either side flags the cell as masked-out for the diff.
+        # Ref has FillValue at [0,1]; candidate has a real value there but
+        # it must not affect the diff because the ref considers that cell
+        # masked.
+        cd = self.case_dir("case_fillvalue_excluded")
+        ref = os.path.join(cd, "ref_map.nc")
+        cand = os.path.join(cd, "cand_map.nc")
+        write_zsmax(ref, [[1.0, FILL_VALUE], [3.0, 4.0]])
+        write_zsmax(cand, [[1.0, 5.0],        [3.0, 4.0]])
+        proc = run_script("--reference", ref, "--candidate", cand, "--threshold", "1e-6")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        r = parse_result(proc.stdout)
+        self.assertEqual(r["verdict"], "PASS")
+        self.assertEqual(float(r["diff"]), 0.0)
+        self.assertEqual(float(r["refmax"]), 4.0)
+
+    def test_fillvalue_only_on_candidate_side_also_masks(self):
+        cd = self.case_dir("case_fillvalue_cand_only")
+        ref = os.path.join(cd, "ref_map.nc")
+        cand = os.path.join(cd, "cand_map.nc")
+        write_zsmax(ref, [[1.0, 7.0], [3.0, 4.0]])
+        write_zsmax(cand, [[1.0, FILL_VALUE], [3.0, 4.0]])
+        proc = run_script("--reference", ref, "--candidate", cand, "--threshold", "1e-6")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        r = parse_result(proc.stdout)
+        self.assertEqual(r["verdict"], "PASS")
+
+    def test_all_cells_fillvalue_is_error_no_valid_cells(self):
+        cd = self.case_dir("case_all_fill")
+        ref = os.path.join(cd, "ref_map.nc")
+        cand = os.path.join(cd, "cand_map.nc")
+        write_zsmax(ref, [[FILL_VALUE, FILL_VALUE]])
+        write_zsmax(cand, [[FILL_VALUE, FILL_VALUE]])
+        proc = run_script("--reference", ref, "--candidate", cand, "--threshold", "1e-3")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("no valid", proc.stderr)
+        r = parse_result(proc.stdout)
+        self.assertEqual(r["verdict"], "ERROR")
+
+    def test_diff_only_over_valid_cells(self):
+        # Mismatched FillValue patterns: ref dry where cand wet at [0,1] and
+        # vice versa at [1,0]. Both should be excluded; the remaining valid
+        # cells [0,0] and [1,1] are identical, so the diff is zero.
+        cd = self.case_dir("case_mixed_fill")
+        ref = os.path.join(cd, "ref_map.nc")
+        cand = os.path.join(cd, "cand_map.nc")
+        write_zsmax(ref, [[1.0, FILL_VALUE], [9.0,        4.0]])
+        write_zsmax(cand, [[1.0, 9.0],       [FILL_VALUE, 4.0]])
+        proc = run_script("--reference", ref, "--candidate", cand, "--threshold", "1e-6")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        r = parse_result(proc.stdout)
+        self.assertEqual(r["verdict"], "PASS")
+        self.assertEqual(float(r["diff"]), 0.0)
 
 
 if __name__ == "__main__":
