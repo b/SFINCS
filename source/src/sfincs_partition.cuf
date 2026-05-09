@@ -169,6 +169,7 @@ module sfincs_partition
               halo_exchange_zs, halo_exchange_q_uv, &
               device_to_host_for_output, &
               allocate_structure_device_shadows, &
+              refresh_kcuv_device_shadow, &
               allocate_discharges_device_shadows, &
               allocate_wavemaker_device_shadows
    private :: compute_quadtree_geometric_partition, &
@@ -433,6 +434,24 @@ contains
       if (allocated(structure_length_h))     then; allocate(structure_length,     mold=structure_length_h);     structure_length     = structure_length_h;     end if
       !
    end subroutine allocate_structure_device_shadows
+   !
+   subroutine refresh_kcuv_device_shadow()
+      !
+      ! Re-upload kcuv to device after read_structures() has mutated the host
+      ! counterpart. read_thin_dams sets kcuv_h(ip) = 0 for thin-dam UV points
+      ! and read_structure_file sets kcuv_h(ip) = 3 for weir UV points; both
+      ! run after copyin_phase4_degenerate has already copied the
+      ! pre-structures kcuv to device, so without this refresh the device
+      ! shadow stays stale. k_compute_fluxes (sfincs_momentum_gpu.cuf:269)
+      ! gates on kcuv == 1/6 to early-return on weirs and thindams, and
+      ! k_update_boundary_fluxes (sfincs_boundaries_gpu.cuf:579) special-cases
+      ! kcuv == 3; with stale device kcuv, weir/thindam UVs leak into the
+      ! momentum kernel and their min_dt candidates contaminate the global
+      ! atomic-min, drifting GPU dt away from CPU dt every step.
+      !
+      if (allocated(kcuv_h) .and. allocated(kcuv)) kcuv = kcuv_h
+      !
+   end subroutine refresh_kcuv_device_shadow
    !
    subroutine allocate_discharges_device_shadows()
       !

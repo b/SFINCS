@@ -183,6 +183,7 @@ module sfincs_lib
    !
 #ifdef USE_CUDA
    call allocate_structure_device_shadows()
+   call refresh_kcuv_device_shadow()
 #endif
    !
    call read_boundary_data()    ! Reads bnd, bzs, etc files
