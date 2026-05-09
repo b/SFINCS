@@ -145,8 +145,25 @@ check_run() {
 
 # --- Build steps ------------------------------------------------------------
 
+# Wipe Fortran build artifacts under source/src and source/third_party_open
+# so the next ./configure+make starts from a known-clean state. Necessary
+# because (a) automake's `make clean` does not remove Fortran .mod files
+# (Makefile.am does not list them in CLEANFILES) and (b) gfortran and
+# nvfortran .mod formats are mutually unreadable, so a stale .mod from one
+# compiler aborts the next build with "Corrupt or Old Module file". The
+# install_* prefixes are deliberately preserved so --skip-build can reuse
+# binaries from a prior successful run.
+wipe_build_artifacts() {
+    for sub in src third_party_open; do
+        find "$REPO_ROOT/source/$sub" -type f \
+            \( -name '*.mod' -o -name '*.o' -o -name '*.lo' \
+               -o -name '*.a' -o -name '*.la' \) -delete
+    done
+}
+
 build_cpu() {
     echo "=== Building CPU (gfortran, single-threaded) ==="
+    wipe_build_artifacts
     (
         cd "$REPO_ROOT/source"
         autoreconf -ivf
@@ -162,12 +179,14 @@ build_cpu() {
 
 build_gpu_kieee() {
     echo "=== Building GPU IEEE-strict (-Kieee) ==="
+    wipe_build_artifacts
     SFINCS_PREFIX=/work/source/install_cuda_kieee \
         "$GPU_WRAPPER" source/build_scripts/build_cuda.sh
 }
 
 build_gpu_fastmath() {
     echo "=== Building GPU fast-math (--enable-fast-math) ==="
+    wipe_build_artifacts
     SFINCS_PREFIX=/work/source/install_cuda_fastmath \
         "$GPU_WRAPPER" source/build_scripts/build_cuda.sh --enable-fast-math
 }
