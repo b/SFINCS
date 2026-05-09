@@ -99,6 +99,13 @@ PASS, otherwise 1.
   Isolates the SnapWave coupling path; no subgrid, no spiderweb, no
   infiltration, no structures.
 
+- **`case_wavemaker`** — a 50 × 50 regular grid at 100 m spacing with a
+  single vertical wavemaker polyline injecting a monochromatic IG wave
+  (Hm0 = 0.5 m, Tp = 60 s) into a flat-bottom closed basin, 24-hour run.
+  Exercises the wavemaker code path (`update_wavemaker_fluxes` and the
+  `sfincs_wavemaker_gpu.cuf` kernel) in isolation: no subgrid, no
+  quadtree, no SnapWave coupling, no incident-wave forcing.
+
 ## Where artifacts land
 
 Each (case, configuration) pair stages its inputs into a clean directory
