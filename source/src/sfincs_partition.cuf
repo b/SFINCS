@@ -169,6 +169,7 @@ module sfincs_partition
               halo_exchange_zs, halo_exchange_q_uv, &
               device_to_host_for_output, &
               allocate_structure_device_shadows, &
+              allocate_discharges_device_shadows, &
               allocate_wavemaker_device_shadows
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
@@ -433,6 +434,23 @@ contains
       !
    end subroutine allocate_structure_device_shadows
    !
+   subroutine allocate_discharges_device_shadows()
+      !
+      ! Pre-allocate the four discharges/drainage catalog device shadows so
+      ! that k_source_interp and k_drainage (sfincs_discharges_gpu.cuf) read
+      ! device storage that is correctly sized and bit-equal to its host
+      ! counterpart. Called from sfincs_lib immediately after read_discharges()
+      ! has populated the host counterparts (which is after
+      ! partition_and_localize, so this site is the earliest point at which
+      ! the host arrays carry the right shape).
+      !
+      if (allocated(nmindsrc_h))        then; allocate(nmindsrc,        mold=nmindsrc_h);        nmindsrc        = nmindsrc_h;        end if
+      if (allocated(qtsrc_h))           then; allocate(qtsrc,           mold=qtsrc_h);           qtsrc           = qtsrc_h;           end if
+      if (allocated(drainage_type_h))   then; allocate(drainage_type,   mold=drainage_type_h);   drainage_type   = drainage_type_h;   end if
+      if (allocated(drainage_params_h)) then; allocate(drainage_params, mold=drainage_params_h); drainage_params = drainage_params_h; end if
+      !
+   end subroutine allocate_discharges_device_shadows
+   !
    subroutine allocate_wavemaker_device_shadows()
       !
       ! Pre-allocate the fifteen wavemaker per-uv catalog device shadows so
@@ -530,10 +548,11 @@ contains
       if (allocated(uv_index_v_ndmu_h)) then; allocate(uv_index_v_ndmu, mold=uv_index_v_ndmu_h); uv_index_v_ndmu = uv_index_v_ndmu_h; end if
       if (allocated(uv_index_v_nm_h))   then; allocate(uv_index_v_nm,   mold=uv_index_v_nm_h);   uv_index_v_nm   = uv_index_v_nm_h;   end if
       if (allocated(uv_index_v_nmu_h))  then; allocate(uv_index_v_nmu,  mold=uv_index_v_nmu_h);  uv_index_v_nmu  = uv_index_v_nmu_h;  end if
-      if (allocated(nmindsrc_h))        then; allocate(nmindsrc,        mold=nmindsrc_h);        nmindsrc        = nmindsrc_h;        end if
-      if (allocated(qtsrc_h))           then; allocate(qtsrc,           mold=qtsrc_h);           qtsrc           = qtsrc_h;           end if
-      if (allocated(drainage_type_h))   then; allocate(drainage_type,   mold=drainage_type_h);   drainage_type   = drainage_type_h;   end if
-      if (allocated(drainage_params_h)) then; allocate(drainage_params, mold=drainage_params_h); drainage_params = drainage_params_h; end if
+      ! Discharges/drainage catalog shadows (nmindsrc, qtsrc, drainage_type,
+      ! drainage_params) are allocated by allocate_discharges_device_shadows
+      ! after read_discharges() populates the host counterparts. They cannot
+      ! be allocated here because read_discharges has not yet run at
+      ! partition time.
       ! Wavemaker catalog shadows (z_index_wavemaker, wavemaker_uvmean,
       ! wavemaker_nmd/nmu/ndm/num, wavemaker_index_uv/nmi/nmb,
       ! wavemaker_index_wmfp1/wmfp2, wavemaker_fac_wmfp, wavemaker_idir,

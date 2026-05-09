@@ -197,6 +197,10 @@ module sfincs_lib
    !
    call read_discharges()       ! Reads dis and src file
    !
+#ifdef USE_CUDA
+   call allocate_discharges_device_shadows()
+#endif
+   !
    if (nonhydrostatic) then
       !
       ! Initialize non-hydrostatic solver
