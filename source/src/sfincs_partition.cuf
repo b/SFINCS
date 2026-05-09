@@ -168,7 +168,8 @@ module sfincs_partition
    public  :: partition_and_localize, device_finalize, &
               halo_exchange_zs, halo_exchange_q_uv, &
               device_to_host_for_output, &
-              allocate_structure_device_shadows
+              allocate_structure_device_shadows, &
+              allocate_wavemaker_device_shadows
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
               build_halo_descriptors, &
@@ -432,6 +433,34 @@ contains
       !
    end subroutine allocate_structure_device_shadows
    !
+   subroutine allocate_wavemaker_device_shadows()
+      !
+      ! Pre-allocate the fifteen wavemaker per-uv catalog device shadows so
+      ! that k_wavemaker_fluxes (sfincs_wavemaker_gpu.cuf) reads device
+      ! storage that is correctly sized and bit-equal to its host counterpart.
+      ! Called from sfincs_lib immediately after initialize_wavemakers() has
+      ! populated the host arrays (which is after partition_and_localize, so
+      ! this site is the earliest point at which the host arrays carry the
+      ! right shape).
+      !
+      if (allocated(wavemaker_index_uv_h))    then; allocate(wavemaker_index_uv,    mold=wavemaker_index_uv_h);    wavemaker_index_uv    = wavemaker_index_uv_h;    end if
+      if (allocated(wavemaker_index_nmi_h))   then; allocate(wavemaker_index_nmi,   mold=wavemaker_index_nmi_h);   wavemaker_index_nmi   = wavemaker_index_nmi_h;   end if
+      if (allocated(wavemaker_index_nmb_h))   then; allocate(wavemaker_index_nmb,   mold=wavemaker_index_nmb_h);   wavemaker_index_nmb   = wavemaker_index_nmb_h;   end if
+      if (allocated(wavemaker_index_wmfp1_h)) then; allocate(wavemaker_index_wmfp1, mold=wavemaker_index_wmfp1_h); wavemaker_index_wmfp1 = wavemaker_index_wmfp1_h; end if
+      if (allocated(wavemaker_index_wmfp2_h)) then; allocate(wavemaker_index_wmfp2, mold=wavemaker_index_wmfp2_h); wavemaker_index_wmfp2 = wavemaker_index_wmfp2_h; end if
+      if (allocated(wavemaker_fac_wmfp_h))    then; allocate(wavemaker_fac_wmfp,    mold=wavemaker_fac_wmfp_h);    wavemaker_fac_wmfp    = wavemaker_fac_wmfp_h;    end if
+      if (allocated(wavemaker_idir_h))        then; allocate(wavemaker_idir,        mold=wavemaker_idir_h);        wavemaker_idir        = wavemaker_idir_h;        end if
+      if (allocated(wavemaker_angfac_h))      then; allocate(wavemaker_angfac,      mold=wavemaker_angfac_h);      wavemaker_angfac      = wavemaker_angfac_h;      end if
+      if (allocated(wavemaker_uvmean_h))      then; allocate(wavemaker_uvmean,      mold=wavemaker_uvmean_h);      wavemaker_uvmean      = wavemaker_uvmean_h;      end if
+      if (allocated(wavemaker_uvtrend_h))     then; allocate(wavemaker_uvtrend,     mold=wavemaker_uvtrend_h);     wavemaker_uvtrend     = wavemaker_uvtrend_h;     end if
+      if (allocated(z_index_wavemaker_h))     then; allocate(z_index_wavemaker,     mold=z_index_wavemaker_h);     z_index_wavemaker     = z_index_wavemaker_h;     end if
+      if (allocated(wavemaker_nmd_h))         then; allocate(wavemaker_nmd,         mold=wavemaker_nmd_h);         wavemaker_nmd         = wavemaker_nmd_h;         end if
+      if (allocated(wavemaker_nmu_h))         then; allocate(wavemaker_nmu,         mold=wavemaker_nmu_h);         wavemaker_nmu         = wavemaker_nmu_h;         end if
+      if (allocated(wavemaker_ndm_h))         then; allocate(wavemaker_ndm,         mold=wavemaker_ndm_h);         wavemaker_ndm         = wavemaker_ndm_h;         end if
+      if (allocated(wavemaker_num_h))         then; allocate(wavemaker_num,         mold=wavemaker_num_h);         wavemaker_num         = wavemaker_num_h;         end if
+      !
+   end subroutine allocate_wavemaker_device_shadows
+   !
    subroutine copyin_phase4_degenerate()
       !
       ! Mirror of the prior single-rank Phase 4 body. Every device shadow
@@ -505,12 +534,13 @@ contains
       if (allocated(qtsrc_h))           then; allocate(qtsrc,           mold=qtsrc_h);           qtsrc           = qtsrc_h;           end if
       if (allocated(drainage_type_h))   then; allocate(drainage_type,   mold=drainage_type_h);   drainage_type   = drainage_type_h;   end if
       if (allocated(drainage_params_h)) then; allocate(drainage_params, mold=drainage_params_h); drainage_params = drainage_params_h; end if
-      if (allocated(z_index_wavemaker_h)) then; allocate(z_index_wavemaker, mold=z_index_wavemaker_h); z_index_wavemaker = z_index_wavemaker_h; end if
-      if (allocated(wavemaker_uvmean_h))  then; allocate(wavemaker_uvmean,  mold=wavemaker_uvmean_h);  wavemaker_uvmean  = wavemaker_uvmean_h;  end if
-      if (allocated(wavemaker_nmd_h))     then; allocate(wavemaker_nmd,     mold=wavemaker_nmd_h);     wavemaker_nmd     = wavemaker_nmd_h;     end if
-      if (allocated(wavemaker_nmu_h))     then; allocate(wavemaker_nmu,     mold=wavemaker_nmu_h);     wavemaker_nmu     = wavemaker_nmu_h;     end if
-      if (allocated(wavemaker_ndm_h))     then; allocate(wavemaker_ndm,     mold=wavemaker_ndm_h);     wavemaker_ndm     = wavemaker_ndm_h;     end if
-      if (allocated(wavemaker_num_h))     then; allocate(wavemaker_num,     mold=wavemaker_num_h);     wavemaker_num     = wavemaker_num_h;     end if
+      ! Wavemaker catalog shadows (z_index_wavemaker, wavemaker_uvmean,
+      ! wavemaker_nmd/nmu/ndm/num, wavemaker_index_uv/nmi/nmb,
+      ! wavemaker_index_wmfp1/wmfp2, wavemaker_fac_wmfp, wavemaker_idir,
+      ! wavemaker_angfac, wavemaker_uvtrend) are allocated by
+      ! allocate_wavemaker_device_shadows after initialize_wavemakers()
+      ! populates the host counterparts. They cannot be allocated here
+      ! because initialize_wavemakers has not yet run at partition time.
       ! Structure catalog shadows (structure_uv_index, structure_parameters,
       ! structure_type, structure_length) are allocated by
       ! allocate_structure_device_shadows after read_structures() populates the
@@ -601,15 +631,14 @@ contains
       !
       ! ===== gpu-wavemaker-snapwave-coupling supplemental ====
       !
-      if (allocated(wavemaker_index_uv_h))    then; allocate(wavemaker_index_uv,    mold=wavemaker_index_uv_h);    wavemaker_index_uv    = wavemaker_index_uv_h;    end if
-      if (allocated(wavemaker_index_nmi_h))   then; allocate(wavemaker_index_nmi,   mold=wavemaker_index_nmi_h);   wavemaker_index_nmi   = wavemaker_index_nmi_h;   end if
-      if (allocated(wavemaker_index_nmb_h))   then; allocate(wavemaker_index_nmb,   mold=wavemaker_index_nmb_h);   wavemaker_index_nmb   = wavemaker_index_nmb_h;   end if
-      if (allocated(wavemaker_index_wmfp1_h)) then; allocate(wavemaker_index_wmfp1, mold=wavemaker_index_wmfp1_h); wavemaker_index_wmfp1 = wavemaker_index_wmfp1_h; end if
-      if (allocated(wavemaker_index_wmfp2_h)) then; allocate(wavemaker_index_wmfp2, mold=wavemaker_index_wmfp2_h); wavemaker_index_wmfp2 = wavemaker_index_wmfp2_h; end if
-      if (allocated(wavemaker_fac_wmfp_h))    then; allocate(wavemaker_fac_wmfp,    mold=wavemaker_fac_wmfp_h);    wavemaker_fac_wmfp    = wavemaker_fac_wmfp_h;    end if
-      if (allocated(wavemaker_idir_h))        then; allocate(wavemaker_idir,        mold=wavemaker_idir_h);        wavemaker_idir        = wavemaker_idir_h;        end if
-      if (allocated(wavemaker_angfac_h))      then; allocate(wavemaker_angfac,      mold=wavemaker_angfac_h);      wavemaker_angfac      = wavemaker_angfac_h;      end if
-      if (allocated(wavemaker_uvtrend_h))     then; allocate(wavemaker_uvtrend,     mold=wavemaker_uvtrend_h);     wavemaker_uvtrend     = wavemaker_uvtrend_h;     end if
+      ! The wavemaker per-uv catalog device shadows
+      ! (wavemaker_index_uv/nmi/nmb, wavemaker_index_wmfp1/wmfp2,
+      ! wavemaker_fac_wmfp, wavemaker_idir, wavemaker_angfac,
+      ! wavemaker_uvtrend) are allocated by allocate_wavemaker_device_shadows
+      ! after initialize_wavemakers() populates the host counterparts; they
+      ! cannot be allocated here because initialize_wavemakers has not yet
+      ! run at partition time. hm0 and hm0_ig stay here because their host
+      ! counterparts already exist by partition time.
       if (allocated(hm0_h))                   then; allocate(hm0,                   mold=hm0_h);                   hm0                   = hm0_h;                   end if
       if (allocated(hm0_ig_h))                then; allocate(hm0_ig,                mold=hm0_ig_h);                hm0_ig                = hm0_ig_h;                end if
       !
