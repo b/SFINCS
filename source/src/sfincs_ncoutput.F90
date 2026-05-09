@@ -2081,17 +2081,22 @@ contains
    !
    NF90(nf90_put_var(his_file%ncid, his_file%crs_varid, epsg))  ! write epsg
    !
-   NF90(nf90_put_var(his_file%ncid, his_file%station_id_varid, idobs))  ! write station_id   
-   !   
-   NF90(nf90_put_var(his_file%ncid, his_file%station_name_varid, nameobs))  ! write station_name      ! , (/1, nobs/)
+   ! Obs arrays (idobs/nameobs/xobs/yobs/xgobs/ygobs/zbobs) are allocated only
+   ! when nobs > 0; the his file is also created for structures-only / crs-only
+   ! / runup-only runs, so these writes need their own nobs guard.
+   if (nobs > 0) then
+      NF90(nf90_put_var(his_file%ncid, his_file%station_id_varid, idobs))  ! write station_id
+      !
+      NF90(nf90_put_var(his_file%ncid, his_file%station_name_varid, nameobs))  ! write station_name      ! , (/1, nobs/)
+   endif
    !
    if (nrcrosssections>0) then
       NF90(nf90_put_var(his_file%ncid, his_file%crosssection_name_varid, namecrs))  ! write station_name      ! , (/1, nobs/)
-   endif   
+   endif
    !
    if (nr_runup_gauges > 0) then
       NF90(nf90_put_var(his_file%ncid, his_file%runup_gauge_name_varid, runup_gauge_name))  ! write rug name
-   endif   
+   endif
    !
    if (nrstructures>0) then
       !
@@ -2138,16 +2143,19 @@ contains
       !       
    endif   
    !
-   NF90(nf90_put_var(his_file%ncid, his_file%station_x_varid, xobs)) ! write station_x, input xobs
-   !    
-   NF90(nf90_put_var(his_file%ncid, his_file%station_y_varid, yobs)) ! write station_y, input yobs
-   !   
-   NF90(nf90_put_var(his_file%ncid, his_file%point_x_varid, xgobs)) ! write point_x, now actual value on grid is written rather than input xobs
-   !    
-   NF90(nf90_put_var(his_file%ncid, his_file%point_y_varid, ygobs)) ! write point_y, now actual value on grid is written rather than input yobs
-   !  
-   NF90(nf90_put_var(his_file%ncid, his_file%zb_varid, zbobs)) ! write point_zb
-   !     
+   ! Same nobs > 0 guard as the station_id / station_name writes above.
+   if (nobs > 0) then
+      NF90(nf90_put_var(his_file%ncid, his_file%station_x_varid, xobs)) ! write station_x, input xobs
+      !
+      NF90(nf90_put_var(his_file%ncid, his_file%station_y_varid, yobs)) ! write station_y, input yobs
+      !
+      NF90(nf90_put_var(his_file%ncid, his_file%point_x_varid, xgobs)) ! write point_x, now actual value on grid is written rather than input xobs
+      !
+      NF90(nf90_put_var(his_file%ncid, his_file%point_y_varid, ygobs)) ! write point_y, now actual value on grid is written rather than input yobs
+      !
+      NF90(nf90_put_var(his_file%ncid, his_file%zb_varid, zbobs)) ! write point_zb
+   endif
+   !
    NF90(nf90_sync(his_file%ncid)) !write away intermediate data
    !
    end subroutine
