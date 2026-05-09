@@ -7,12 +7,12 @@ non-trivial change to either build, before opening a PR.
 ## Purpose
 
 `tests/run_validation.sh` builds the CPU and GPU SFINCS binaries, then runs
-each of the three test cases under `tests/cases/` in three configurations —
-the CPU baseline, GPU under `mpirun -n 1`, and GPU under `mpirun -n 2` — and
-diffs each GPU run's `zsmax` against the CPU baseline using
+each test case under `tests/cases/` in three configurations — the CPU
+baseline, GPU under `mpirun -n 1`, and GPU under `mpirun -n 2` — and diffs
+each GPU run's `zsmax` against the CPU baseline using
 `tests/scripts/diff_zsmax.py`. The harness gates each (case × GPU rank
 count) pair on `max(|zsmax_gpu - zsmax_cpu|) / max(zsmax_cpu) < 1e-4` after
-24 simulated hours, producing six PASS/FAIL/ERROR verdicts in total.
+24 simulated hours, producing two PASS/FAIL/ERROR verdicts per case.
 **Bit-exact agreement between CPU and GPU is explicitly NOT a goal**: the
 two builds use different compilers (gfortran vs. nvfortran), different
 floating-point reductions, and different parallel decompositions, so
@@ -69,7 +69,7 @@ Optional flags:
   other two cases ship their inputs in-tree.
 - `-h`, `--help` — print the harness's header comment.
 
-The harness exits 0 iff all six (case × GPU rank count) pairs report
+The harness exits 0 iff every (case × GPU rank count) pair reports
 PASS, otherwise 1.
 
 ## What each case covers
@@ -90,6 +90,14 @@ PASS, otherwise 1.
   tropical-cyclone meteo, spatially-varying infiltration, and a weir-style
   structure, 24-hour run. Inputs are downloaded by
   `tests/cases/case_production/fetch.sh` on first run.
+
+- **`case_snapwave`** — a 30 x 30 single-level quadtree mesh at 200 m
+  spacing under a single-harmonic M2 tide, 24-hour run, with the
+  SFINCS-SnapWave coupling enabled. The western column is both the
+  SFINCS water-level boundary and the SnapWave wave boundary, fed by a
+  single SnapWave support point with monochromatic wave conditions.
+  Isolates the SnapWave coupling path; no subgrid, no spiderweb, no
+  infiltration, no structures.
 
 ## Where artifacts land
 
@@ -165,9 +173,12 @@ The following are explicitly **not** covered by this harness:
   only. A separate harness, `tests/run_benchmarks.sh`, measures wall-time
   and peak memory across the CPU, GPU IEEE-strict, and GPU fast-math
   builds; see the **Performance benchmarking** section below.
-- **Non-hydrostatic, bathtub, or SnapWave-on-GPU configurations** — none
-  of the three cases enable these, so the harness does not validate
-  them. They remain CPU-only paths.
+- **Non-hydrostatic and bathtub configurations** — none of the cases
+  enable these, so the harness does not validate them. They remain
+  CPU-only paths. (SnapWave is exercised by `case_snapwave`; the
+  SnapWave solver itself runs on the host even in the GPU build, but
+  the bridge that hands fields between SFINCS and SnapWave is GPU code
+  the harness now diffs.)
 
 ## Performance benchmarking
 
@@ -191,8 +202,8 @@ It builds three configurations into separate prefixes:
   contraction, denormal flushing, reciprocal approximations, and
   reassociation).
 
-Each build's binary is run on every case under `tests/cases/` (3 cases ×
-3 builds = 9 runs) under `tests/runs_bench/<case>/<config>/`,
+Each build's binary is run on every case under `tests/cases/` (one run
+per `(case, build)` pair) under `tests/runs_bench/<case>/<config>/`,
 wall-clock-timed via `/usr/bin/time -v`. Each GPU configuration is run
 twice and only the second timing is recorded so first-run JIT / driver
 init / page-cache costs do not pollute the steady-state measurement.
@@ -218,8 +229,8 @@ Output is two-fold:
   for `cpu`), `verdict` (`PASS` / `FAIL` / `ERROR`), and
   `speedup_vs_cpu` (`null` for `cpu`, else `cpu_wall / config_wall`).
 
-Exit code: 0 iff all 9 runs completed without error AND every GPU run's
-`ratio_vs_ref < 1e-3`. Otherwise 1.
+Exit code: 0 iff every `(case, build)` run completed without error AND
+every GPU run's `ratio_vs_ref < 1e-3`. Otherwise 1.
 
 Optional flags:
 
@@ -241,7 +252,7 @@ tests/run_benchmarks.sh --skip-build --skip-fetch
 ```
 
 This skips both the multi-minute autotools/nvfortran builds and the
-`case_production` archive fetch, re-runs all 9 (case × config) pairs
+`case_production` archive fetch, re-runs every `(case, config)` pair
 against the existing `source/install_*/bin/sfincs` binaries, and
 re-generates `tests/runs_bench/summary.json`. Exit code semantics are
 unchanged (0 iff `OVERALL: PASS`).

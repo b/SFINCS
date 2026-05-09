@@ -4,10 +4,10 @@
 # Builds the CPU and GPU binaries, runs each test case under tests/cases/
 # in three configurations (CPU baseline, GPU mpirun -n 1, GPU mpirun -n 2),
 # diffs the GPU runs' zsmax against the CPU baseline using
-# tests/scripts/diff_zsmax.py, and prints a PASS/FAIL summary across all
-# six (case, gpu_run) pairs.
+# tests/scripts/diff_zsmax.py, and prints a PASS/FAIL summary across every
+# (case, gpu_run) pair.
 #
-# Exit code: 0 iff all six pairs are PASS, otherwise 1.
+# Exit code: 0 iff every pair is PASS, otherwise 1.
 #
 # Dev-only — not invoked from CI. Run from the repo root:
 #
