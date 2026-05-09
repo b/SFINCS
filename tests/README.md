@@ -69,7 +69,7 @@ Optional flags:
   other two cases ship their inputs in-tree.
 - `-h`, `--help` — print the harness's header comment.
 
-The harness exits 0 iff all six (case × GPU rank count) pairs report
+The harness exits 0 iff every (case × GPU rank count) pair reports
 PASS, otherwise 1.
 
 ## What each case covers
@@ -202,8 +202,8 @@ It builds three configurations into separate prefixes:
   contraction, denormal flushing, reciprocal approximations, and
   reassociation).
 
-Each build's binary is run on every case under `tests/cases/` (3 cases ×
-3 builds = 9 runs) under `tests/runs_bench/<case>/<config>/`,
+Each build's binary is run on every case under `tests/cases/` (one run
+per `(case, build)` pair) under `tests/runs_bench/<case>/<config>/`,
 wall-clock-timed via `/usr/bin/time -v`. Each GPU configuration is run
 twice and only the second timing is recorded so first-run JIT / driver
 init / page-cache costs do not pollute the steady-state measurement.
@@ -229,8 +229,8 @@ Output is two-fold:
   for `cpu`), `verdict` (`PASS` / `FAIL` / `ERROR`), and
   `speedup_vs_cpu` (`null` for `cpu`, else `cpu_wall / config_wall`).
 
-Exit code: 0 iff all 9 runs completed without error AND every GPU run's
-`ratio_vs_ref < 1e-3`. Otherwise 1.
+Exit code: 0 iff every `(case, build)` run completed without error AND
+every GPU run's `ratio_vs_ref < 1e-3`. Otherwise 1.
 
 Optional flags:
 
@@ -252,7 +252,7 @@ tests/run_benchmarks.sh --skip-build --skip-fetch
 ```
 
 This skips both the multi-minute autotools/nvfortran builds and the
-`case_production` archive fetch, re-runs all 9 (case × config) pairs
+`case_production` archive fetch, re-runs every `(case, config)` pair
 against the existing `source/install_*/bin/sfincs` binaries, and
 re-generates `tests/runs_bench/summary.json`. Exit code semantics are
 unchanged (0 iff `OVERALL: PASS`).

@@ -6,20 +6,20 @@
 #   * gpu_kieee    — nvfortran CUDA, default -Kieee (matches CPU FP)
 #   * gpu_fastmath — nvfortran CUDA, --enable-fast-math (drops -Kieee)
 #
-# Runs every test case under tests/cases/ once per build (3 cases x 3
-# builds = 9 runs) under tests/runs_bench/<case>/<config>/, captures wall
-# time + peak resident memory via /usr/bin/time -v, and diffs each GPU
-# run's zsmax against the CPU baseline. Prints a summary table on stdout
-# and writes a machine-readable tests/runs_bench/summary.json.
+# Runs every test case under tests/cases/ once per build (one run per
+# (case, build) pair) under tests/runs_bench/<case>/<config>/, captures
+# wall time + peak resident memory via /usr/bin/time -v, and diffs each
+# GPU run's zsmax against the CPU baseline. Prints a summary table on
+# stdout and writes a machine-readable tests/runs_bench/summary.json.
 #
 # Each GPU configuration is run twice; only the second timing is recorded
 # so first-run JIT / driver init / page-cache costs do not pollute the
 # steady-state measurement. GPU runs are pinned to GPU 0 via
 # CUDA_VISIBLE_DEVICES=0.
 #
-# Exit code: 0 iff all 9 runs completed without error AND every GPU run's
-# max(|gpu - cpu|) / max(cpu) < 1e-3 (loose threshold; the validation
-# harness gates on the strict 1e-4). Otherwise 1.
+# Exit code: 0 iff every (case, build) run completed without error AND
+# every GPU run's max(|gpu - cpu|) / max(cpu) < 1e-3 (loose threshold;
+# the validation harness gates on the strict 1e-4). Otherwise 1.
 #
 # Dev-only — not invoked from CI. Numbers are dev-box-specific and not
 # comparable across machines or across SFINCS versions.
