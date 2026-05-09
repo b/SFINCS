@@ -133,6 +133,15 @@ PASS, otherwise 1.
   Inputs are generated in-tree by `case_prod_riverine/generate.py`
   from a fixed seed; no `fetch.sh`.
 
+- **`case_prod_quadtree_subgrid_tide`** — a 102880-cell quadtree mesh
+  (three refinement levels over a 130 × 130 base grid at 200 m spacing,
+  no rotation) with subgrid topography under a multi-component
+  M2 + M4 + sea-level tide, 24-hour run. Production-scale tier: sized
+  so benchmark wall-times are dominated by per-step kernel work rather
+  than GPU launch overhead. Inputs ship in-tree as zlib-compressed
+  NetCDF (≈ 3.5 MB combined). No spiderweb, no infiltration, no
+  structures, no SnapWave.
+
 ## Where artifacts land
 
 Each (case, configuration) pair stages its inputs into a clean directory
