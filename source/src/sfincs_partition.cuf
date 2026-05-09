@@ -496,6 +496,22 @@ contains
       if (allocated(wavemaker_ndm_h))         then; allocate(wavemaker_ndm,         mold=wavemaker_ndm_h);         wavemaker_ndm         = wavemaker_ndm_h;         end if
       if (allocated(wavemaker_num_h))         then; allocate(wavemaker_num,         mold=wavemaker_num_h);         wavemaker_num         = wavemaker_num_h;         end if
       !
+      ! Re-upload kcs and kcuv to device after initialize_wavemakers() has
+      ! mutated the host counterparts. initialize_wavemakers (sfincs_wavemaker_io.f90)
+      ! sets kcs_h(ip) = 4 for wavemaker z-points (line 450) and
+      ! kcuv_h(ip) = 4 for wavemaker uv-faces (line 1136); both run after
+      ! copyin_phase4_degenerate has already copied the pre-wavemaker kcs /
+      ! kcuv to device, so without this refresh the device shadows stay stale.
+      ! k_compute_continuity (sfincs_continuity_gpu.cuf:519) branches on
+      ! kcs(nm) == 4 to apply the wavemaker discharge term, and
+      ! k_compute_fluxes (sfincs_momentum_gpu.cuf:269) gates on
+      ! kcuv(ip) == 1 .or. kcuv(ip) == 6; with stale device kcs/kcuv the
+      ! GPU never sees wavemaker cells / faces and zsmax diverges from CPU
+      ! by ~50% on a wavemaker case.
+      !
+      if (allocated(kcs_h))  kcs  = kcs_h
+      if (allocated(kcuv_h)) kcuv = kcuv_h
+      !
    end subroutine allocate_wavemaker_device_shadows
    !
    subroutine copyin_phase4_degenerate()
