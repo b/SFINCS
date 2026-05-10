@@ -1256,6 +1256,7 @@ end subroutine neuboundaries
    ! STEP 4 - Make faces
    !
    allocate(faces(4, 4*quadtree_nr_points)) ! max 4 nodes per faces, and max 4 faces per node
+   faces = 0
    !
    nfaces = 0
    !   
