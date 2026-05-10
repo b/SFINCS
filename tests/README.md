@@ -142,6 +142,15 @@ PASS, otherwise 1.
   NetCDF (≈ 3.5 MB combined). No spiderweb, no infiltration, no
   structures, no SnapWave.
 
+- **`case_prod_storm_amuv`** — a 400 × 400 regular grid at 50 m spacing
+  (160 000 active cells) under gridded `amu` / `amv` wind components with a
+  drifting wind front and a non-trivial meridional gradient, plus
+  spatially-varying Green-Ampt infiltration (`infiltration_type = gai`,
+  three soil rasters), tidal western boundary forcing, 24-hour run.
+  Production-scale tier: large enough to amortise GPU launch overhead so
+  `tests/run_benchmarks.sh` reports a measured speedup. Inputs are
+  authored synthetically by the directory's `generate.py`.
+
 ## Where artifacts land
 
 Each (case, configuration) pair stages its inputs into a clean directory
