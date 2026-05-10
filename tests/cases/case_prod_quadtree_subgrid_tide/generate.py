@@ -30,8 +30,8 @@ from shapely.geometry import Polygon
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, help="output case directory")
-    parser.add_argument("--nmax", type=int, default=150)
-    parser.add_argument("--mmax", type=int, default=150)
+    parser.add_argument("--nmax", type=int, default=130)
+    parser.add_argument("--mmax", type=int, default=130)
     parser.add_argument("--dx", type=float, default=200.0)
     parser.add_argument("--epsg", type=int, default=32633)
     return parser.parse_args()
