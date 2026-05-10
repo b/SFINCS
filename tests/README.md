@@ -118,6 +118,21 @@ PASS, otherwise 1.
   infiltration, no structures, no discharges, no wavemakers, no
   SnapWave.
 
+- **`case_prod_riverine`** — a 400 × 400 regular grid at 50 m spacing
+  (160 000 active z points, ~22 700 adaptive-CFL time steps over 24
+  simulated hours), exercising **simultaneous boundary types**: a
+  downstream tidal water-level boundary (M2 + M4 + sea-level on the
+  west edge) and an upstream `srcfile`/`disfile` mass-flux source
+  (stepped hydrograph) running together over the same window. Adds
+  `inftype = cna` SCS Curve Number infiltration over a spatially-varying
+  CN raster, time-varying precipitation, and one weir polyline carrying
+  flux at the river midpoint. The harness's first production-scale tier
+  case, sized to make `tests/runs_bench/summary.json`'s speedup ratio
+  dominated by per-step compute rather than GPU launch overhead. No
+  subgrid, no quadtree, no spiderweb, no SnapWave, no wavemakers.
+  Inputs are generated in-tree by `case_prod_riverine/generate.py`
+  from a fixed seed; no `fetch.sh`.
+
 ## Where artifacts land
 
 Each (case, configuration) pair stages its inputs into a clean directory
