@@ -79,6 +79,13 @@ PASS, otherwise 1.
   only: no subgrid, no quadtree, no spiderweb meteo, no infiltration, no
   structures. Fast smoke layer of the matrix.
 
+- **`case_infiltration`** — the same 50 × 50 regular mesh, bathymetry,
+  and M2 tide as `case_regular`, plus a zero-rate `precipfile`
+  (`precip = .true.` is the gate that lets infiltration initialize) and
+  `qinf = 5.0` mm/hr to activate the spatially-uniform constant
+  infiltration variant (`inftype = 'con'`). Isolates the infiltration
+  update in the time loop without introducing any rainfall forcing.
+
 - **`case_quadtree_tide`** — a 4452-cell quadtree mesh (three refinement
   levels over a 23 × 63 base grid at 200 m spacing, rotated 27°) under a
   single semidiurnal M2 tide, 24-hour run. Isolates the quadtree path
@@ -243,8 +250,7 @@ The following are explicitly **not** covered by this harness:
 
 `tests/run_benchmarks.sh` is the companion harness that measures
 wall-time and peak resident memory across three SFINCS builds, on the
-same three test cases the validation harness uses. Run from the repo
-root:
+same test cases the validation harness uses. Run from the repo root:
 
 ```sh
 tests/run_benchmarks.sh
