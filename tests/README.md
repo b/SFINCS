@@ -245,8 +245,16 @@ tests/run_benchmarks.sh
 
 It builds three configurations into separate prefixes:
 
-- **`cpu`** — `source/install_cpu/bin/sfincs`, gfortran CPU baseline,
-  `OMP_NUM_THREADS=1` for determinism.
+- **`cpu`** — `source/install_cpu/bin/sfincs`, gfortran CPU baseline.
+  By default the harness lets OpenMP use **all available cores**
+  (`OMP_NUM_THREADS=$(nproc)`) so `speedup_vs_cpu` reflects the operator
+  expectation of "1 GPU vs the CPU's full throughput", not "1 GPU vs 1
+  CPU thread". Set `BENCH_CPU_THREADS=N` to pin the CPU baseline to a
+  specific thread count for cross-host repeatability — that path also
+  exports `OMP_PROC_BIND=close` for thread-pinning stability. The
+  validation harness (`tests/run_validation.sh`) keeps
+  `OMP_NUM_THREADS=1` on purpose; that one cares about FP determinism,
+  not throughput.
 - **`gpu_kieee`** — `source/install_cuda_kieee/bin/sfincs`, nvfortran with
   `-Kieee` (the default; matches CPU floating-point semantics).
 - **`gpu_fastmath`** — `source/install_cuda_fastmath/bin/sfincs`,
@@ -278,8 +286,13 @@ Output is two-fold:
   object per `(case, build)` pair containing: `case`, `config`,
   `wall_clock_seconds`, `peak_memory_mb`, `max_abs_diff_zsmax` (`null`
   for `cpu`), `max_zsmax_ref` (`null` for `cpu`), `ratio_vs_ref` (`null`
-  for `cpu`), `verdict` (`PASS` / `FAIL` / `ERROR`), and
-  `speedup_vs_cpu` (`null` for `cpu`, else `cpu_wall / config_wall`).
+  for `cpu`), `verdict` (`PASS` / `FAIL` / `ERROR`),
+  `speedup_vs_cpu` (`null` for `cpu`, else `cpu_wall / config_wall`),
+  and `cpu_threads` (the OpenMP thread count used by the CPU baseline
+  on `cpu` rows; `null` on GPU rows). The `speedup_vs_cpu` figures on
+  GPU rows are therefore "GPU vs CPU at `cpu_threads` threads"; an
+  operator chasing a single number across runs should always read it
+  alongside its accompanying `(case, cpu)` row.
 
 Exit code: 0 iff every `(case, build)` run completed without error AND
 every GPU run's `ratio_vs_ref < 1e-3`. Otherwise 1.
@@ -289,6 +302,15 @@ Optional flags:
 - `--skip-build` — reuse existing binaries from a prior run.
 - `--skip-fetch` — skip per-case `fetch.sh` (only `case_production`
   fetches inputs).
+
+Optional env knobs:
+
+- `BENCH_CPU_THREADS=<int>` — pin the CPU baseline to `N` OpenMP
+  threads for cross-host reproducibility. Unset (the default) lets
+  OpenMP pick all available cores via `nproc`. When set, the harness
+  additionally exports `OMP_PROC_BIND=close` so the threads stay
+  pinned. The recorded value lands in `summary.json` as `cpu_threads`
+  on every CPU row.
 
 Per-row detail (`sfincs.log`, `sfincs_map.nc`, `time.txt`) lands under
 `tests/runs_bench/<case>/<config>/` for inspection.
