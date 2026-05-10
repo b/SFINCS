@@ -481,10 +481,14 @@ module snapwave_infragravity
     hsig = 4*sqrt(sum(Ebnd)*df)   
     !
     ! Calculate representative value for IG wave period
-    allocate (temp(K))
-    temp=(/(i,i=0,K-1)/)
-    !  
-    ! Select equidistant wave components between the earlier selected range of frequencies around the peak frequency based on sprdthr
+    !
+    ! Difference-frequency grid for the bound long-wave spectrum. Ebnd(m) is at deltaf = m*df
+    ! (see the do m=1,K-1 loop above), so fbnd must be K-1 long with values m*df, m=1..K-1.
+    ! Both temp and fbnd must be K-1 here: a size-K temp would (a) shift fbnd off by one bin
+    ! relative to Ebnd and (b) auto-grow fbnd to K via Fortran-2003 reallocation-on-assignment,
+    ! which gfortran -fcheck=bounds then flags inside tpDcalc as "bound mismatch ... 'f' (K/K-1)".
+    allocate (temp(K-1))
+    temp=(/(i,i=1,K-1)/)
     allocate(fbnd(K-1))
     fbnd = temp * df
     deallocate(temp)
