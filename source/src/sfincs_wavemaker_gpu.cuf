@@ -22,6 +22,11 @@ module sfincs_wavemaker
    use sfincs_log
    use sfincs_error
    use sfincs_data_device
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8, &
+      bridge_out_cell_int1, bridge_out_cell_int4, &
+      bridge_out_edge_real4, bridge_out_edge_int1
    use sfincs_wavemaker_io, only: initialize_wavemakers
    !
    implicit none
@@ -251,7 +256,7 @@ contains
       ! computed earlier in this routine; they are NOT catalog bridge-IN
       ! and remain intact.
       !
-      zs = zs_h
+      call bridge_in_cell_real8(zs, zs_h)
       if (wavemaker_timeseries_h) then
          allocate(wavemaker_forcing_hm0_ig_t_d(wavemaker_nr_forcing_points_h))
          allocate(wavemaker_forcing_setup_t_d(wavemaker_nr_forcing_points_h))
@@ -282,7 +287,9 @@ contains
          !
          ! ===== Layer 4: copy-OUT device -> host for WRITE set =============
          !
-         q_h                 = q
+         call bridge_out_edge_real4(q_h, q)
+         ! wavemaker_uvmean / wavemaker_uvtrend are wavemaker-uv-point-sized
+         ! (iwm), not edge-rank — keep bulk D2H.
          wavemaker_uvmean_h  = wavemaker_uvmean
          wavemaker_uvtrend_h = wavemaker_uvtrend
          !

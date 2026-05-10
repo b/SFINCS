@@ -32,6 +32,7 @@ libsfincs_la_SOURCES += \
 	sfincs_spiderweb.f90 \
 	sfincs_data.f90 \
 	sfincs_data_device.cuf \
+	sfincs_partition.cuf \
     ../third_party_open/Delft3D/astro.f90 \
 	../third_party_open/utils/geometry.f90 \
 	sfincs_error.f90 \
@@ -78,7 +79,6 @@ libsfincs_la_SOURCES += \
 	sfincs_wavemaker_io.f90 \
 	sfincs_wavemaker_gpu.cuf \
 	sfincs_bathtub.f90 \
-	sfincs_partition.cuf \
 	sfincs_lib.F90 \
 	sfincs_bmi.f90
 else

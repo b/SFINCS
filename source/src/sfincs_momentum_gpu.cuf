@@ -33,6 +33,11 @@ module sfincs_momentum
    use cudafor
    use iso_fortran_env, only: int32
    use sfincs_data_device
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8, &
+      bridge_out_cell_int1, bridge_out_cell_int4, &
+      bridge_out_edge_real4, bridge_out_edge_int1
    !
    implicit none
    !
@@ -125,10 +130,12 @@ contains
       ! friction arrays, subgrid tables, etc.). See PR description for the
       ! full per-array tally.
       !
-      zs = zs_h
-      uv = uv_h
+      call bridge_in_cell_real8(zs, zs_h)
+      call bridge_in_edge_real4(uv, uv_h)
       !
-      ! ------ Seed q0/uv0 from q/uv (covers full 1..npuv+ncuv range) -------
+      ! ------ Seed q0/uv0 from q/uv (covers the local-indexed range) -------
+      ! Both q0/uv0 and q/uv are sized npuv_local + halo_edge_count after
+      ! the shrink, so a whole-array assign covers the full local range.
       !
       q0  = q
       uv0 = uv
@@ -165,17 +172,17 @@ contains
       !
       ! ------ Copy-OUT: device -> host for WRITE set ----------------------
       !
-      q_h    = q
-      q0_h   = q0
-      uv_h   = uv
-      uv0_h  = uv0
-      kfuv_h = kfuv
+      call bridge_out_edge_real4(q_h,    q)
+      call bridge_out_edge_real4(q0_h,   q0)
+      call bridge_out_edge_real4(uv_h,   uv)
+      call bridge_out_edge_real4(uv0_h,  uv0)
+      call bridge_out_edge_int1 (kfuv_h, kfuv)
       !
       min_dt_int_h = min_dt_int_d
       min_dt_h     = transfer(min_dt_int_h, 0.0_4)
       !
       if (timestep_analysis_h) then
-         timestep_analysis_required_timestep_h = timestep_analysis_required_timestep
+         call bridge_out_edge_real4(timestep_analysis_required_timestep_h, timestep_analysis_required_timestep)
       endif
       !
       call system_clock(count1, count_rate, count_max)

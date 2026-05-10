@@ -34,6 +34,11 @@ module sfincs_structures
    !
    use cudafor
    use sfincs_data_device
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8, &
+      bridge_out_cell_int1, bridge_out_cell_int4, &
+      bridge_out_edge_real4, bridge_out_edge_int1
    use sfincs_structures_io, only: read_structures, &
                                    read_structure_file, &
                                    read_thin_dams, &
@@ -104,7 +109,7 @@ contains
       ! update_boundary_conditions (sfincs_boundaries_gpu.cuf:210) writes
       ! zs(nmb) host-side for kcs==6 (Neumann lateral) cells.
       !
-      zs = zs_h
+      call bridge_in_cell_real8(zs, zs_h)
       !
       ! ------ One thread per structure-face entry ------------------------
       !
@@ -117,8 +122,8 @@ contains
       !
       ! ------ Copy-OUT: device -> host for WRITE set ---------------------
       !
-      q_h  = q
-      uv_h = uv
+      call bridge_out_edge_real4(q_h,  q)
+      call bridge_out_edge_real4(uv_h, uv)
       !
       call system_clock(count1, count_rate, count_max)
       tloop = tloop + 1.0 * (count1 - count0) / count_rate

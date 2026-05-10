@@ -39,6 +39,11 @@ module sfincs_discharges
    use cudafor
    use sfincs_data_device
    use sfincs_discharges_io, only: io_read_discharges => read_discharges
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8, &
+      bridge_out_cell_int1, bridge_out_cell_int4, &
+      bridge_out_edge_real4, bridge_out_edge_int1
    !
    implicit none
    !
@@ -169,7 +174,7 @@ contains
          ! drainage_fraction_open are written on-device the previous
          ! step with no per-step host writer.
          !
-         zs = zs_h
+         call bridge_in_cell_real8(zs, zs_h)
          !
          ! ------ Kernel launch ------------------------------------
          !
