@@ -2,7 +2,10 @@
 # CPU vs GPU-IEEE-strict vs GPU-fast-math benchmark harness for SFINCS.
 #
 # Builds three configurations into separate prefixes:
-#   * cpu          — gfortran CPU baseline, OMP_NUM_THREADS=1
+#   * cpu          — gfortran CPU baseline, all OpenMP cores by default
+#                    (override with BENCH_CPU_THREADS=N for repeatable
+#                    cross-host numbers; that path also pins threads via
+#                    OMP_PROC_BIND=close)
 #   * gpu_kieee    — nvfortran CUDA, default -Kieee (matches CPU FP)
 #   * gpu_fastmath — nvfortran CUDA, --enable-fast-math (drops -Kieee)
 #
@@ -58,7 +61,7 @@ for arg in "$@"; do
         --skip-build) SKIP_BUILD=1 ;;
         --skip-fetch) SKIP_FETCH=1 ;;
         -h|--help)
-            sed -n '2,32p' "$0"
+            sed -n '2,36p' "$0"
             exit 0
             ;;
         *)
@@ -67,6 +70,19 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# CPU baseline thread count. Default = all cores via nproc so the
+# `speedup_vs_cpu` numbers reflect the comparison an operator expects
+# ("1 GPU vs the CPU's full throughput"). BENCH_CPU_THREADS=N pins to a
+# specific count for cross-host reproducibility and additionally exports
+# OMP_PROC_BIND=close for thread-pinning stability.
+if [ -n "${BENCH_CPU_THREADS:-}" ]; then
+    CPU_THREADS=$BENCH_CPU_THREADS
+    CPU_OMP_PROC_BIND=close
+else
+    CPU_THREADS=$(nproc)
+    CPU_OMP_PROC_BIND=
+fi
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -193,20 +209,24 @@ build_gpu_fastmath() {
 
 # --- Run steps --------------------------------------------------------------
 
-# Run the CPU binary in tests/runs_bench/<case>/cpu/. OMP_NUM_THREADS=1
-# matches the validation harness convention so the comparison is
-# single-threaded reference vs. single-rank GPU.
+# Run the CPU binary in tests/runs_bench/<case>/cpu/ at the harness-wide
+# CPU_THREADS count (all cores by default; BENCH_CPU_THREADS overrides).
+# Diverges from tests/run_validation.sh on purpose: validation pins to a
+# single thread for FP determinism, benchmarking measures throughput.
 run_cpu() {
     case_name=$1
     case_dir=$2
     run_dir=$RUNS_DIR/$case_name/cpu
     populate_run_dir "$case_dir" "$run_dir"
-    echo "--- Running CPU: $case_name ---"
+    echo "--- Running CPU ($CPU_THREADS threads): $case_name ---"
     rc=0
     (
         cd "$run_dir"
-        OMP_NUM_THREADS=1 /usr/bin/time -v -o time.txt \
-            "$CPU_BIN" >sfincs.log 2>&1
+        export OMP_NUM_THREADS=$CPU_THREADS
+        if [ -n "$CPU_OMP_PROC_BIND" ]; then
+            export OMP_PROC_BIND=$CPU_OMP_PROC_BIND
+        fi
+        /usr/bin/time -v -o time.txt "$CPU_BIN" >sfincs.log 2>&1
     ) || rc=$?
     echo "    cpu exit=$rc log=$run_dir/sfincs.log"
 }
@@ -331,8 +351,9 @@ while IFS= read -r case_name; do
     if [ ! -f "$case_dir/sfincs.inp" ]; then
         echo "    no sfincs.inp in $case_dir — marking all configs ERROR"
         for cfg in cpu gpu_kieee gpu_fastmath; do
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-                "$case_name" "$cfg" "null" "null" "null" "null" "null" "ERROR" "null" \
+            if [ "$cfg" = cpu ]; then row_threads=$CPU_THREADS; else row_threads=null; fi
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$case_name" "$cfg" "null" "null" "null" "null" "null" "ERROR" "null" "$row_threads" \
                 >>"$ROWS"
         done
         continue
@@ -349,8 +370,8 @@ while IFS= read -r case_name; do
         cpu_peak=$(parse_peak_mem_mb "$cpu_run_dir/time.txt")
         cpu_verdict=PASS
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$case_name" "cpu" "$cpu_wall" "$cpu_peak" "null" "null" "null" "$cpu_verdict" "null" \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$case_name" "cpu" "$cpu_wall" "$cpu_peak" "null" "null" "null" "$cpu_verdict" "null" "$CPU_THREADS" \
         >>"$ROWS"
 
     for cfg in gpu_kieee gpu_fastmath; do
@@ -384,8 +405,8 @@ while IFS= read -r case_name; do
                 fi
             fi
         fi
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-            "$case_name" "$cfg" "$gpu_wall" "$gpu_peak" "$max_abs_diff" "$max_zsmax_ref" "$ratio" "$verdict" "$speedup" \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$case_name" "$cfg" "$gpu_wall" "$gpu_peak" "$max_abs_diff" "$max_zsmax_ref" "$ratio" "$verdict" "$speedup" "null" \
             >>"$ROWS"
     done
 done <"$CASES_FILE"
@@ -398,24 +419,24 @@ echo "=== Benchmark summary ==="
 overall=0
 # r_max_abs / r_max_zs are emitted into summary.json but not into the
 # stdout BENCH-SUMMARY line — same row, two consumers, different columns.
-while IFS="$TAB" read -r r_case r_config r_wall r_peak r_max_abs r_max_zs r_ratio r_verdict r_speedup; do
+while IFS="$TAB" read -r r_case r_config r_wall r_peak r_max_abs r_max_zs r_ratio r_verdict r_speedup r_threads; do
     : "$r_peak" "$r_max_abs" "$r_max_zs"
-    printf 'BENCH-SUMMARY case=%s config=%s wall=%s speedup=%s ratio=%s verdict=%s\n' \
-        "$r_case" "$r_config" "$r_wall" "$r_speedup" "$r_ratio" "$r_verdict"
+    printf 'BENCH-SUMMARY case=%s config=%s wall=%s speedup=%s ratio=%s verdict=%s cpu_threads=%s\n' \
+        "$r_case" "$r_config" "$r_wall" "$r_speedup" "$r_ratio" "$r_verdict" "$r_threads"
     if [ "$r_verdict" != PASS ]; then
         overall=1
     fi
 done <"$ROWS"
 
 echo
-printf '%-26s %-14s %-12s %-12s %-12s %-10s %s\n' \
-    "case" "config" "wall_sec" "peak_mb" "ratio" "speedup" "verdict"
-printf '%-26s %-14s %-12s %-12s %-12s %-10s %s\n' \
-    "----" "------" "--------" "-------" "-----" "-------" "-------"
-while IFS="$TAB" read -r r_case r_config r_wall r_peak r_max_abs r_max_zs r_ratio r_verdict r_speedup; do
+printf '%-32s %-14s %-12s %-12s %-12s %-10s %-10s %s\n' \
+    "case" "config" "wall_sec" "peak_mb" "ratio" "speedup" "threads" "verdict"
+printf '%-32s %-14s %-12s %-12s %-12s %-10s %-10s %s\n' \
+    "----" "------" "--------" "-------" "-----" "-------" "-------" "-------"
+while IFS="$TAB" read -r r_case r_config r_wall r_peak r_max_abs r_max_zs r_ratio r_verdict r_speedup r_threads; do
     : "$r_max_abs" "$r_max_zs"
-    printf '%-26s %-14s %-12s %-12s %-12s %-10s %s\n' \
-        "$r_case" "$r_config" "$r_wall" "$r_peak" "$r_ratio" "$r_speedup" "$r_verdict"
+    printf '%-32s %-14s %-12s %-12s %-12s %-10s %-10s %s\n' \
+        "$r_case" "$r_config" "$r_wall" "$r_peak" "$r_ratio" "$r_speedup" "$r_threads" "$r_verdict"
 done <"$ROWS"
 
 # Build summary.json from the TSV.
@@ -428,17 +449,23 @@ rows_path, json_path = sys.argv[1], sys.argv[2]
 keys = [
     "case", "config", "wall_clock_seconds", "peak_memory_mb",
     "max_abs_diff_zsmax", "max_zsmax_ref", "ratio_vs_ref", "verdict",
-    "speedup_vs_cpu",
+    "speedup_vs_cpu", "cpu_threads",
 ]
 numeric = {
     "wall_clock_seconds", "peak_memory_mb", "max_abs_diff_zsmax",
     "max_zsmax_ref", "ratio_vs_ref", "speedup_vs_cpu",
 }
+integer = {"cpu_threads"}
 
 
 def parse_value(key, raw):
     if raw == "null" or raw == "":
         return None
+    if key in integer:
+        try:
+            return int(raw)
+        except ValueError:
+            return None
     if key in numeric:
         try:
             v = float(raw)
