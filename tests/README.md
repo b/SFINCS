@@ -85,6 +85,13 @@ PASS, otherwise 1.
   from the rest: no subgrid, no spiderweb, no infiltration, no
   structures, no SnapWave.
 
+- **`case_discharges`** — a 50 × 50 regular grid at 100 m spacing, flat
+  -10 m bathymetry, all-interior mask (closed basin, no boundary
+  forcing), with a single point source at the centre injecting a
+  constant 50 m³/s for 24 hours. Isolates the point-discharge path
+  (`srcfile` / `disfile`) so the `nsrc_h > 0` branches in
+  `sfincs_discharges_gpu.cuf` are exercised by the harness output diffs.
+
 - **`case_production`** — a production-style case combining subgrid
   topography, a quadtree mesh, a synthetic Holland-vortex spiderweb
   tropical-cyclone meteo, spatially-varying infiltration, and a weir-style
