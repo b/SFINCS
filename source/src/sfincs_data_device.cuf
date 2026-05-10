@@ -227,6 +227,8 @@ module sfincs_data_device
    integer :: local_rank
    integer :: npn_local
    integer :: npuv_local
+   integer :: halo_cell_count
+   integer :: halo_edge_count
    integer :: cell_index_first
    integer :: cell_index_last
    !
@@ -337,30 +339,29 @@ module sfincs_data_device
    integer :: halo_uv_n_neighbors
    !
    ! Local-to-global translation maps. Persisted across partition_and_localize
-   ! because SOR-708's halo_exchange uses them to translate the LOCAL indices
-   ! stored in halo_send_local_idx back into GLOBAL indices, which are what
-   ! the still-full-size device shadows are addressed by while AC #5/#6
-   ! deferral remains in effect (see sfincs_partition.cuf Phase 4 comment;
-   ! SOR-755 lands the eventual Phase-4 shrink and connectivity renumber
-   ! that makes this translation step unnecessary).
-   ! halo_recv_remote_idx already carries global indices on the receive side,
-   ! so only the send side needs the translation. global_to_local /
-   ! global_to_local_uv are not persisted: they are fully consumed inside
-   ! build_local_index_maps + build_halo_descriptors.
+   ! because the per-step bridge-IN gather kernels in source/src/sfincs_*_gpu.cuf
+   ! (and the post-shrink output-pack helpers in this module) read
+   ! local_to_global / local_to_global_uv to translate LOCAL device-shadow
+   ! indices into GLOBAL host-array indices. global_to_local /
+   ! global_to_local_uv are persisted alongside so that
+   ! allocate_structure_device_shadows /
+   ! allocate_discharges_device_shadows / allocate_wavemaker_device_shadows --
+   ! which run after read_structures / read_discharges / initialize_wavemakers
+   ! has populated host counterparts -- can renumber the connectivity entries
+   ! they ship to device through the maps. halo_recv_remote_idx still carries
+   ! global indices on the receive side so the recv-translate step in
+   ! halo_exchange_zs / halo_exchange_q_uv keeps that source-of-truth.
    !
    integer, allocatable :: local_to_global(:)
    integer, allocatable :: local_to_global_uv(:)
+   integer, allocatable :: global_to_local(:)
+   integer, allocatable :: global_to_local_uv(:)
    !
-   ! Device-resident copy of local_to_global. The CUDA Fortran gather/scatter
-   ! kernels in halo_exchange_zs index halo_send_local_idx through this map
-   ! to translate the LOCAL halo index into the GLOBAL device-array index
-   ! while the AC #5/#6 Phase-4 shrink remains deferred to SOR-755.
+   ! Device-resident copy of local_to_global. Read by the per-step bridge-IN
+   ! gather and bridge-OUT scatter kernels in source/src/sfincs_*_gpu.cuf to
+   ! translate LOCAL device-shadow positions to GLOBAL host-array indices.
    !
    integer, device, allocatable :: local_to_global_d(:)
-   ! local_to_global_uv_d is the uv-edge counterpart, declared here for
-   ! symmetry. It is consumed by SOR-709's halo_exchange_q_uv gather/scatter
-   ! kernels (this PR does not allocate it; SOR-709 wires the allocation +
-   ! copyin alongside the q/uv halo exchange body).
    integer, device, allocatable :: local_to_global_uv_d(:)
    !
    ! Send/recv staging buffers for halo exchange. CUDA-aware MPI is

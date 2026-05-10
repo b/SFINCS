@@ -22,7 +22,7 @@ module sfincs_partition
    ! still maps to a recognisable host name.
    !
    use sfincs_data, only: &
-      npn_h => np, npuv_h => npuv, &
+      npn_h => np, npuv_h => npuv, ncuv_h => ncuv, &
       z_xz_h => z_xz, z_yz_h => z_yz, &
       kcs_h => kcs, kfuv_h => kfuv, kcuv_h => kcuv, &
       zs_h => zs, zs0_h => zs0, zsderv_h => zsderv, &
@@ -171,14 +171,24 @@ module sfincs_partition
               allocate_structure_device_shadows, &
               refresh_kcuv_device_shadow, &
               allocate_discharges_device_shadows, &
-              allocate_wavemaker_device_shadows
+              allocate_wavemaker_device_shadows, &
+              bridge_in_cell_real4, bridge_in_cell_real8, &
+              bridge_in_edge_real4, &
+              bridge_out_cell_real4, bridge_out_cell_real8, bridge_out_cell_int1, bridge_out_cell_int4, &
+              bridge_out_edge_real4, bridge_out_edge_int1
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
               build_halo_descriptors, &
               copyin_phase4_degenerate, &
               sort_indices_by_key, qsort_recursive, &
               gather_to_rank0_in_global_order, &
-              gather_to_rank0_real4, gather_to_rank0_real8
+              gather_to_rank0_real4, gather_to_rank0_real8, &
+              gather_cell_int1, gather_cell_int4, gather_cell_real4, gather_cell_real8, &
+              gather_edge_int1, gather_edge_real4, &
+              gather_edge_wide_int1, gather_edge_wide_real4, &
+              gather_cell_int4_renumber_edge, &
+              gather_edge_int4_renumber_cell, gather_edge_int4_renumber_edge, &
+              renumber_to_local_cell, renumber_to_local_edge
    !
    ! SOR-712: per-array gather of the rank-local slice of a device shadow
    ! into rank 0's full-size global host array. The two MPI types we need
@@ -198,17 +208,16 @@ contains
       integer :: nGpus, istat
       logical :: flag
       !
-      ! Local partition / index-map state. cell_part and the global_to_local
-      ! reverse maps are owned by this routine and deallocated before return.
-      ! local_to_global / local_to_global_uv live at module scope in
-      ! sfincs_data_device.cuf because SOR-708's halo_exchange needs them at
-      ! runtime to translate LOCAL send indices into GLOBAL device indices
-      ! (the device shadows stay full-size global-indexed while AC #5/#6
-      ! deferral is in effect).
+      ! Local partition state. cell_part is owned by this routine and
+      ! deallocated before return. local_to_global / local_to_global_uv /
+      ! global_to_local / global_to_local_uv live at module scope in
+      ! sfincs_data_device.cuf: halo_exchange_zs / halo_exchange_q_uv,
+      ! the per-step bridge-IN gathers and bridge-OUT scatters in
+      ! source/src/sfincs_*_gpu.cuf, and the deferred shadow allocators
+      ! (allocate_structure / allocate_discharges / allocate_wavemaker
+      ! device shadows) all need them at runtime.
       !
       integer, allocatable :: cell_part(:)
-      integer, allocatable :: global_to_local(:)
-      integer, allocatable :: global_to_local_uv(:)
       integer :: npn_total, npuv_total
       !
       ! --- Phase 1: MPI bootstrap -------------------------------------------
@@ -262,44 +271,29 @@ contains
       !
       allocate(cell_part(max(npn_h, 1)))
       call compute_quadtree_geometric_partition(cell_part)
-      call build_local_index_maps(cell_part, &
-                                  global_to_local, global_to_local_uv, &
-                                  npn_total, npuv_total)
+      call build_local_index_maps(cell_part, npn_total, npuv_total)
+      !
+      ! Halo extent scalars consumed by Phase-4 shrink and the per-step
+      ! bridge-IN gathers in source/src/sfincs_*_gpu.cuf. Layout:
+      ! local indices 1..npn_local own; npn_local+1..npn_local+halo_cell_count
+      ! mirror neighbor-rank cells in halo_neighbor_ranks order. Same for edges.
+      !
+      halo_cell_count = npn_total  - npn_local
+      halo_edge_count = npuv_total - npuv_local
       !
       ! --- Phase 4: Allocate device shadows + copyin ------------------------
-      ! Every device shadow is allocated with mold=arr_h and copied verbatim
-      ! from its host counterpart, both for mpi_size == 1 and mpi_size > 1.
-      !
-      ! NOTE on AC #5/#6 (Phase 4 shrink + connectivity renumber):
-      !
-      !    Phase 4 here does NOT shrink to npn_local + halo_count, and the
-      !    connectivity arrays are NOT renumbered to local indices. Per the
-      !    2026-05-05 architect amendment, AC #5 and AC #6 are deferred to
-      !    sub-epic 10 (gpu-rank-local-allocation), which executes after the
-      !    per-step staging bridges in source/src/sfincs_<name>_gpu.cuf are
-      !    removed. Reason: those bridges (e.g. compute_fluxes at
-      !    sfincs_momentum_gpu.cuf:138-176) re-copy the full host arrays into
-      !    the device shadows each step via plain `arr_d = arr_h` whole-array
-      !    assignments — the symmetric Bridge code lifetime mandated by the
-      !    architect's cross-sub-epic contract. Shrinking the device shadow
-      !    here, while the bridges still bulk re-copy, triggers a shape
-      !    mismatch / cudaErrorIllegalAddress on the first compute_fluxes
-      !    call. The SOR-707 issue body's "the per-step compute kernels in
-      !    sfincs_<name>_gpu.cuf are not touched" clause forbids the
-      !    bridge-side gather edit needed to make the shrink work, so the
-      !    shrink lives in sub-epic 10 instead, after the bridges are gone.
-      !
-      !    The foundation this issue delivers — cell_part (Phase 3),
-      !    npn_local / npuv_local / cell_index_first / cell_index_last
-      !    (build_local_index_maps), per-neighbor-rank halo descriptors
-      !    (Phase 5), and the persisted local_to_global / local_to_global_uv
-      !    translation maps (sfincs_data_device) — is sufficient input for
-      !    SOR-708 / SOR-709's halo-exchange execution to land against the
-      !    full-size global-indexed device shadows, and for sub-epic 10 to
-      !    land the eventual shrink and renumber.
-      !
-      !    N=1 stays bit-identical to the pre-PR baseline because Phase 4
-      !    here is a verbatim port of the prior single-rank Phase 4 body.
+      ! Every cell-rank device shadow is allocated with size
+      ! npn_local + halo_cell_count and gathered from its full-size host
+      ! counterpart through local_to_global. Edge-rank device shadows shrink
+      ! to npuv_local + halo_edge_count via local_to_global_uv. Connectivity
+      ! arrays whose entries are global cell or edge indices are renumbered
+      ! through the inverse maps (global_to_local / global_to_local_uv) so
+      ! kernel reads into the now-local-indexed device shadows resolve to the
+      ! correct local position. Other-sized shadows (boundary-, source-,
+      ! struct-, wavemaker-, quadtree-level-, fixed-sized) keep their host
+      ! shape via the legacy mold/copy pattern. For mpi_size == 1 the maps
+      ! degenerate to identity and halo_*_count == 0, reproducing the
+      ! pre-PR single-rank state bit-identically.
       !
       call copyin_phase4_degenerate()
       !
@@ -311,8 +305,7 @@ contains
       ! routine returns with halo_n_neighbors == 0 and no allocations
       ! beyond the zero-length neighbor-rank vector.
       !
-      call build_halo_descriptors(cell_part, &
-                                  global_to_local, global_to_local_uv)
+      call build_halo_descriptors(cell_part)
       !
       ! --- Phase 6: Halo-exchange runtime allocations -----------------------
       ! Mirror local_to_global to the device so the gather/scatter kernels in
@@ -408,12 +401,11 @@ contains
       !
       ! Drop host-side temporaries. The state that needs to live past this
       ! routine is the device-resident catalog plus the halo descriptor
-      ! arrays and local_to_global / local_to_global_uv (module scope in
-      ! sfincs_data_device, deallocated by device_finalize).
+      ! arrays and local_to_global / local_to_global_uv / global_to_local /
+      ! global_to_local_uv (module scope in sfincs_data_device, deallocated
+      ! by device_finalize).
       !
-      if (allocated(cell_part))          deallocate(cell_part)
-      if (allocated(global_to_local))    deallocate(global_to_local)
-      if (allocated(global_to_local_uv)) deallocate(global_to_local_uv)
+      if (allocated(cell_part)) deallocate(cell_part)
       !
    end subroutine partition_and_localize
    !
@@ -428,7 +420,16 @@ contains
       ! partition_and_localize, so this site is the earliest point at which
       ! the host arrays carry the right shape).
       !
-      if (allocated(structure_uv_index_h))   then; allocate(structure_uv_index,   mold=structure_uv_index_h);   structure_uv_index   = structure_uv_index_h;   end if
+      ! structure_uv_index is nstruc-sized; entries are global edge indices.
+      ! Renumber through global_to_local_uv so kernels can index
+      ! structure_uv_index(i) directly into the local-indexed device shadows
+      ! of kcuv / uv / q. Other three are data values, not indices, so they
+      ! keep verbatim mold/copy semantics.
+      !
+      if (allocated(structure_uv_index_h)) then
+         allocate(structure_uv_index, mold=structure_uv_index_h)
+         call renumber_to_local_edge(structure_uv_index, structure_uv_index_h)
+      end if
       if (allocated(structure_parameters_h)) then; allocate(structure_parameters, mold=structure_parameters_h); structure_parameters = structure_parameters_h; end if
       if (allocated(structure_type_h))       then; allocate(structure_type,       mold=structure_type_h);       structure_type       = structure_type_h;       end if
       if (allocated(structure_length_h))     then; allocate(structure_length,     mold=structure_length_h);     structure_length     = structure_length_h;     end if
@@ -449,7 +450,9 @@ contains
       ! momentum kernel and their min_dt candidates contaminate the global
       ! atomic-min, drifting GPU dt away from CPU dt every step.
       !
-      if (allocated(kcuv_h) .and. allocated(kcuv)) kcuv = kcuv_h
+      if (allocated(kcuv_h) .and. allocated(kcuv)) then
+         kcuv = kcuv_h(local_to_global_uv(1:npuv_local + halo_edge_count + ncuv_h + 1))
+      end if
       !
    end subroutine refresh_kcuv_device_shadow
    !
@@ -463,7 +466,15 @@ contains
       ! partition_and_localize, so this site is the earliest point at which
       ! the host arrays carry the right shape).
       !
-      if (allocated(nmindsrc_h))        then; allocate(nmindsrc,        mold=nmindsrc_h);        nmindsrc        = nmindsrc_h;        end if
+      ! nmindsrc is nsrcdrn-sized; entries are global SFINCS cell indices.
+      ! Renumber through global_to_local. qtsrc / drainage_type /
+      ! drainage_params carry data values (not indices) so they keep
+      ! verbatim mold/copy semantics.
+      !
+      if (allocated(nmindsrc_h)) then
+         allocate(nmindsrc, mold=nmindsrc_h)
+         call renumber_to_local_cell(nmindsrc, nmindsrc_h)
+      end if
       if (allocated(qtsrc_h))           then; allocate(qtsrc,           mold=qtsrc_h);           qtsrc           = qtsrc_h;           end if
       if (allocated(drainage_type_h))   then; allocate(drainage_type,   mold=drainage_type_h);   drainage_type   = drainage_type_h;   end if
       if (allocated(drainage_params_h)) then; allocate(drainage_params, mold=drainage_params_h); drainage_params = drainage_params_h; end if
@@ -480,9 +491,25 @@ contains
       ! this site is the earliest point at which the host arrays carry the
       ! right shape).
       !
-      if (allocated(wavemaker_index_uv_h))    then; allocate(wavemaker_index_uv,    mold=wavemaker_index_uv_h);    wavemaker_index_uv    = wavemaker_index_uv_h;    end if
-      if (allocated(wavemaker_index_nmi_h))   then; allocate(wavemaker_index_nmi,   mold=wavemaker_index_nmi_h);   wavemaker_index_nmi   = wavemaker_index_nmi_h;   end if
-      if (allocated(wavemaker_index_nmb_h))   then; allocate(wavemaker_index_nmb,   mold=wavemaker_index_nmb_h);   wavemaker_index_nmb   = wavemaker_index_nmb_h;   end if
+      ! Wavemaker arrays sized by wavemaker count (iwm), wavemaker-cell count
+      ! (nok), and wavemaker forcing-point count (wavemaker_nr_uv_points)
+      ! stay full-size; only entries that hold global SFINCS cell or edge
+      ! indices are renumbered. The cell-rank z_index_wavemaker (np-sized)
+      ! shrinks; its entries are wavemaker positions (1..nok), not cell or
+      ! edge indices, so no entry renumber is required.
+      !
+      if (allocated(wavemaker_index_uv_h)) then
+         allocate(wavemaker_index_uv, mold=wavemaker_index_uv_h)
+         call renumber_to_local_edge(wavemaker_index_uv, wavemaker_index_uv_h)
+      end if
+      if (allocated(wavemaker_index_nmi_h)) then
+         allocate(wavemaker_index_nmi, mold=wavemaker_index_nmi_h)
+         call renumber_to_local_cell(wavemaker_index_nmi, wavemaker_index_nmi_h)
+      end if
+      if (allocated(wavemaker_index_nmb_h)) then
+         allocate(wavemaker_index_nmb, mold=wavemaker_index_nmb_h)
+         call renumber_to_local_cell(wavemaker_index_nmb, wavemaker_index_nmb_h)
+      end if
       if (allocated(wavemaker_index_wmfp1_h)) then; allocate(wavemaker_index_wmfp1, mold=wavemaker_index_wmfp1_h); wavemaker_index_wmfp1 = wavemaker_index_wmfp1_h; end if
       if (allocated(wavemaker_index_wmfp2_h)) then; allocate(wavemaker_index_wmfp2, mold=wavemaker_index_wmfp2_h); wavemaker_index_wmfp2 = wavemaker_index_wmfp2_h; end if
       if (allocated(wavemaker_fac_wmfp_h))    then; allocate(wavemaker_fac_wmfp,    mold=wavemaker_fac_wmfp_h);    wavemaker_fac_wmfp    = wavemaker_fac_wmfp_h;    end if
@@ -490,11 +517,18 @@ contains
       if (allocated(wavemaker_angfac_h))      then; allocate(wavemaker_angfac,      mold=wavemaker_angfac_h);      wavemaker_angfac      = wavemaker_angfac_h;      end if
       if (allocated(wavemaker_uvmean_h))      then; allocate(wavemaker_uvmean,      mold=wavemaker_uvmean_h);      wavemaker_uvmean      = wavemaker_uvmean_h;      end if
       if (allocated(wavemaker_uvtrend_h))     then; allocate(wavemaker_uvtrend,     mold=wavemaker_uvtrend_h);     wavemaker_uvtrend     = wavemaker_uvtrend_h;     end if
-      if (allocated(z_index_wavemaker_h))     then; allocate(z_index_wavemaker,     mold=z_index_wavemaker_h);     z_index_wavemaker     = z_index_wavemaker_h;     end if
       if (allocated(wavemaker_nmd_h))         then; allocate(wavemaker_nmd,         mold=wavemaker_nmd_h);         wavemaker_nmd         = wavemaker_nmd_h;         end if
       if (allocated(wavemaker_nmu_h))         then; allocate(wavemaker_nmu,         mold=wavemaker_nmu_h);         wavemaker_nmu         = wavemaker_nmu_h;         end if
       if (allocated(wavemaker_ndm_h))         then; allocate(wavemaker_ndm,         mold=wavemaker_ndm_h);         wavemaker_ndm         = wavemaker_ndm_h;         end if
       if (allocated(wavemaker_num_h))         then; allocate(wavemaker_num,         mold=wavemaker_num_h);         wavemaker_num         = wavemaker_num_h;         end if
+      !
+      ! z_index_wavemaker is cell-rank (np-sized) — shrink to npn_local +
+      ! halo_cell_count. Entries are wavemaker positions (no renumber).
+      !
+      if (allocated(z_index_wavemaker_h)) then
+         allocate(z_index_wavemaker(npn_local + halo_cell_count))
+         call gather_cell_int4(z_index_wavemaker, z_index_wavemaker_h)
+      end if
       !
       ! Re-upload kcs and kcuv to device after initialize_wavemakers() has
       ! mutated the host counterparts. initialize_wavemakers (sfincs_wavemaker_io.f90)
@@ -509,199 +543,606 @@ contains
       ! GPU never sees wavemaker cells / faces and zsmax diverges from CPU
       ! by ~50% on a wavemaker case.
       !
-      if (allocated(kcs_h))  kcs  = kcs_h
-      if (allocated(kcuv_h)) kcuv = kcuv_h
+      if (allocated(kcs_h))  kcs  = kcs_h(local_to_global   (1:npn_local  + halo_cell_count))
+      if (allocated(kcuv_h)) kcuv = kcuv_h(local_to_global_uv(1:npuv_local + halo_edge_count + ncuv_h + 1))
       !
    end subroutine allocate_wavemaker_device_shadows
    !
    subroutine copyin_phase4_degenerate()
       !
-      ! Mirror of the prior single-rank Phase 4 body. Every device shadow
-      ! is allocated with mold=arr_h and copied verbatim from its host
-      ! counterpart, guaranteeing the N=1 path produces device-side arrays
-      ! bit-identical to the pre-PR baseline. Skip arrays whose host
-      ! counterpart is unallocated (wavemaker, drainage, structures, etc.
-      ! only allocated when their input is given).
+      ! Allocate device shadows and copyin from host counterparts. Cell-rank
+      ! shadows shrink to npn_local + halo_cell_count and are gathered
+      ! through local_to_global; edge-rank shadows shrink to
+      ! npuv_local + halo_edge_count and are gathered through
+      ! local_to_global_uv. Connectivity arrays whose entries are global
+      ! cell or edge indices are renumbered through global_to_local /
+      ! global_to_local_uv before being shipped to device. Sentinel /
+      ! out-of-range entries (<= 0 or > npn_h / > npuv_h) pass through
+      ! unchanged. Other-sized shadows (boundary-, source-, struct-,
+      ! wavemaker-, quadtree-level-, fixed-sized) keep their host shape via
+      ! the legacy mold/copy pattern. For mpi_size == 1 the maps degenerate
+      ! to identity and halo_*_count == 0, so this routine reproduces the
+      ! pre-shrink single-rank state bit-identically.
       !
-      if (allocated(kcs_h))           then; allocate(kcs,           mold=kcs_h);           kcs           = kcs_h;           end if
-      if (allocated(kfuv_h))          then; allocate(kfuv,          mold=kfuv_h);          kfuv          = kfuv_h;          end if
-      if (allocated(kcuv_h))          then; allocate(kcuv,          mold=kcuv_h);          kcuv          = kcuv_h;          end if
-      if (allocated(zs_h))            then; allocate(zs,            mold=zs_h);            zs            = zs_h;            end if
-      if (allocated(zs0_h))           then; allocate(zs0,           mold=zs0_h);           zs0           = zs0_h;           end if
-      if (allocated(zsderv_h))        then; allocate(zsderv,        mold=zsderv_h);        zsderv        = zsderv_h;        end if
-      if (allocated(q_h))             then; allocate(q,             mold=q_h);             q             = q_h;             end if
-      if (allocated(q0_h))            then; allocate(q0,            mold=q0_h);            q0            = q0_h;            end if
-      if (allocated(uv_h))            then; allocate(uv,            mold=uv_h);            uv            = uv_h;            end if
-      if (allocated(uv0_h))           then; allocate(uv0,           mold=uv0_h);           uv0           = uv0_h;           end if
-      if (allocated(zb_h))            then; allocate(zb,            mold=zb_h);            zb            = zb_h;            end if
-      if (allocated(zbuv_h))          then; allocate(zbuv,          mold=zbuv_h);          zbuv          = zbuv_h;          end if
-      if (allocated(zbuvmx_h))        then; allocate(zbuvmx,        mold=zbuvmx_h);        zbuvmx        = zbuvmx_h;        end if
-      if (allocated(zsmax_h))         then; allocate(zsmax,         mold=zsmax_h);         zsmax         = zsmax_h;         end if
-      if (allocated(maxzsm_h))        then; allocate(maxzsm,        mold=maxzsm_h);        maxzsm        = maxzsm_h;        end if
-      if (allocated(qmax_h))          then; allocate(qmax,          mold=qmax_h);          qmax          = qmax_h;          end if
-      if (allocated(vmax_h))          then; allocate(vmax,          mold=vmax_h);          vmax          = vmax_h;          end if
-      if (allocated(twet_h))          then; allocate(twet,          mold=twet_h);          twet          = twet_h;          end if
-      if (allocated(zsm_h))           then; allocate(zsm,           mold=zsm_h);           zsm           = zsm_h;           end if
-      if (allocated(z_volume_h))      then; allocate(z_volume,      mold=z_volume_h);      z_volume      = z_volume_h;      end if
-      if (allocated(z_flags_iref_h))  then; allocate(z_flags_iref,  mold=z_flags_iref_h);  z_flags_iref  = z_flags_iref_h;  end if
-      if (allocated(uv_flags_iref_h)) then; allocate(uv_flags_iref, mold=uv_flags_iref_h); uv_flags_iref = uv_flags_iref_h; end if
-      if (allocated(uv_flags_type_h)) then; allocate(uv_flags_type, mold=uv_flags_type_h); uv_flags_type = uv_flags_type_h; end if
-      if (allocated(uv_flags_dir_h))  then; allocate(uv_flags_dir,  mold=uv_flags_dir_h);  uv_flags_dir  = uv_flags_dir_h;  end if
-      if (allocated(mask_adv_h))      then; allocate(mask_adv,      mold=mask_adv_h);      mask_adv      = mask_adv_h;      end if
-      if (allocated(index_kcuv2_h))   then; allocate(index_kcuv2,   mold=index_kcuv2_h);   index_kcuv2   = index_kcuv2_h;   end if
-      if (allocated(nmikcuv2_h))      then; allocate(nmikcuv2,      mold=nmikcuv2_h);      nmikcuv2      = nmikcuv2_h;      end if
-      if (allocated(nmbkcuv2_h))      then; allocate(nmbkcuv2,      mold=nmbkcuv2_h);      nmbkcuv2      = nmbkcuv2_h;      end if
-      if (allocated(ibkcuv2_h))       then; allocate(ibkcuv2,       mold=ibkcuv2_h);       ibkcuv2       = ibkcuv2_h;       end if
-      if (allocated(zsb_h))           then; allocate(zsb,           mold=zsb_h);           zsb           = zsb_h;           end if
-      if (allocated(zsb0_h))          then; allocate(zsb0,          mold=zsb0_h);          zsb0          = zsb0_h;          end if
-      if (allocated(ibuvdir_h))       then; allocate(ibuvdir,       mold=ibuvdir_h);       ibuvdir       = ibuvdir_h;       end if
-      if (allocated(uvmean_h))        then; allocate(uvmean,        mold=uvmean_h);        uvmean        = uvmean_h;        end if
-      if (allocated(subgrid_uv_zmin_h))      then; allocate(subgrid_uv_zmin,      mold=subgrid_uv_zmin_h);      subgrid_uv_zmin      = subgrid_uv_zmin_h;      end if
-      if (allocated(subgrid_uv_zmax_h))      then; allocate(subgrid_uv_zmax,      mold=subgrid_uv_zmax_h);      subgrid_uv_zmax      = subgrid_uv_zmax_h;      end if
-      if (allocated(subgrid_uv_havg_h))      then; allocate(subgrid_uv_havg,      mold=subgrid_uv_havg_h);      subgrid_uv_havg      = subgrid_uv_havg_h;      end if
-      if (allocated(subgrid_uv_nrep_h))      then; allocate(subgrid_uv_nrep,      mold=subgrid_uv_nrep_h);      subgrid_uv_nrep      = subgrid_uv_nrep_h;      end if
-      if (allocated(subgrid_uv_pwet_h))      then; allocate(subgrid_uv_pwet,      mold=subgrid_uv_pwet_h);      subgrid_uv_pwet      = subgrid_uv_pwet_h;      end if
-      if (allocated(subgrid_uv_havg_zmax_h)) then; allocate(subgrid_uv_havg_zmax, mold=subgrid_uv_havg_zmax_h); subgrid_uv_havg_zmax = subgrid_uv_havg_zmax_h; end if
-      if (allocated(subgrid_uv_nrep_zmax_h)) then; allocate(subgrid_uv_nrep_zmax, mold=subgrid_uv_nrep_zmax_h); subgrid_uv_nrep_zmax = subgrid_uv_nrep_zmax_h; end if
-      if (allocated(subgrid_uv_fnfit_h))     then; allocate(subgrid_uv_fnfit,     mold=subgrid_uv_fnfit_h);     subgrid_uv_fnfit     = subgrid_uv_fnfit_h;     end if
-      if (allocated(subgrid_uv_navg_w_h))    then; allocate(subgrid_uv_navg_w,    mold=subgrid_uv_navg_w_h);    subgrid_uv_navg_w    = subgrid_uv_navg_w_h;    end if
-      if (allocated(subgrid_z_zmin_h))       then; allocate(subgrid_z_zmin,       mold=subgrid_z_zmin_h);       subgrid_z_zmin       = subgrid_z_zmin_h;       end if
-      if (allocated(subgrid_z_zmax_h))       then; allocate(subgrid_z_zmax,       mold=subgrid_z_zmax_h);       subgrid_z_zmax       = subgrid_z_zmax_h;       end if
-      if (allocated(subgrid_z_dep_h))        then; allocate(subgrid_z_dep,        mold=subgrid_z_dep_h);        subgrid_z_dep        = subgrid_z_dep_h;        end if
-      if (allocated(subgrid_z_volmax_h))     then; allocate(subgrid_z_volmax,     mold=subgrid_z_volmax_h);     subgrid_z_volmax     = subgrid_z_volmax_h;     end if
-      if (allocated(z_index_uv_md_h))   then; allocate(z_index_uv_md,   mold=z_index_uv_md_h);   z_index_uv_md   = z_index_uv_md_h;   end if
-      if (allocated(z_index_uv_nd_h))   then; allocate(z_index_uv_nd,   mold=z_index_uv_nd_h);   z_index_uv_nd   = z_index_uv_nd_h;   end if
-      if (allocated(z_index_uv_mu_h))   then; allocate(z_index_uv_mu,   mold=z_index_uv_mu_h);   z_index_uv_mu   = z_index_uv_mu_h;   end if
-      if (allocated(z_index_uv_nu_h))   then; allocate(z_index_uv_nu,   mold=z_index_uv_nu_h);   z_index_uv_nu   = z_index_uv_nu_h;   end if
-      if (allocated(uv_index_z_nm_h))   then; allocate(uv_index_z_nm,   mold=uv_index_z_nm_h);   uv_index_z_nm   = uv_index_z_nm_h;   end if
-      if (allocated(uv_index_z_nmu_h))  then; allocate(uv_index_z_nmu,  mold=uv_index_z_nmu_h);  uv_index_z_nmu  = uv_index_z_nmu_h;  end if
-      if (allocated(uv_index_u_nmd_h))  then; allocate(uv_index_u_nmd,  mold=uv_index_u_nmd_h);  uv_index_u_nmd  = uv_index_u_nmd_h;  end if
-      if (allocated(uv_index_u_nmu_h))  then; allocate(uv_index_u_nmu,  mold=uv_index_u_nmu_h);  uv_index_u_nmu  = uv_index_u_nmu_h;  end if
-      if (allocated(uv_index_u_ndm_h))  then; allocate(uv_index_u_ndm,  mold=uv_index_u_ndm_h);  uv_index_u_ndm  = uv_index_u_ndm_h;  end if
-      if (allocated(uv_index_u_num_h))  then; allocate(uv_index_u_num,  mold=uv_index_u_num_h);  uv_index_u_num  = uv_index_u_num_h;  end if
-      if (allocated(uv_index_v_ndm_h))  then; allocate(uv_index_v_ndm,  mold=uv_index_v_ndm_h);  uv_index_v_ndm  = uv_index_v_ndm_h;  end if
-      if (allocated(uv_index_v_ndmu_h)) then; allocate(uv_index_v_ndmu, mold=uv_index_v_ndmu_h); uv_index_v_ndmu = uv_index_v_ndmu_h; end if
-      if (allocated(uv_index_v_nm_h))   then; allocate(uv_index_v_nm,   mold=uv_index_v_nm_h);   uv_index_v_nm   = uv_index_v_nm_h;   end if
-      if (allocated(uv_index_v_nmu_h))  then; allocate(uv_index_v_nmu,  mold=uv_index_v_nmu_h);  uv_index_v_nmu  = uv_index_v_nmu_h;  end if
-      ! Discharges/drainage catalog shadows (nmindsrc, qtsrc, drainage_type,
-      ! drainage_params) are allocated by allocate_discharges_device_shadows
-      ! after read_discharges() populates the host counterparts. They cannot
-      ! be allocated here because read_discharges has not yet run at
-      ! partition time.
-      ! Wavemaker catalog shadows (z_index_wavemaker, wavemaker_uvmean,
-      ! wavemaker_nmd/nmu/ndm/num, wavemaker_index_uv/nmi/nmb,
-      ! wavemaker_index_wmfp1/wmfp2, wavemaker_fac_wmfp, wavemaker_idir,
-      ! wavemaker_angfac, wavemaker_uvtrend) are allocated by
-      ! allocate_wavemaker_device_shadows after initialize_wavemakers()
-      ! populates the host counterparts. They cannot be allocated here
-      ! because initialize_wavemakers has not yet run at partition time.
-      ! Structure catalog shadows (structure_uv_index, structure_parameters,
-      ! structure_type, structure_length) are allocated by
-      ! allocate_structure_device_shadows after read_structures() populates the
-      ! host counterparts. They cannot be allocated here because read_structures
-      ! has not yet run at partition time.
-      if (allocated(fwuv_h))    then; allocate(fwuv,    mold=fwuv_h);    fwuv    = fwuv_h;    end if
-      if (allocated(tauwu_h))   then; allocate(tauwu,   mold=tauwu_h);   tauwu   = tauwu_h;   end if
-      if (allocated(tauwv_h))   then; allocate(tauwv,   mold=tauwv_h);   tauwv   = tauwv_h;   end if
-      if (allocated(tauwu0_h))  then; allocate(tauwu0,  mold=tauwu0_h);  tauwu0  = tauwu0_h;  end if
-      if (allocated(tauwv0_h))  then; allocate(tauwv0,  mold=tauwv0_h);  tauwv0  = tauwv0_h;  end if
-      if (allocated(tauwu1_h))  then; allocate(tauwu1,  mold=tauwu1_h);  tauwu1  = tauwu1_h;  end if
-      if (allocated(tauwv1_h))  then; allocate(tauwv1,  mold=tauwv1_h);  tauwv1  = tauwv1_h;  end if
-      if (allocated(windu_h))   then; allocate(windu,   mold=windu_h);   windu   = windu_h;   end if
-      if (allocated(windv_h))   then; allocate(windv,   mold=windv_h);   windv   = windv_h;   end if
-      if (allocated(windu0_h))  then; allocate(windu0,  mold=windu0_h);  windu0  = windu0_h;  end if
-      if (allocated(windv0_h))  then; allocate(windv0,  mold=windv0_h);  windv0  = windv0_h;  end if
-      if (allocated(windu1_h))  then; allocate(windu1,  mold=windu1_h);  windu1  = windu1_h;  end if
-      if (allocated(windv1_h))  then; allocate(windv1,  mold=windv1_h);  windv1  = windv1_h;  end if
-      if (allocated(windmax_h)) then; allocate(windmax, mold=windmax_h); windmax = windmax_h; end if
-      if (allocated(patm_h))    then; allocate(patm,    mold=patm_h);    patm    = patm_h;    end if
-      if (allocated(patm0_h))   then; allocate(patm0,   mold=patm0_h);   patm0   = patm0_h;   end if
-      if (allocated(patm1_h))   then; allocate(patm1,   mold=patm1_h);   patm1   = patm1_h;   end if
-      if (allocated(patmb_h))   then; allocate(patmb,   mold=patmb_h);   patmb   = patmb_h;   end if
-      if (allocated(nmindbnd_h)) then; allocate(nmindbnd, mold=nmindbnd_h); nmindbnd = nmindbnd_h; end if
-      if (allocated(prcp_h))    then; allocate(prcp,    mold=prcp_h);    prcp    = prcp_h;    end if
-      if (allocated(prcp0_h))   then; allocate(prcp0,   mold=prcp0_h);   prcp0   = prcp0_h;   end if
-      if (allocated(prcp1_h))   then; allocate(prcp1,   mold=prcp1_h);   prcp1   = prcp1_h;   end if
-      if (allocated(cumprcp_h)) then; allocate(cumprcp, mold=cumprcp_h); cumprcp = cumprcp_h; end if
-      if (allocated(netprcp_h)) then; allocate(netprcp, mold=netprcp_h); netprcp = netprcp_h; end if
-      if (allocated(qext_h))    then; allocate(qext,    mold=qext_h);    qext    = qext_h;    end if
-      if (allocated(dxminv_h))  then; allocate(dxminv,  mold=dxminv_h);  dxminv  = dxminv_h;  end if
-      if (allocated(dxrinv_h))  then; allocate(dxrinv,  mold=dxrinv_h);  dxrinv  = dxrinv_h;  end if
-      if (allocated(dyrinv_h))  then; allocate(dyrinv,  mold=dyrinv_h);  dyrinv  = dyrinv_h;  end if
-      if (allocated(dxm2inv_h)) then; allocate(dxm2inv, mold=dxm2inv_h); dxm2inv = dxm2inv_h; end if
-      if (allocated(dxr2inv_h)) then; allocate(dxr2inv, mold=dxr2inv_h); dxr2inv = dxr2inv_h; end if
-      if (allocated(dyr2inv_h)) then; allocate(dyr2inv, mold=dyr2inv_h); dyr2inv = dyr2inv_h; end if
-      if (allocated(dxrinvc_h)) then; allocate(dxrinvc, mold=dxrinvc_h); dxrinvc = dxrinvc_h; end if
-      if (allocated(dyrinvc_h)) then; allocate(dyrinvc, mold=dyrinvc_h); dyrinvc = dyrinvc_h; end if
-      if (allocated(dxm_h))     then; allocate(dxm,     mold=dxm_h);     dxm     = dxm_h;     end if
-      if (allocated(dxrm_h))    then; allocate(dxrm,    mold=dxrm_h);    dxrm    = dxrm_h;    end if
-      if (allocated(dyrm_h))    then; allocate(dyrm,    mold=dyrm_h);    dyrm    = dyrm_h;    end if
-      if (allocated(cell_area_m2_h)) then; allocate(cell_area_m2, mold=cell_area_m2_h); cell_area_m2 = cell_area_m2_h; end if
-      if (allocated(cell_area_h))    then; allocate(cell_area,    mold=cell_area_h);    cell_area    = cell_area_h;    end if
-      if (allocated(gn2uv_h))          then; allocate(gn2uv,          mold=gn2uv_h);          gn2uv          = gn2uv_h;          end if
-      if (allocated(fcorio2d_h))       then; allocate(fcorio2d,       mold=fcorio2d_h);       fcorio2d       = fcorio2d_h;       end if
-      if (allocated(storage_volume_h)) then; allocate(storage_volume, mold=storage_volume_h); storage_volume = storage_volume_h; end if
-      if (allocated(nuvisc_h))         then; allocate(nuvisc,         mold=nuvisc_h);         nuvisc         = nuvisc_h;         end if
-      if (allocated(cuv_index_uv_h))  then; allocate(cuv_index_uv,  mold=cuv_index_uv_h);  cuv_index_uv  = cuv_index_uv_h;  end if
-      if (allocated(cuv_index_uv1_h)) then; allocate(cuv_index_uv1, mold=cuv_index_uv1_h); cuv_index_uv1 = cuv_index_uv1_h; end if
-      if (allocated(cuv_index_uv2_h)) then; allocate(cuv_index_uv2, mold=cuv_index_uv2_h); cuv_index_uv2 = cuv_index_uv2_h; end if
-      if (allocated(x73_h))    then; allocate(x73,    mold=x73_h);    x73    = x73_h;    end if
-      if (allocated(gnapp2_h)) then; allocate(gnapp2, mold=gnapp2_h); gnapp2 = gnapp2_h; end if
+      ! Helpers below (gather_*_*) factor the four most common patterns to
+      ! keep the body short. Connectivity renumbering uses inline blocks.
+      !
+      integer :: nc, ne, nw
+      !
+      nc = npn_local  + halo_cell_count
+      ne = npuv_local + halo_edge_count
+      nw = ne + ncuv_h + 1   ! wide edge size: q/q0/uv/uv0/kcuv mirror npuv_h+ncuv_h+1
+      !
+      ! ---- Cell-rank shadows (no renumber) ---------------------------------
+      ! Shrink to nc; gather from host through local_to_global. The trailing
+      ! halo entries mirror neighbor-rank cells; halo_exchange_zs refreshes
+      ! the zs slice every step at runtime, but Phase 4 still seeds the
+      ! halo region from the local rank's host alias because every rank
+      ! reads the full input file before partition_and_localize runs (so
+      ! kcs_h, zb_h, ... are bit-identical across ranks at this point).
+      !
+      if (allocated(kcs_h)) then
+         allocate(kcs(nc))
+         call gather_cell_int1(kcs, kcs_h)
+      end if
+      if (allocated(z_flags_iref_h)) then
+         allocate(z_flags_iref(nc))
+         call gather_cell_int1(z_flags_iref, z_flags_iref_h)
+      end if
+      if (allocated(zs_h)) then
+         allocate(zs(nc))
+         call gather_cell_real8(zs, zs_h)
+      end if
+      if (allocated(zs0_h)) then
+         allocate(zs0(nc))
+         call gather_cell_real4(zs0, zs0_h)
+      end if
+      if (allocated(zsderv_h)) then
+         allocate(zsderv(nc))
+         call gather_cell_real4(zsderv, zsderv_h)
+      end if
+      if (allocated(zb_h)) then
+         allocate(zb(nc))
+         call gather_cell_real4(zb, zb_h)
+      end if
+      if (allocated(zsmax_h)) then
+         allocate(zsmax(nc))
+         call gather_cell_real4(zsmax, zsmax_h)
+      end if
+      if (allocated(maxzsm_h)) then
+         allocate(maxzsm(nc))
+         call gather_cell_real4(maxzsm, maxzsm_h)
+      end if
+      if (allocated(qmax_h)) then
+         allocate(qmax(nc))
+         call gather_cell_real4(qmax, qmax_h)
+      end if
+      if (allocated(vmax_h)) then
+         allocate(vmax(nc))
+         call gather_cell_real4(vmax, vmax_h)
+      end if
+      if (allocated(twet_h)) then
+         allocate(twet(nc))
+         call gather_cell_real4(twet, twet_h)
+      end if
+      if (allocated(zsm_h)) then
+         allocate(zsm(nc))
+         call gather_cell_real4(zsm, zsm_h)
+      end if
+      if (allocated(z_volume_h)) then
+         allocate(z_volume(nc))
+         call gather_cell_real8(z_volume, z_volume_h)
+      end if
+      if (allocated(cell_area_m2_h)) then
+         allocate(cell_area_m2(nc))
+         call gather_cell_real4(cell_area_m2, cell_area_m2_h)
+      end if
+      if (allocated(dxm_h)) then
+         allocate(dxm(nc))
+         call gather_cell_real4(dxm, dxm_h)
+      end if
+      if (allocated(fcorio2d_h)) then
+         allocate(fcorio2d(nc))
+         call gather_cell_real4(fcorio2d, fcorio2d_h)
+      end if
+      if (allocated(storage_volume_h)) then
+         allocate(storage_volume(nc))
+         call gather_cell_real4(storage_volume, storage_volume_h)
+      end if
+      if (allocated(windu_h)) then
+         allocate(windu(nc))
+         call gather_cell_real4(windu, windu_h)
+      end if
+      if (allocated(windv_h)) then
+         allocate(windv(nc))
+         call gather_cell_real4(windv, windv_h)
+      end if
+      if (allocated(windu0_h)) then
+         allocate(windu0(nc))
+         call gather_cell_real4(windu0, windu0_h)
+      end if
+      if (allocated(windv0_h)) then
+         allocate(windv0(nc))
+         call gather_cell_real4(windv0, windv0_h)
+      end if
+      if (allocated(windu1_h)) then
+         allocate(windu1(nc))
+         call gather_cell_real4(windu1, windu1_h)
+      end if
+      if (allocated(windv1_h)) then
+         allocate(windv1(nc))
+         call gather_cell_real4(windv1, windv1_h)
+      end if
+      if (allocated(windmax_h)) then
+         allocate(windmax(nc))
+         call gather_cell_real4(windmax, windmax_h)
+      end if
+      if (allocated(patm_h)) then
+         allocate(patm(nc))
+         call gather_cell_real4(patm, patm_h)
+      end if
+      if (allocated(patm0_h)) then
+         allocate(patm0(nc))
+         call gather_cell_real4(patm0, patm0_h)
+      end if
+      if (allocated(patm1_h)) then
+         allocate(patm1(nc))
+         call gather_cell_real4(patm1, patm1_h)
+      end if
+      if (allocated(patmb_h)) then
+         allocate(patmb(nc))
+         call gather_cell_real4(patmb, patmb_h)
+      end if
+      if (allocated(prcp_h)) then
+         allocate(prcp(nc))
+         call gather_cell_real4(prcp, prcp_h)
+      end if
+      if (allocated(prcp0_h)) then
+         allocate(prcp0(nc))
+         call gather_cell_real4(prcp0, prcp0_h)
+      end if
+      if (allocated(prcp1_h)) then
+         allocate(prcp1(nc))
+         call gather_cell_real4(prcp1, prcp1_h)
+      end if
+      if (allocated(cumprcp_h)) then
+         allocate(cumprcp(nc))
+         call gather_cell_real4(cumprcp, cumprcp_h)
+      end if
+      if (allocated(netprcp_h)) then
+         allocate(netprcp(nc))
+         call gather_cell_real4(netprcp, netprcp_h)
+      end if
+      if (allocated(qext_h)) then
+         allocate(qext(nc))
+         call gather_cell_real4(qext, qext_h)
+      end if
+      if (allocated(tauwu_h)) then
+         allocate(tauwu(nc))
+         call gather_cell_real4(tauwu, tauwu_h)
+      end if
+      if (allocated(tauwv_h)) then
+         allocate(tauwv(nc))
+         call gather_cell_real4(tauwv, tauwv_h)
+      end if
+      if (allocated(tauwu0_h)) then
+         allocate(tauwu0(nc))
+         call gather_cell_real4(tauwu0, tauwu0_h)
+      end if
+      if (allocated(tauwv0_h)) then
+         allocate(tauwv0(nc))
+         call gather_cell_real4(tauwv0, tauwv0_h)
+      end if
+      if (allocated(tauwu1_h)) then
+         allocate(tauwu1(nc))
+         call gather_cell_real4(tauwu1, tauwu1_h)
+      end if
+      if (allocated(tauwv1_h)) then
+         allocate(tauwv1(nc))
+         call gather_cell_real4(tauwv1, tauwv1_h)
+      end if
+      if (allocated(qinffield_h)) then
+         allocate(qinffield(nc))
+         call gather_cell_real4(qinffield, qinffield_h)
+      end if
+      if (allocated(qinfmap_h)) then
+         allocate(qinfmap(nc))
+         call gather_cell_real4(qinfmap, qinfmap_h)
+      end if
+      if (allocated(cuminf_h)) then
+         allocate(cuminf(nc))
+         call gather_cell_real4(cuminf, cuminf_h)
+      end if
+      if (allocated(scs_rain_h)) then
+         allocate(scs_rain(nc))
+         call gather_cell_int1(scs_rain, scs_rain_h)
+      end if
+      if (allocated(scs_Se_h)) then
+         allocate(scs_Se(nc))
+         call gather_cell_real4(scs_Se, scs_Se_h)
+      end if
+      if (allocated(scs_P1_h)) then
+         allocate(scs_P1(nc))
+         call gather_cell_real4(scs_P1, scs_P1_h)
+      end if
+      if (allocated(scs_F1_h)) then
+         allocate(scs_F1(nc))
+         call gather_cell_real4(scs_F1, scs_F1_h)
+      end if
+      if (allocated(scs_S1_h)) then
+         allocate(scs_S1(nc))
+         call gather_cell_real4(scs_S1, scs_S1_h)
+      end if
+      if (allocated(rain_T1_h)) then
+         allocate(rain_T1(nc))
+         call gather_cell_real4(rain_T1, rain_T1_h)
+      end if
+      if (allocated(ksfield_h)) then
+         allocate(ksfield(nc))
+         call gather_cell_real4(ksfield, ksfield_h)
+      end if
+      if (allocated(GA_head_h)) then
+         allocate(GA_head(nc))
+         call gather_cell_real4(GA_head, GA_head_h)
+      end if
+      if (allocated(GA_sigma_h)) then
+         allocate(GA_sigma(nc))
+         call gather_cell_real4(GA_sigma, GA_sigma_h)
+      end if
+      if (allocated(GA_sigma_max_h)) then
+         allocate(GA_sigma_max(nc))
+         call gather_cell_real4(GA_sigma_max, GA_sigma_max_h)
+      end if
+      if (allocated(GA_F_h)) then
+         allocate(GA_F(nc))
+         call gather_cell_real4(GA_F, GA_F_h)
+      end if
+      if (allocated(GA_Lu_h)) then
+         allocate(GA_Lu(nc))
+         call gather_cell_real4(GA_Lu, GA_Lu_h)
+      end if
+      if (allocated(inf_kr_h)) then
+         allocate(inf_kr(nc))
+         call gather_cell_real4(inf_kr, inf_kr_h)
+      end if
+      if (allocated(horton_kd_h)) then
+         allocate(horton_kd(nc))
+         call gather_cell_real4(horton_kd, horton_kd_h)
+      end if
+      if (allocated(horton_fc_h)) then
+         allocate(horton_fc(nc))
+         call gather_cell_real4(horton_fc, horton_fc_h)
+      end if
+      if (allocated(horton_f0_h)) then
+         allocate(horton_f0(nc))
+         call gather_cell_real4(horton_f0, horton_f0_h)
+      end if
+      if (allocated(z_xz_h)) then
+         allocate(z_xz(nc))
+         call gather_cell_real4(z_xz, z_xz_h)
+      end if
+      if (allocated(z_yz_h)) then
+         allocate(z_yz(nc))
+         call gather_cell_real4(z_yz, z_yz_h)
+      end if
+      ! timestep_analysis_* are edge-rank (sized npuv on host); see
+      ! sfincs_timestep_analysis.f90:12-15.
+      if (allocated(hm0_h)) then
+         allocate(hm0(nc))
+         call gather_cell_real4(hm0, hm0_h)
+      end if
+      if (allocated(hm0_ig_h)) then
+         allocate(hm0_ig(nc))
+         call gather_cell_real4(hm0_ig, hm0_ig_h)
+      end if
+      !
+      ! Cell-rank subgrid Z scalars (1D over cells)
+      !
+      if (allocated(subgrid_z_zmin_h)) then
+         allocate(subgrid_z_zmin(nc))
+         call gather_cell_real4(subgrid_z_zmin, subgrid_z_zmin_h)
+      end if
+      if (allocated(subgrid_z_zmax_h)) then
+         allocate(subgrid_z_zmax(nc))
+         call gather_cell_real4(subgrid_z_zmax, subgrid_z_zmax_h)
+      end if
+      if (allocated(subgrid_z_volmax_h)) then
+         allocate(subgrid_z_volmax(nc))
+         call gather_cell_real4(subgrid_z_volmax, subgrid_z_volmax_h)
+      end if
+      !
+      ! Cell-rank subgrid Z table (subgrid_nlevels, np). Trailing dim is
+      ! cell-rank: shrink only that dim and gather columns through
+      ! local_to_global.
+      !
+      if (allocated(subgrid_z_dep_h)) then
+         allocate(subgrid_z_dep(size(subgrid_z_dep_h, 1), nc))
+         subgrid_z_dep = subgrid_z_dep_h(:, local_to_global(1:nc))
+      end if
+      !
+      ! ---- Edge-rank shadows (no renumber) ---------------------------------
+      !
+      if (allocated(kfuv_h)) then
+         allocate(kfuv(ne))
+         call gather_edge_int1(kfuv, kfuv_h)
+      end if
+      if (allocated(kcuv_h)) then
+         allocate(kcuv(nw))
+         call gather_edge_wide_int1(kcuv, kcuv_h)
+      end if
+      if (allocated(q_h)) then
+         allocate(q(nw))
+         call gather_edge_wide_real4(q, q_h)
+      end if
+      if (allocated(q0_h)) then
+         allocate(q0(nw))
+         call gather_edge_wide_real4(q0, q0_h)
+      end if
+      if (allocated(uv_h)) then
+         allocate(uv(nw))
+         call gather_edge_wide_real4(uv, uv_h)
+      end if
+      if (allocated(uv0_h)) then
+         allocate(uv0(nw))
+         call gather_edge_wide_real4(uv0, uv0_h)
+      end if
+      if (allocated(zbuv_h)) then
+         allocate(zbuv(ne))
+         call gather_edge_real4(zbuv, zbuv_h)
+      end if
+      if (allocated(zbuvmx_h)) then
+         allocate(zbuvmx(ne))
+         call gather_edge_real4(zbuvmx, zbuvmx_h)
+      end if
+      if (allocated(uv_flags_iref_h)) then
+         allocate(uv_flags_iref(ne))
+         call gather_edge_int1(uv_flags_iref, uv_flags_iref_h)
+      end if
+      if (allocated(uv_flags_type_h)) then
+         allocate(uv_flags_type(ne))
+         call gather_edge_int1(uv_flags_type, uv_flags_type_h)
+      end if
+      if (allocated(uv_flags_dir_h)) then
+         allocate(uv_flags_dir(ne))
+         call gather_edge_int1(uv_flags_dir, uv_flags_dir_h)
+      end if
+      if (allocated(mask_adv_h)) then
+         allocate(mask_adv(ne))
+         call gather_edge_int1(mask_adv, mask_adv_h)
+      end if
+      if (allocated(gn2uv_h)) then
+         allocate(gn2uv(ne))
+         call gather_edge_real4(gn2uv, gn2uv_h)
+      end if
+      if (allocated(dxminv_h)) then
+         allocate(dxminv(ne))
+         call gather_edge_real4(dxminv, dxminv_h)
+      end if
+      if (allocated(dxm2inv_h)) then
+         allocate(dxm2inv(ne))
+         call gather_edge_real4(dxm2inv, dxm2inv_h)
+      end if
+      if (allocated(gnapp2_h)) then
+         allocate(gnapp2(ne))
+         call gather_edge_real4(gnapp2, gnapp2_h)
+      end if
+      if (allocated(fwuv_h)) then
+         allocate(fwuv(ne))
+         call gather_edge_real4(fwuv, fwuv_h)
+      end if
+      !
       if (allocated(timestep_analysis_required_timestep_h)) then
-         allocate(timestep_analysis_required_timestep, mold=timestep_analysis_required_timestep_h)
-         timestep_analysis_required_timestep = timestep_analysis_required_timestep_h
+         allocate(timestep_analysis_required_timestep(ne))
+         call gather_edge_real4(timestep_analysis_required_timestep, timestep_analysis_required_timestep_h)
       end if
       if (allocated(timestep_analysis_average_required_timestep_h)) then
-         allocate(timestep_analysis_average_required_timestep, mold=timestep_analysis_average_required_timestep_h)
-         timestep_analysis_average_required_timestep = timestep_analysis_average_required_timestep_h
+         allocate(timestep_analysis_average_required_timestep(ne))
+         call gather_edge_real4(timestep_analysis_average_required_timestep, timestep_analysis_average_required_timestep_h)
       end if
+      ! gather_edge_int4 helpers don't exist; use a 2-line manual gather.
       if (allocated(timestep_analysis_times_wet_h)) then
-         allocate(timestep_analysis_times_wet, mold=timestep_analysis_times_wet_h)
-         timestep_analysis_times_wet = timestep_analysis_times_wet_h
+         allocate(timestep_analysis_times_wet(npuv_local + halo_edge_count))
+         timestep_analysis_times_wet = timestep_analysis_times_wet_h(local_to_global_uv(1:npuv_local + halo_edge_count))
       end if
       if (allocated(timestep_analysis_times_limiting_h)) then
-         allocate(timestep_analysis_times_limiting, mold=timestep_analysis_times_limiting_h)
-         timestep_analysis_times_limiting = timestep_analysis_times_limiting_h
+         allocate(timestep_analysis_times_limiting(npuv_local + halo_edge_count))
+         timestep_analysis_times_limiting = timestep_analysis_times_limiting_h(local_to_global_uv(1:npuv_local + halo_edge_count))
       end if
-      if (allocated(qinffield_h)) then; allocate(qinffield, mold=qinffield_h); qinffield = qinffield_h; end if
-      if (allocated(qinfmap_h))   then; allocate(qinfmap,   mold=qinfmap_h);   qinfmap   = qinfmap_h;   end if
-      if (allocated(cuminf_h))    then; allocate(cuminf,    mold=cuminf_h);    cuminf    = cuminf_h;    end if
-      if (allocated(scs_rain_h))  then; allocate(scs_rain,  mold=scs_rain_h);  scs_rain  = scs_rain_h;  end if
-      if (allocated(scs_Se_h))    then; allocate(scs_Se,    mold=scs_Se_h);    scs_Se    = scs_Se_h;    end if
-      if (allocated(scs_P1_h))    then; allocate(scs_P1,    mold=scs_P1_h);    scs_P1    = scs_P1_h;    end if
-      if (allocated(scs_F1_h))    then; allocate(scs_F1,    mold=scs_F1_h);    scs_F1    = scs_F1_h;    end if
-      if (allocated(scs_S1_h))    then; allocate(scs_S1,    mold=scs_S1_h);    scs_S1    = scs_S1_h;    end if
-      if (allocated(rain_T1_h))   then; allocate(rain_T1,   mold=rain_T1_h);   rain_T1   = rain_T1_h;   end if
-      if (allocated(ksfield_h))   then; allocate(ksfield,   mold=ksfield_h);   ksfield   = ksfield_h;   end if
-      if (allocated(GA_head_h))      then; allocate(GA_head,      mold=GA_head_h);      GA_head      = GA_head_h;      end if
-      if (allocated(GA_sigma_h))     then; allocate(GA_sigma,     mold=GA_sigma_h);     GA_sigma     = GA_sigma_h;     end if
-      if (allocated(GA_sigma_max_h)) then; allocate(GA_sigma_max, mold=GA_sigma_max_h); GA_sigma_max = GA_sigma_max_h; end if
-      if (allocated(GA_F_h))         then; allocate(GA_F,         mold=GA_F_h);         GA_F         = GA_F_h;         end if
-      if (allocated(GA_Lu_h))        then; allocate(GA_Lu,        mold=GA_Lu_h);        GA_Lu        = GA_Lu_h;        end if
-      if (allocated(inf_kr_h))       then; allocate(inf_kr,       mold=inf_kr_h);       inf_kr       = inf_kr_h;       end if
-      if (allocated(horton_kd_h))    then; allocate(horton_kd,    mold=horton_kd_h);    horton_kd    = horton_kd_h;    end if
-      if (allocated(horton_fc_h))    then; allocate(horton_fc,    mold=horton_fc_h);    horton_fc    = horton_fc_h;    end if
-      if (allocated(horton_f0_h))    then; allocate(horton_f0,    mold=horton_f0_h);    horton_f0    = horton_f0_h;    end if
       !
-      ! ===== gpu-wavemaker-snapwave-coupling supplemental ====
+      ! Edge-rank subgrid UV scalars (1D over edges)
       !
-      ! The wavemaker per-uv catalog device shadows
-      ! (wavemaker_index_uv/nmi/nmb, wavemaker_index_wmfp1/wmfp2,
-      ! wavemaker_fac_wmfp, wavemaker_idir, wavemaker_angfac,
-      ! wavemaker_uvtrend) are allocated by allocate_wavemaker_device_shadows
-      ! after initialize_wavemakers() populates the host counterparts; they
-      ! cannot be allocated here because initialize_wavemakers has not yet
-      ! run at partition time. hm0 and hm0_ig stay here because their host
-      ! counterparts already exist by partition time.
-      if (allocated(hm0_h))                   then; allocate(hm0,                   mold=hm0_h);                   hm0                   = hm0_h;                   end if
-      if (allocated(hm0_ig_h))                then; allocate(hm0_ig,                mold=hm0_ig_h);                hm0_ig                = hm0_ig_h;                end if
+      if (allocated(subgrid_uv_zmin_h)) then
+         allocate(subgrid_uv_zmin(ne))
+         call gather_edge_real4(subgrid_uv_zmin, subgrid_uv_zmin_h)
+      end if
+      if (allocated(subgrid_uv_zmax_h)) then
+         allocate(subgrid_uv_zmax(ne))
+         call gather_edge_real4(subgrid_uv_zmax, subgrid_uv_zmax_h)
+      end if
+      if (allocated(subgrid_uv_havg_zmax_h)) then
+         allocate(subgrid_uv_havg_zmax(ne))
+         call gather_edge_real4(subgrid_uv_havg_zmax, subgrid_uv_havg_zmax_h)
+      end if
+      if (allocated(subgrid_uv_nrep_zmax_h)) then
+         allocate(subgrid_uv_nrep_zmax(ne))
+         call gather_edge_real4(subgrid_uv_nrep_zmax, subgrid_uv_nrep_zmax_h)
+      end if
+      if (allocated(subgrid_uv_fnfit_h)) then
+         allocate(subgrid_uv_fnfit(ne))
+         call gather_edge_real4(subgrid_uv_fnfit, subgrid_uv_fnfit_h)
+      end if
+      if (allocated(subgrid_uv_navg_w_h)) then
+         allocate(subgrid_uv_navg_w(ne))
+         call gather_edge_real4(subgrid_uv_navg_w, subgrid_uv_navg_w_h)
+      end if
+      !
+      ! Edge-rank subgrid UV tables (subgrid_nlevels, npuv). Trailing dim
+      ! is edge-rank.
+      !
+      if (allocated(subgrid_uv_havg_h)) then
+         allocate(subgrid_uv_havg(size(subgrid_uv_havg_h, 1), ne))
+         subgrid_uv_havg = subgrid_uv_havg_h(:, local_to_global_uv(1:ne))
+      end if
+      if (allocated(subgrid_uv_nrep_h)) then
+         allocate(subgrid_uv_nrep(size(subgrid_uv_nrep_h, 1), ne))
+         subgrid_uv_nrep = subgrid_uv_nrep_h(:, local_to_global_uv(1:ne))
+      end if
+      if (allocated(subgrid_uv_pwet_h)) then
+         allocate(subgrid_uv_pwet(size(subgrid_uv_pwet_h, 1), ne))
+         subgrid_uv_pwet = subgrid_uv_pwet_h(:, local_to_global_uv(1:ne))
+      end if
+      !
+      ! ---- Cell-rank connectivity (entries are EDGE indices) ---------------
+      ! Each entry is renumbered through global_to_local_uv. Sentinel /
+      ! out-of-range entries pass through unchanged.
+      !
+      if (allocated(z_index_uv_md_h)) then
+         allocate(z_index_uv_md(nc))
+         call gather_cell_int4_renumber_edge(z_index_uv_md, z_index_uv_md_h)
+      end if
+      if (allocated(z_index_uv_nd_h)) then
+         allocate(z_index_uv_nd(nc))
+         call gather_cell_int4_renumber_edge(z_index_uv_nd, z_index_uv_nd_h)
+      end if
+      if (allocated(z_index_uv_mu_h)) then
+         allocate(z_index_uv_mu(nc))
+         call gather_cell_int4_renumber_edge(z_index_uv_mu, z_index_uv_mu_h)
+      end if
+      if (allocated(z_index_uv_nu_h)) then
+         allocate(z_index_uv_nu(nc))
+         call gather_cell_int4_renumber_edge(z_index_uv_nu, z_index_uv_nu_h)
+      end if
+      !
+      ! ---- Edge-rank connectivity (entries are CELL indices) ---------------
+      !
+      if (allocated(uv_index_z_nm_h)) then
+         allocate(uv_index_z_nm(ne))
+         call gather_edge_int4_renumber_cell(uv_index_z_nm, uv_index_z_nm_h)
+      end if
+      if (allocated(uv_index_z_nmu_h)) then
+         allocate(uv_index_z_nmu(ne))
+         call gather_edge_int4_renumber_cell(uv_index_z_nmu, uv_index_z_nmu_h)
+      end if
+      !
+      ! ---- Edge-rank connectivity (entries are EDGE indices) ---------------
+      !
+      if (allocated(uv_index_u_nmd_h)) then
+         allocate(uv_index_u_nmd(ne))
+         call gather_edge_int4_renumber_edge(uv_index_u_nmd, uv_index_u_nmd_h)
+      end if
+      if (allocated(uv_index_u_nmu_h)) then
+         allocate(uv_index_u_nmu(ne))
+         call gather_edge_int4_renumber_edge(uv_index_u_nmu, uv_index_u_nmu_h)
+      end if
+      if (allocated(uv_index_u_ndm_h)) then
+         allocate(uv_index_u_ndm(ne))
+         call gather_edge_int4_renumber_edge(uv_index_u_ndm, uv_index_u_ndm_h)
+      end if
+      if (allocated(uv_index_u_num_h)) then
+         allocate(uv_index_u_num(ne))
+         call gather_edge_int4_renumber_edge(uv_index_u_num, uv_index_u_num_h)
+      end if
+      if (allocated(uv_index_v_ndm_h)) then
+         allocate(uv_index_v_ndm(ne))
+         call gather_edge_int4_renumber_edge(uv_index_v_ndm, uv_index_v_ndm_h)
+      end if
+      if (allocated(uv_index_v_ndmu_h)) then
+         allocate(uv_index_v_ndmu(ne))
+         call gather_edge_int4_renumber_edge(uv_index_v_ndmu, uv_index_v_ndmu_h)
+      end if
+      if (allocated(uv_index_v_nm_h)) then
+         allocate(uv_index_v_nm(ne))
+         call gather_edge_int4_renumber_edge(uv_index_v_nm, uv_index_v_nm_h)
+      end if
+      if (allocated(uv_index_v_nmu_h)) then
+         allocate(uv_index_v_nmu(ne))
+         call gather_edge_int4_renumber_edge(uv_index_v_nmu, uv_index_v_nmu_h)
+      end if
+      !
+      ! cuv_index_uv* are sized ncuv (combined-uv-rank), NOT npuv. The
+      ! quadtree's combined-UV table is globally constant: every rank
+      ! reads the same ncuv-sized table. Keep host shape on device,
+      ! renumber the entries (global edge indices) through
+      ! global_to_local_uv so kernel-side q(cuv_index_uv*(icuv)) reads
+      ! resolve to the local-indexed edge shadows.
+      !
+      if (allocated(cuv_index_uv_h)) then
+         allocate(cuv_index_uv, mold=cuv_index_uv_h)
+         call renumber_to_local_edge(cuv_index_uv, cuv_index_uv_h)
+      end if
+      if (allocated(cuv_index_uv1_h)) then
+         allocate(cuv_index_uv1, mold=cuv_index_uv1_h)
+         call renumber_to_local_edge(cuv_index_uv1, cuv_index_uv1_h)
+      end if
+      if (allocated(cuv_index_uv2_h)) then
+         allocate(cuv_index_uv2, mold=cuv_index_uv2_h)
+         call renumber_to_local_edge(cuv_index_uv2, cuv_index_uv2_h)
+      end if
+      !
+      ! ---- Boundary-sized arrays (size ngbnd or nkcuv2) --------------------
+      ! These keep host shape; entries (where they index cells or edges)
+      ! are renumbered through the appropriate map. zsb / zsb0 / ibuvdir /
+      ! uvmean carry data values, not indices, so they keep verbatim
+      ! mold/copy semantics.
+      !
+      if (allocated(nmindbnd_h)) then
+         allocate(nmindbnd, mold=nmindbnd_h)
+         call renumber_to_local_cell(nmindbnd, nmindbnd_h)
+      end if
+      if (allocated(zsb_h))      then; allocate(zsb,      mold=zsb_h);      zsb      = zsb_h;      end if
+      if (allocated(zsb0_h))     then; allocate(zsb0,     mold=zsb0_h);     zsb0     = zsb0_h;     end if
+      if (allocated(ibuvdir_h))  then; allocate(ibuvdir,  mold=ibuvdir_h);  ibuvdir  = ibuvdir_h;  end if
+      if (allocated(uvmean_h))   then; allocate(uvmean,   mold=uvmean_h);   uvmean   = uvmean_h;   end if
+      if (allocated(index_kcuv2_h)) then
+         allocate(index_kcuv2, mold=index_kcuv2_h)
+         call renumber_to_local_edge(index_kcuv2, index_kcuv2_h)
+      end if
+      if (allocated(nmikcuv2_h)) then
+         allocate(nmikcuv2, mold=nmikcuv2_h)
+         call renumber_to_local_cell(nmikcuv2, nmikcuv2_h)
+      end if
+      if (allocated(nmbkcuv2_h)) then
+         allocate(nmbkcuv2, mold=nmbkcuv2_h)
+         call renumber_to_local_cell(nmbkcuv2, nmbkcuv2_h)
+      end if
+      if (allocated(ibkcuv2_h)) then
+         allocate(ibkcuv2, mold=ibkcuv2_h)
+         call renumber_to_local_edge(ibkcuv2, ibkcuv2_h)
+      end if
+      !
+      ! ---- Quadtree-level-sized arrays (size nref) -------------------------
+      ! Verbatim mold/copy: kernels index these by z_flags_iref / uv_flags_iref
+      ! values, not by cell/edge indices.
+      !
+      if (allocated(dxrinv_h))   then; allocate(dxrinv,   mold=dxrinv_h);   dxrinv   = dxrinv_h;   end if
+      if (allocated(dyrinv_h))   then; allocate(dyrinv,   mold=dyrinv_h);   dyrinv   = dyrinv_h;   end if
+      if (allocated(dxr2inv_h))  then; allocate(dxr2inv,  mold=dxr2inv_h);  dxr2inv  = dxr2inv_h;  end if
+      if (allocated(dyr2inv_h))  then; allocate(dyr2inv,  mold=dyr2inv_h);  dyr2inv  = dyr2inv_h;  end if
+      if (allocated(dxrinvc_h))  then; allocate(dxrinvc,  mold=dxrinvc_h);  dxrinvc  = dxrinvc_h;  end if
+      if (allocated(dyrinvc_h))  then; allocate(dyrinvc,  mold=dyrinvc_h);  dyrinvc  = dyrinvc_h;  end if
+      if (allocated(dxrm_h))     then; allocate(dxrm,     mold=dxrm_h);     dxrm     = dxrm_h;     end if
+      if (allocated(dyrm_h))     then; allocate(dyrm,     mold=dyrm_h);     dyrm     = dyrm_h;     end if
+      if (allocated(cell_area_h))then; allocate(cell_area,mold=cell_area_h);cell_area= cell_area_h;end if
+      if (allocated(nuvisc_h))   then; allocate(nuvisc,   mold=nuvisc_h);   nuvisc   = nuvisc_h;   end if
+      !
+      ! ---- Fixed-shape arrays (x73 etc.) -----------------------------------
+      !
+      if (allocated(x73_h)) then; allocate(x73, mold=x73_h); x73 = x73_h; end if
+      !
+      ! ---- Discharges/drainage/wavemaker/structure deferred ---------------
+      ! Their host counterparts aren't populated until read_discharges /
+      ! initialize_wavemakers / read_structures runs (post partition); the
+      ! corresponding device shadows are allocated from
+      ! allocate_discharges_device_shadows / allocate_wavemaker_device_shadows /
+      ! allocate_structure_device_shadows.
       !
       ! ===== gpu-meteo-spatial-interp supplemental ====
       !
       ! cdval and cdlgx are non-allocatable fixed-size on both host and
-      ! device sides; copy them unconditionally. Everything else here
-      ! follows the standard mold/copy pattern, gated by allocated() so
-      ! we tolerate runs that don't use spiderweb / amuv / amp / ampr.
+      ! device sides; copy them unconditionally. spw_/amuv_/amp_/ampr_
+      ! tables index by source space (spiderweb segment, raster cell), not
+      ! by SFINCS cell/edge, so they keep mold/copy semantics. z0land /
+      ! z0land_table are land-use tables, similarly source-indexed.
       !
       cdval = cdval_h
       cdlgx = cdlgx_h
@@ -727,12 +1168,377 @@ contains
       if (allocated(ampr_times_h))   then; allocate(ampr_times,   mold=ampr_times_h);   ampr_times   = ampr_times_h;   end if
       if (allocated(ampr_pr_h))      then; allocate(ampr_pr,      mold=ampr_pr_h);      ampr_pr      = ampr_pr_h;      end if
       if (allocated(ampr_pr01_h))    then; allocate(ampr_pr01,    mold=ampr_pr01_h);    ampr_pr01    = ampr_pr01_h;    end if
-      if (allocated(z_xz_h))         then; allocate(z_xz,         mold=z_xz_h);         z_xz         = z_xz_h;         end if
-      if (allocated(z_yz_h))         then; allocate(z_yz,         mold=z_yz_h);         z_yz         = z_yz_h;         end if
       if (allocated(z0land_h))       then; allocate(z0land,       mold=z0land_h);       z0land       = z0land_h;       end if
       if (allocated(z0land_table_h)) then; allocate(z0land_table, mold=z0land_table_h); z0land_table = z0land_table_h; end if
       !
    end subroutine copyin_phase4_degenerate
+   !
+   ! ===================================================================
+   ! Phase-4 / shadow-allocator helpers. Cell-rank gather pattern:
+   !    allocate dev to size npn_local + halo_cell_count
+   !    dev = host(local_to_global(1:size(dev)))
+   ! Edge-rank: same with local_to_global_uv and npuv_local +
+   ! halo_edge_count. Renumber-aware variants substitute connectivity
+   ! entries through global_to_local / global_to_local_uv. In every case
+   ! the host counterpart full-sized array stays untouched.
+   ! ===================================================================
+   !
+   ! NOTE: the helpers below take a pre-allocated device dummy. Allocating
+   ! through an `allocatable, intent(inout)` device dummy did not propagate
+   ! the allocation status back to the module-scope actual argument under
+   ! NVHPC 25.9 — the kernel side then dereferenced a NULL device pointer
+   ! and compute-sanitizer flagged "Access to 0x0 is out of bounds". The
+   ! caller now allocates the device shadow first, then calls the helper
+   ! with a non-allocatable `intent(out)` device dummy that the helper
+   ! fills via the gather expression.
+   !
+   subroutine gather_cell_int1(dev, host)
+      integer*1, device, intent(out)     :: dev(:)
+      integer*1, allocatable, intent(in) :: host(:)
+      dev = host(local_to_global(1:size(dev)))
+   end subroutine gather_cell_int1
+   !
+   subroutine gather_cell_int4(dev, host)
+      integer*4, device, intent(out)     :: dev(:)
+      integer*4, allocatable, intent(in) :: host(:)
+      dev = host(local_to_global(1:size(dev)))
+   end subroutine gather_cell_int4
+   !
+   subroutine gather_cell_real4(dev, host)
+      real*4, device, intent(out)     :: dev(:)
+      real*4, allocatable, intent(in) :: host(:)
+      dev = host(local_to_global(1:size(dev)))
+   end subroutine gather_cell_real4
+   !
+   subroutine gather_cell_real8(dev, host)
+      real*8, device, intent(out)     :: dev(:)
+      real*8, allocatable, intent(in) :: host(:)
+      dev = host(local_to_global(1:size(dev)))
+   end subroutine gather_cell_real8
+   !
+   subroutine gather_edge_int1(dev, host)
+      integer*1, device, intent(out)     :: dev(:)
+      integer*1, allocatable, intent(in) :: host(:)
+      dev = host(local_to_global_uv(1:size(dev)))
+   end subroutine gather_edge_int1
+   !
+   subroutine gather_edge_real4(dev, host)
+      real*4, device, intent(out)     :: dev(:)
+      real*4, allocatable, intent(in) :: host(:)
+      dev = host(local_to_global_uv(1:size(dev)))
+   end subroutine gather_edge_real4
+   !
+   subroutine gather_edge_wide_int1(dev, host)
+      ! Wide edge-rank int*1: kcuv. Host is sized npuv_h + ncuv_h + 1 to
+      ! cover combined-UV refinement transitions plus a sentinel slot;
+      ! device shadow mirrors that shape with size
+      ! (npuv_local + halo_edge_count) + ncuv_h + 1. local_to_global_uv
+      ! has been extended with the matching tail entries so a single
+      ! gather covers both portions.
+      integer*1, device, intent(out)     :: dev(:)
+      integer*1, allocatable, intent(in) :: host(:)
+      dev = host(local_to_global_uv(1:size(dev)))
+   end subroutine gather_edge_wide_int1
+   !
+   subroutine gather_edge_wide_real4(dev, host)
+      ! Wide edge-rank real*4: q, q0, uv, uv0. See gather_edge_wide_int1.
+      real*4, device, intent(out)     :: dev(:)
+      real*4, allocatable, intent(in) :: host(:)
+      dev = host(local_to_global_uv(1:size(dev)))
+   end subroutine gather_edge_wide_real4
+   !
+   subroutine gather_cell_int4_renumber_edge(dev, host)
+      ! Cell-rank int*4 with edge-index entries. Entries in
+      ! [1..npuv_h] map to the local owned/halo edge slice; entries in
+      ! [npuv_h+1..npuv_h+ncuv_h+1] map to combined-UV / sentinel slots
+      ! at the wide tail (global_to_local_uv has been extended to cover
+      ! both ranges). Entries outside that range pass through unchanged.
+      integer*4, device, intent(out)     :: dev(:)
+      integer*4, allocatable, intent(in) :: host(:)
+      integer*4, allocatable :: tmp(:)
+      integer :: i, e, nc, gmax
+      nc   = size(dev)
+      gmax = npuv_h + ncuv_h + 1
+      allocate(tmp(nc))
+      do i = 1, nc
+         e = host(local_to_global(i))
+         if (e <= 0 .or. e > gmax) then
+            tmp(i) = e
+         else
+            tmp(i) = global_to_local_uv(e)
+         end if
+      end do
+      dev = tmp
+      deallocate(tmp)
+   end subroutine gather_cell_int4_renumber_edge
+   !
+   subroutine gather_edge_int4_renumber_cell(dev, host)
+      ! Edge-rank int*4 with cell-index entries.
+      integer*4, device, intent(out)     :: dev(:)
+      integer*4, allocatable, intent(in) :: host(:)
+      integer*4, allocatable :: tmp(:)
+      integer :: i, c, ne
+      ne = size(dev)
+      allocate(tmp(ne))
+      do i = 1, ne
+         c = host(local_to_global_uv(i))
+         if (c <= 0 .or. c > npn_h) then
+            tmp(i) = c
+         else
+            tmp(i) = global_to_local(c)
+         end if
+      end do
+      dev = tmp
+      deallocate(tmp)
+   end subroutine gather_edge_int4_renumber_cell
+   !
+   subroutine gather_edge_int4_renumber_edge(dev, host)
+      ! Edge-rank int*4 with edge-index entries (uv_index_u_*, uv_index_v_*,
+      ! cuv_index_uv*). Entries can be in [1..npuv_h] (regular edges),
+      ! [npuv_h+1..npuv_h+ncuv_h] (combined-UV) or npuv_h+ncuv_h+1
+      ! (sentinel). global_to_local_uv has been extended to cover the full
+      ! [1..npuv_h+ncuv_h+1] range so a single map lookup suffices.
+      integer*4, device, intent(out)     :: dev(:)
+      integer*4, allocatable, intent(in) :: host(:)
+      integer*4, allocatable :: tmp(:)
+      integer :: i, e, ne, gmax
+      ne   = size(dev)
+      gmax = npuv_h + ncuv_h + 1
+      allocate(tmp(ne))
+      do i = 1, ne
+         e = host(local_to_global_uv(i))
+         if (e <= 0 .or. e > gmax) then
+            tmp(i) = e
+         else
+            tmp(i) = global_to_local_uv(e)
+         end if
+      end do
+      dev = tmp
+      deallocate(tmp)
+   end subroutine gather_edge_int4_renumber_edge
+   !
+   subroutine renumber_to_local_cell(dev, host)
+      ! Other-sized int*4 with cell-index entries: keep host shape,
+      ! renumber entries through global_to_local. Used for nmindbnd
+      ! (ngbnd-sized), nmikcuv2 / nmbkcuv2 (nkcuv2-sized).
+      integer*4, device, intent(inout) :: dev(:)
+      integer*4, intent(in)            :: host(:)
+      integer*4, allocatable :: tmp(:)
+      integer :: i, c, n
+      n = size(host)
+      allocate(tmp(n))
+      do i = 1, n
+         c = host(i)
+         if (c <= 0 .or. c > npn_h) then
+            tmp(i) = c
+         else
+            tmp(i) = global_to_local(c)
+         end if
+      end do
+      dev = tmp
+      deallocate(tmp)
+   end subroutine renumber_to_local_cell
+   !
+   subroutine renumber_to_local_edge(dev, host)
+      ! Other-sized int*4 with edge-index entries: keep host shape,
+      ! renumber entries through global_to_local_uv. Used for index_kcuv2,
+      ! ibkcuv2 (both nkcuv2-sized), structure_uv_index (nstruc-sized),
+      ! wavemaker_index_uv (iwm-sized). Entries can also be combined-UV
+      ! (npuv_h+1..npuv_h+ncuv_h) or sentinel (npuv_h+ncuv_h+1); the
+      ! extended global_to_local_uv covers both.
+      integer*4, device, intent(inout) :: dev(:)
+      integer*4, intent(in)            :: host(:)
+      integer*4, allocatable :: tmp(:)
+      integer :: i, e, n, gmax
+      n    = size(host)
+      gmax = npuv_h + ncuv_h + 1
+      allocate(tmp(n))
+      do i = 1, n
+         e = host(i)
+         if (e <= 0 .or. e > gmax) then
+            tmp(i) = e
+         else
+            tmp(i) = global_to_local_uv(e)
+         end if
+      end do
+      dev = tmp
+      deallocate(tmp)
+   end subroutine renumber_to_local_edge
+   !
+   ! ===================================================================
+   ! Per-step bridge-IN gather and bridge-OUT scatter helpers, used by
+   ! source/src/sfincs_*_gpu.cuf to copy host <-> device while the device
+   ! shadow is local-indexed.
+   !
+   ! Bridge-IN gathers the FULL local range (1..npn_local + halo_cell_count
+   ! for cell-rank, 1..npuv_local + halo_edge_count for edge-rank). Halo
+   ! positions get whatever the host alias holds at the corresponding
+   ! global index; this matches the pre-shrink behavior where bulk H2D
+   ! overwrote the post-halo-exchange halo slice with the host's stale
+   ! halo values, and is corrected each step by halo_exchange_zs /
+   ! halo_exchange_q_uv at the end of the time-step.
+   !
+   ! Bridge-OUT scatters ONLY the owned slice (1..npn_local or 1..npuv_local).
+   ! Halo entries on this rank's host alias are left untouched: they are
+   ! authoritative on the OWNING rank, not this one. The output gather
+   ! (gather_to_rank0_in_global_order) is what reconstructs the
+   ! global-ordered host array on rank 0 for write_output / BMI getters.
+   !
+   ! Bridge-IN copies ONLY the owned slice into 1..npn_local (cell) or
+   ! 1..npuv_local (edge) of the device shadow. The halo region of the
+   ! device shadow (npn_local+1..nc, npuv_local+1..ne) is intentionally
+   ! left untouched: those entries are populated by halo_exchange_zs /
+   ! halo_exchange_q_uv at the end of each time step from neighbor-rank
+   ! data. Touching them in bridge-IN would clobber the cross-rank halo
+   ! values with stale host aliases (each rank's <name>_h is only kept
+   ! current for its OWN owned slice, via bridge-OUT). For wide edge
+   ! shadows (q, q0, uv, uv0, kcuv) the combined-UV tail at positions
+   ! ne+1..nw is also copied because that portion of the host array is
+   ! kept consistent across ranks by the boundary broadcast.
+   ! ===================================================================
+   !
+   subroutine bridge_in_cell_real4(dev, host)
+      real*4, device, intent(inout) :: dev(:)
+      real*4, intent(in)            :: host(:)
+      integer :: n
+      n = npn_local
+      if (n <= 0) return
+      dev(1:n) = host(local_to_global(1:n))
+   end subroutine bridge_in_cell_real4
+   !
+   subroutine bridge_in_cell_real8(dev, host)
+      real*8, device, intent(inout) :: dev(:)
+      real*8, intent(in)            :: host(:)
+      integer :: n
+      n = npn_local
+      if (n <= 0) return
+      dev(1:n) = host(local_to_global(1:n))
+   end subroutine bridge_in_cell_real8
+   !
+   subroutine bridge_in_edge_real4(dev, host)
+      ! Gather host -> device ONLY for the OWNED edge slice (1..npuv_local).
+      ! The halo region (npuv_local+1..narrow) is populated by
+      ! halo_exchange_q_uv. The combined-UV tail (narrow+1..size(dev)) is
+      ! NOT touched here either -- it is recomputed each step on device by
+      ! k_combined_uv (sfincs_momentum_gpu.cuf) from the neighbor-edge
+      ! values, so the host alias is stale; copying host values into the
+      ! tail would clobber the previous step's GPU-computed combined-UV
+      ! averages and contaminate the next compute_fluxes / continuity
+      ! reads.
+      real*4, device, intent(inout) :: dev(:)
+      real*4, intent(in)            :: host(:)
+      if (npuv_local > 0) then
+         dev(1:npuv_local) = host(local_to_global_uv(1:npuv_local))
+      end if
+   end subroutine bridge_in_edge_real4
+   !
+   subroutine bridge_out_cell_real4(host, dev)
+      real*4, intent(inout)         :: host(:)
+      real*4, device, intent(in)    :: dev(:)
+      real*4, allocatable :: tmp(:)
+      integer :: i, n
+      n = npn_local
+      if (n <= 0) return
+      allocate(tmp(n))
+      tmp = dev(1:n)
+      do i = 1, n
+         host(local_to_global(i)) = tmp(i)
+      end do
+      deallocate(tmp)
+   end subroutine bridge_out_cell_real4
+   !
+   subroutine bridge_out_cell_real8(host, dev)
+      real*8, intent(inout)         :: host(:)
+      real*8, device, intent(in)    :: dev(:)
+      real*8, allocatable :: tmp(:)
+      integer :: i, n
+      n = npn_local
+      if (n <= 0) return
+      allocate(tmp(n))
+      tmp = dev(1:n)
+      do i = 1, n
+         host(local_to_global(i)) = tmp(i)
+      end do
+      deallocate(tmp)
+   end subroutine bridge_out_cell_real8
+   !
+   subroutine bridge_out_cell_int1(host, dev)
+      integer*1, intent(inout)         :: host(:)
+      integer*1, device, intent(in)    :: dev(:)
+      integer*1, allocatable :: tmp(:)
+      integer :: i, n
+      n = npn_local
+      if (n <= 0) return
+      allocate(tmp(n))
+      tmp = dev(1:n)
+      do i = 1, n
+         host(local_to_global(i)) = tmp(i)
+      end do
+      deallocate(tmp)
+   end subroutine bridge_out_cell_int1
+   !
+   subroutine bridge_out_cell_int4(host, dev)
+      integer*4, intent(inout)         :: host(:)
+      integer*4, device, intent(in)    :: dev(:)
+      integer*4, allocatable :: tmp(:)
+      integer :: i, n
+      n = npn_local
+      if (n <= 0) return
+      allocate(tmp(n))
+      tmp = dev(1:n)
+      do i = 1, n
+         host(local_to_global(i)) = tmp(i)
+      end do
+      deallocate(tmp)
+   end subroutine bridge_out_cell_int4
+   !
+   subroutine bridge_out_edge_real4(host, dev)
+      ! Scatter dev -> host for owned edges (1..npuv_local) and, if dev is
+      ! wide-sized (size > npuv_local + halo_edge_count), the combined-UV
+      ! tail at the end. Halo entries (between owned and tail) are
+      ! authoritative on the owning rank and stay untouched in this rank's
+      ! host alias. local_to_global_uv has been extended with tail entries
+      ! that map to host positions npuv_h + 1 .. npuv_h + ncuv_h + 1.
+      real*4, intent(inout)         :: host(:)
+      real*4, device, intent(in)    :: dev(:)
+      real*4, allocatable :: tmp(:)
+      integer :: i, n_total, narrow
+      n_total = size(dev)
+      narrow  = npuv_local + halo_edge_count
+      if (n_total <= 0) return
+      allocate(tmp(n_total))
+      tmp = dev(1:n_total)
+      do i = 1, npuv_local
+         host(local_to_global_uv(i)) = tmp(i)
+      end do
+      if (n_total > narrow) then
+         do i = narrow + 1, n_total
+            host(local_to_global_uv(i)) = tmp(i)
+         end do
+      end if
+      deallocate(tmp)
+   end subroutine bridge_out_edge_real4
+   !
+   subroutine bridge_out_edge_int1(host, dev)
+      integer*1, intent(inout)         :: host(:)
+      integer*1, device, intent(in)    :: dev(:)
+      integer*1, allocatable :: tmp(:)
+      integer :: i, n_total, narrow
+      n_total = size(dev)
+      narrow  = npuv_local + halo_edge_count
+      if (n_total <= 0) return
+      allocate(tmp(n_total))
+      tmp = dev(1:n_total)
+      do i = 1, npuv_local
+         host(local_to_global_uv(i)) = tmp(i)
+      end do
+      if (n_total > narrow) then
+         do i = narrow + 1, n_total
+            host(local_to_global_uv(i)) = tmp(i)
+         end do
+      end if
+      deallocate(tmp)
+   end subroutine bridge_out_edge_int1
    !
    subroutine compute_quadtree_geometric_partition(cell_part)
       !
@@ -870,25 +1676,23 @@ contains
       call qsort_recursive(idx, keys, j + 1, hi)
    end subroutine qsort_recursive
    !
-   subroutine build_local_index_maps(cell_part, &
-                                     global_to_local, global_to_local_uv, &
-                                     npn_total, npuv_total)
+   subroutine build_local_index_maps(cell_part, npn_total, npuv_total)
       !
       ! Walks owned cells, discovers one-cell-deep cell and edge halos, and
       ! produces the local_to_global / global_to_local maps consumed by
-      ! Phase 4 copyin and Phase 5 halo-descriptor build. Halo cells are
-      ! laid out contiguously after owned cells, grouped by neighbor rank
-      ! in halo_neighbor_ranks order, so that the per-neighbor receive
-      ! slices in halo_recv_local_idx are contiguous local-index ranges.
-      ! local_to_global / local_to_global_uv are module-scope in
-      ! sfincs_data_device.cuf (persisted for SOR-708's halo_exchange);
-      ! global_to_local / global_to_local_uv are routine-local outputs,
-      ! consumed only by build_halo_descriptors.
+      ! Phase 4 copyin (shrink + connectivity renumber) and Phase 5
+      ! halo-descriptor build. Halo cells are laid out contiguously after
+      ! owned cells, grouped by neighbor rank in halo_neighbor_ranks order,
+      ! so that the per-neighbor receive slices in halo_recv_local_idx are
+      ! contiguous local-index ranges. All four maps live module-scope in
+      ! sfincs_data_device.cuf so they outlive partition_and_localize: the
+      ! halo-exchange runtime, the per-step bridge-IN/OUT helpers in
+      ! source/src/sfincs_*_gpu.cuf, and the deferred shadow allocators
+      ! (allocate_structure / allocate_discharges / allocate_wavemaker
+      ! device shadows) all read them.
       !
-      integer, intent(in)               :: cell_part(:)
-      integer, allocatable, intent(out) :: global_to_local(:)
-      integer, allocatable, intent(out) :: global_to_local_uv(:)
-      integer, intent(out)              :: npn_total, npuv_total
+      integer, intent(in)  :: cell_part(:)
+      integer, intent(out) :: npn_total, npuv_total
       !
       logical, allocatable :: is_halo_cell(:), is_halo_edge(:)
       integer, allocatable :: edge_owner(:)
@@ -913,6 +1717,8 @@ contains
       !
       if (allocated(local_to_global))    deallocate(local_to_global)
       if (allocated(local_to_global_uv)) deallocate(local_to_global_uv)
+      if (allocated(global_to_local))    deallocate(global_to_local)
+      if (allocated(global_to_local_uv)) deallocate(global_to_local_uv)
       !
       if (npn_h <= 0) then
          allocate(local_to_global(0))
@@ -1091,8 +1897,20 @@ contains
       end do
       npuv_total = npuv_local + count(is_halo_edge)
       !
-      allocate(local_to_global_uv(max(npuv_total, 1)))
-      allocate(global_to_local_uv(max(npuv_h, 1)))
+      ! Wide layout: local_to_global_uv extends past
+      ! npuv_local + halo_edge_count with ncuv_h slots for combined-UV
+      ! (quadtree refinement transitions) plus a sentinel slot at the end,
+      ! mirroring host arrays sized npuv + ncuv + 1 (q, q0, uv, uv0, kcuv).
+      ! global_to_local_uv extends to npuv_h + ncuv_h + 1 so that
+      ! connectivity entries that reference combined-UV global positions
+      ! (npuv_h+1 .. npuv_h+ncuv_h) and the sentinel (npuv_h+ncuv_h+1) get
+      ! renumbered into local positions in the same wide layout. Other-
+      ! sized device shadows (uv_index_*_*, uv_flags_*, kfuv, etc., sized
+      ! "narrow" npuv on host) don't include the tail — they ignore it
+      ! by allocating only npuv_local + halo_edge_count entries.
+      !
+      allocate(local_to_global_uv(max(npuv_total + ncuv_h + 1, 1)))
+      allocate(global_to_local_uv(max(npuv_h + ncuv_h + 1, 1)))
       local_to_global_uv = 0
       global_to_local_uv = 0
       i = 0
@@ -1114,6 +1932,17 @@ contains
          end do
       end do
       !
+      ! Combined-UV + sentinel tail. Each rank mirrors the global tail so
+      ! k_combined_uv (which iterates 1..ncuv on every rank) can write into
+      ! a contiguous range in the device shadow, and so connectivity
+      ! entries pointing to the global sentinel npuv_h + ncuv_h + 1 stay
+      ! in-bounds after renumber.
+      !
+      do iuv = 1, ncuv_h + 1
+         local_to_global_uv(npuv_total + iuv) = npuv_h + iuv
+         global_to_local_uv(npuv_h    + iuv) = npuv_total + iuv
+      end do
+      !
       deallocate(is_halo_cell)
       deallocate(is_halo_edge)
       deallocate(edge_owner)
@@ -1122,8 +1951,7 @@ contains
       !
    end subroutine build_local_index_maps
    !
-   subroutine build_halo_descriptors(cell_part, &
-                                     global_to_local, global_to_local_uv)
+   subroutine build_halo_descriptors(cell_part)
       !
       ! Builds the per-neighbor-rank cell and edge index lists consumed by
       ! halo_exchange_zs / halo_exchange_q_uv (SOR-708) at runtime. The neighbor-rank list
@@ -1145,10 +1973,12 @@ contains
       ! For mpi_size == 1 the routine returns immediately with all device
       ! arrays unallocated and counts at zero, which is what guarantees the
       ! N=1 device-side state matches the prior degenerate code path.
+      ! global_to_local / global_to_local_uv are read from module scope
+      ! (sfincs_data_device); they are populated by build_local_index_maps
+      ! and outlive this routine for use by Phase 4 copyin and the deferred
+      ! shadow allocators.
       !
       integer, intent(in) :: cell_part(:)
-      integer, intent(in) :: global_to_local(:)
-      integer, intent(in) :: global_to_local_uv(:)
       !
       integer, allocatable :: edge_owner(:)
       integer, allocatable :: cell_recv_count(:), cell_send_count(:)
@@ -1643,6 +2473,8 @@ contains
       if (allocated(halo_neighbor_ranks))     deallocate(halo_neighbor_ranks)
       if (allocated(local_to_global))         deallocate(local_to_global)
       if (allocated(local_to_global_uv))      deallocate(local_to_global_uv)
+      if (allocated(global_to_local))         deallocate(global_to_local)
+      if (allocated(global_to_local_uv))      deallocate(global_to_local_uv)
       if (allocated(local_to_global_d))       deallocate(local_to_global_d)
       if (allocated(local_to_global_uv_d))    deallocate(local_to_global_uv_d)
       if (allocated(halo_send_buf_zs))        deallocate(halo_send_buf_zs)
@@ -1666,9 +2498,11 @@ contains
       !
       ! Per-step halo exchange of cell water levels (zs) across rank
       ! boundaries. CUDA-aware MPI consumes the device-side staging
-      ! buffers directly; the gather/scatter kernels translate the
-      ! local-indexed halo descriptors through local_to_global_d into
-      ! the still-full-size global-indexed device shadow of zs.
+      ! buffers directly; the gather/scatter kernels read/write the
+      ! local-indexed device shadow of zs directly through the
+      ! local-indexed halo_*_local_idx descriptors (no
+      ! local_to_global_d translation — that step was needed only while
+      ! the device shadow was full-size global-indexed).
       !
       integer :: nbr_slot, i, n
       integer :: ierr, istat
@@ -1702,7 +2536,7 @@ contains
          n = halo_send_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            halo_send_buf_zs(i, nbr_slot) = real( zs( local_to_global_d( halo_send_local_idx(i, nbr_slot) ) ), kind=4 )
+            halo_send_buf_zs(i, nbr_slot) = real( zs( halo_send_local_idx(i, nbr_slot) ), kind=4 )
          end do
       end do
       !
@@ -1732,7 +2566,7 @@ contains
          n = halo_recv_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            zs( local_to_global_d( halo_recv_local_idx(i, nbr_slot) ) ) = real( halo_recv_buf_zs(i, nbr_slot), kind=8 )
+            zs( halo_recv_local_idx(i, nbr_slot) ) = real( halo_recv_buf_zs(i, nbr_slot), kind=8 )
          end do
       end do
       !
@@ -1756,8 +2590,9 @@ contains
       ! each modeled on halo_exchange_zs: gather owned edges into the
       ! device staging buffer, Isend/Irecv with HPC-X consuming the
       ! device pointers directly, scatter the received halo values back
-      ! into the still-full-size global-indexed device shadows of q / uv
-      ! at the global edge positions resolved by local_to_global_uv_d.
+      ! into the local-indexed device shadows of q / uv at the local
+      ! edge positions in halo_uv_*_local_idx (no local_to_global_uv_d
+      ! translation now that the device shadows are local-indexed).
       !
       integer :: nbr_slot, i, n
       integer :: ierr, istat
@@ -1785,7 +2620,7 @@ contains
          n = halo_uv_send_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            halo_send_buf_q(i, nbr_slot) = q( local_to_global_uv_d( halo_uv_send_local_idx(i, nbr_slot) ) )
+            halo_send_buf_q(i, nbr_slot) = q( halo_uv_send_local_idx(i, nbr_slot) )
          end do
       end do
       !
@@ -1803,7 +2638,7 @@ contains
          n = halo_uv_recv_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            q( local_to_global_uv_d( halo_uv_recv_local_idx(i, nbr_slot) ) ) = halo_recv_buf_q(i, nbr_slot)
+            q( halo_uv_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_q(i, nbr_slot)
          end do
       end do
       !
@@ -1823,7 +2658,7 @@ contains
          n = halo_uv_send_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            halo_send_buf_uv(i, nbr_slot) = uv( local_to_global_uv_d( halo_uv_send_local_idx(i, nbr_slot) ) )
+            halo_send_buf_uv(i, nbr_slot) = uv( halo_uv_send_local_idx(i, nbr_slot) )
          end do
       end do
       !
@@ -1841,7 +2676,7 @@ contains
          n = halo_uv_recv_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            uv( local_to_global_uv_d( halo_uv_recv_local_idx(i, nbr_slot) ) ) = halo_recv_buf_uv(i, nbr_slot)
+            uv( halo_uv_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_uv(i, nbr_slot)
          end do
       end do
       !
@@ -1954,22 +2789,21 @@ contains
          n_local = npuv_local
       end if
       !
-      ! Step 1: pack the rank-local slice on the device, then D2H into a
-      ! host workbuf sized n_local. Going through a device-side pack avoids
-      ! a full-array D2H that would copy npn_h - n_local stale entries.
+      ! Step 1: D2H copy the leading n_local owned-cells/edges slice. The
+      ! device shadow is now local-indexed (post Phase-4 shrink) so the
+      ! pack reduces to a contiguous copy: positions 1..n_local hold the
+      ! owned slice in the same order as local_to_global(1:n_local). Use a
+      ! cuf kernel to force a device-side copy; PGI's whole-array slice
+      ! assignment between device arrays on n>1 ranks did not always
+      ! propagate the data on NVHPC 25.9 (rank 1's owned slice came back
+      ! all-zero on rank 0 after the MPI gather).
       !
       allocate(workbuf_d(max(n_local, 1)))
-      if (kind == 'cell') then
-         !$cuf kernel do(1) <<<*,*>>>
-         do i = 1, n_local
-            workbuf_d(i) = arr_d(local_to_global_d(i))
-         end do
-      else
-         !$cuf kernel do(1) <<<*,*>>>
-         do i = 1, n_local
-            workbuf_d(i) = arr_d(local_to_global_uv_d(i))
-         end do
-      end if
+      !$cuf kernel do(1) <<<*,*>>>
+      do i = 1, n_local
+         workbuf_d(i) = arr_d(i)
+      end do
+      ierr = cudaDeviceSynchronize()
       allocate(workbuf(max(n_local, 1)))
       workbuf = workbuf_d
       deallocate(workbuf_d)
@@ -2043,18 +2877,14 @@ contains
          n_local = npuv_local
       end if
       !
+      ! Pack rank-local slice (see real4 sibling for the reasoning behind
+      ! the explicit cuf kernel rather than a slice assignment).
+      !
       allocate(workbuf_d(max(n_local, 1)))
-      if (kind == 'cell') then
-         !$cuf kernel do(1) <<<*,*>>>
-         do i = 1, n_local
-            workbuf_d(i) = arr_d(local_to_global_d(i))
-         end do
-      else
-         !$cuf kernel do(1) <<<*,*>>>
-         do i = 1, n_local
-            workbuf_d(i) = arr_d(local_to_global_uv_d(i))
-         end do
-      end if
+      !$cuf kernel do(1) <<<*,*>>>
+      do i = 1, n_local
+         workbuf_d(i) = arr_d(i)
+      end do
       allocate(workbuf(max(n_local, 1)))
       workbuf = workbuf_d
       deallocate(workbuf_d)

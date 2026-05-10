@@ -39,6 +39,11 @@ module sfincs_boundaries
    use sfincs_data_device
    use sfincs_log
    use sfincs_error
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8, &
+      bridge_out_cell_int1, bridge_out_cell_int4, &
+      bridge_out_edge_real4, bridge_out_edge_int1
    use sfincs_boundaries_io, only: io_read_boundary_data    => read_boundary_data, &
                                    io_find_boundary_indices => find_boundary_indices, &
                                    io_find_sfincs_cell      => find_sfincs_cell, &
@@ -326,7 +331,8 @@ contains
    !     (sfincs_boundaries_gpu.cuf:194) for kcs==6 cells -- catalog
    !     Section C.3, conservative default.
    !
-   zs   = zs_h
+   call bridge_in_cell_real8(zs, zs_h)
+   ! zsb / zsb0 are boundary-sized (ngbnd), not edge-rank: keep bulk H2D.
    zsb  = zsb_h
    zsb0 = zsb0_h
    !
@@ -348,9 +354,10 @@ contains
    ! kept to keep the host view canonical and so future device-side
    ! mutations stay correct without further changes).
    !
-   zs_h     = zs
-   q_h      = q
-   uv_h     = uv
+   call bridge_out_cell_real8(zs_h,   zs)
+   call bridge_out_edge_real4(q_h,    q)
+   call bridge_out_edge_real4(uv_h,   uv)
+   ! uvmean / zsb / zsb0 are boundary-sized (nkcuv2 / ngbnd); keep bulk D2H.
    uvmean_h = uvmean
    zsb_h    = zsb
    zsb0_h   = zsb0
@@ -372,7 +379,7 @@ contains
          enddo
       endif
       !
-      zsmax_h = zsmax
+      call bridge_out_cell_real4(zsmax_h, zsmax)
       !
    endif
    !

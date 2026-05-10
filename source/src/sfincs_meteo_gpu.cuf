@@ -26,6 +26,11 @@ module sfincs_meteo
    use cudafor
    use sfincs_data_device
    use sfincs_meteo_io, only: read_meteo_data
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8, &
+      bridge_out_cell_int1, bridge_out_cell_int4, &
+      bridge_out_edge_real4, bridge_out_edge_int1
    !
    implicit none
    !
@@ -120,7 +125,7 @@ contains
          ! writes zs(nmb) host-side for kcs==6 (Neumann lateral) cells.
          !
          if (precip_h .and. .not. subgrid_h) then
-            zs = zs_h
+            call bridge_in_cell_real8(zs, zs_h)
          endif
          !
          ! ------ Per-cell time interpolation kernel -------------------------
@@ -155,24 +160,24 @@ contains
          ! ------ Copy-OUT: device -> host for WRITE set ---------------------
          !
          if (wind_h) then
-            tauwu_h = tauwu
-            tauwv_h = tauwv
+            call bridge_out_cell_real4(tauwu_h, tauwu)
+            call bridge_out_cell_real4(tauwv_h, tauwv)
             if (store_wind_h) then
-               windu_h = windu
-               windv_h = windv
-               if (store_wind_max_h) windmax_h = windmax
+               call bridge_out_cell_real4(windu_h, windu)
+               call bridge_out_cell_real4(windv_h, windv)
+               if (store_wind_max_h) call bridge_out_cell_real4(windmax_h, windmax)
             endif
          endif
          !
          if (patmos_h) then
-            patm_h = patm
-            if (pavbnd_h > 0.0) patmb_h = patmb
+            call bridge_out_cell_real4(patm_h, patm)
+            if (pavbnd_h > 0.0) call bridge_out_cell_real4(patmb_h, patmb)
          endif
          !
          if (precip_h) then
-            prcp_h    = prcp
-            netprcp_h = netprcp
-            if (store_cumulative_precipitation_h) cumprcp_h = cumprcp
+            call bridge_out_cell_real4(prcp_h,    prcp)
+            call bridge_out_cell_real4(netprcp_h, netprcp)
+            if (store_cumulative_precipitation_h) call bridge_out_cell_real4(cumprcp_h, cumprcp)
          endif
          !
       endif
@@ -251,11 +256,11 @@ contains
             !
             ! Publish device -> host for downstream CPU consumers
             !
-            tauwu_h = tauwu
-            tauwv_h = tauwv
+            call bridge_out_cell_real4(tauwu_h, tauwu)
+            call bridge_out_cell_real4(tauwv_h, tauwv)
             if (store_wind_h) then
-               windu_h = windu
-               windv_h = windv
+               call bridge_out_cell_real4(windu_h, windu)
+               call bridge_out_cell_real4(windv_h, windv)
             endif
             !
             itwndlast = itw - 1
@@ -313,9 +318,9 @@ contains
       !
       ! Copy-OUT
       !
-      prcp_h    = prcp
-      netprcp_h = netprcp
-      if (store_cumulative_precipitation_h) cumprcp_h = cumprcp
+      call bridge_out_cell_real4(prcp_h,    prcp)
+      call bridge_out_cell_real4(netprcp_h, netprcp)
+      if (store_cumulative_precipitation_h) call bridge_out_cell_real4(cumprcp_h, cumprcp)
       !
       itprcplast = itp - 1
       !

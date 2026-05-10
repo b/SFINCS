@@ -24,6 +24,11 @@ module sfincs_infiltration
    !
    use cudafor
    use sfincs_data_device
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8, &
+      bridge_out_cell_int1, bridge_out_cell_int4, &
+      bridge_out_edge_real4, bridge_out_edge_int1
    use sfincs_infiltration_io, only: initialize_infiltration
    !
    implicit none
@@ -91,7 +96,7 @@ contains
       ! routine (e.g. update_meteo_forcing for prcp/cumprcp/netprcp), so
       ! their device shadows are already up-to-date.
       !
-      zs = zs_h
+      call bridge_in_cell_real8(zs, zs_h)
       !
       blocks = (npn_local + TPB - 1) / TPB
       !
@@ -132,21 +137,21 @@ contains
       !
       ! ------ Copy-OUT: device -> host (union of all branches' WRITE sets) --
       !
-      qinfmap_h  = qinfmap
-      netprcp_h  = netprcp
-      cuminf_h   = cuminf
-      scs_rain_h = scs_rain
-      scs_Se_h   = scs_Se
-      scs_P1_h   = scs_P1
-      scs_F1_h   = scs_F1
-      scs_S1_h   = scs_S1
-      rain_T1_h  = rain_T1
-      GA_head_h  = GA_head
-      GA_sigma_h = GA_sigma
-      GA_F_h     = GA_F
-      horton_kd_h = horton_kd
-      horton_fc_h = horton_fc
-      horton_f0_h = horton_f0
+      call bridge_out_cell_real4(qinfmap_h,  qinfmap)
+      call bridge_out_cell_real4(netprcp_h,  netprcp)
+      call bridge_out_cell_real4(cuminf_h,   cuminf)
+      call bridge_out_cell_int1 (scs_rain_h, scs_rain)
+      call bridge_out_cell_real4(scs_Se_h,   scs_Se)
+      call bridge_out_cell_real4(scs_P1_h,   scs_P1)
+      call bridge_out_cell_real4(scs_F1_h,   scs_F1)
+      call bridge_out_cell_real4(scs_S1_h,   scs_S1)
+      call bridge_out_cell_real4(rain_T1_h,  rain_T1)
+      call bridge_out_cell_real4(GA_head_h,  GA_head)
+      call bridge_out_cell_real4(GA_sigma_h, GA_sigma)
+      call bridge_out_cell_real4(GA_F_h,     GA_F)
+      call bridge_out_cell_real4(horton_kd_h, horton_kd)
+      call bridge_out_cell_real4(horton_fc_h, horton_fc)
+      call bridge_out_cell_real4(horton_f0_h, horton_f0)
       !
       call system_clock(count1, count_rate, count_max)
       tloop = tloop + 1.0 * (count1 - count0) / count_rate

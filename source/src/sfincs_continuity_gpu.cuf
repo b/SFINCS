@@ -24,6 +24,11 @@ module sfincs_continuity
    !
    use cudafor
    use sfincs_data_device
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8, &
+      bridge_out_cell_int1, bridge_out_cell_int4, &
+      bridge_out_edge_real4, bridge_out_edge_int1
    !
    implicit none
    !
@@ -152,12 +157,12 @@ contains
       ! the device here. Same conservative rationale as vmax/qmax/twet
       ! in compute_store_variables.
       !
-      zs = zs_h
-      q  = q_h
+      call bridge_in_cell_real8(zs, zs_h)
+      call bridge_in_edge_real4(q,  q_h)
       !
-      if (use_qext_h)  qext = qext_h
+      if (use_qext_h)  call bridge_in_cell_real4(qext, qext_h)
       !
-      if (store_maximum_waterlevel_h) zsmax = zsmax_h
+      if (store_maximum_waterlevel_h) call bridge_in_cell_real4(zsmax, zsmax_h)
       !
       ! ------ Discharges: small sequential update on a single thread -----
       !
@@ -179,11 +184,11 @@ contains
       !
       ! ------ Copy-OUT: device -> host for WRITE set ---------------------
       !
-      zs_h = zs
+      call bridge_out_cell_real8(zs_h, zs)
       !
       if (snapwave_h) then
-         zsm_h    = zsm
-         maxzsm_h = maxzsm
+         call bridge_out_cell_real4(zsm_h,    zsm)
+         call bridge_out_cell_real4(maxzsm_h, maxzsm)
       endif
       !
       if (store_maximum_waterlevel_h) then
@@ -191,19 +196,25 @@ contains
          ! t_zsmax is host-only (not in foundation catalog). We compare the new
          ! zs_h (just copied from device) against the old zsmax_h (still the
          ! pre-kernel value) to decide whether each cell's zsmax was updated;
-         ! same predicate as the CPU sibling.
+         ! same predicate as the CPU sibling. Iterate the rank-local owned
+         ! slice so multi-rank runs only update zsmax_h on cells they own;
+         ! halo / non-owned positions stay authoritative on the owning rank.
          !
          if (store_t_zsmax_h) then
-            do nm = 1, np_h
-               if (zs_h(nm) > zsmax_h(nm)) then
-                  if ((zs_h(nm) - zb_h(nm)) > huthresh_h) then
-                     t_zsmax_h(nm) = t
+            do nm = 1, npn_local
+               block
+                  integer :: g
+                  g = local_to_global(nm)
+                  if (zs_h(g) > zsmax_h(g)) then
+                     if ((zs_h(g) - zb_h(g)) > huthresh_h) then
+                        t_zsmax_h(g) = t
+                     endif
                   endif
-               endif
+               end block
             enddo
          endif
          !
-         zsmax_h = zsmax
+         call bridge_out_cell_real4(zsmax_h, zsmax)
          !
       endif
       !
@@ -289,12 +300,12 @@ contains
       ! the device here. Same conservative rationale as vmax/qmax/twet
       ! in compute_store_variables.
       !
-      zs = zs_h
-      q  = q_h
+      call bridge_in_cell_real8(zs, zs_h)
+      call bridge_in_edge_real4(q,  q_h)
       !
-      if (use_qext_h)  qext = qext_h
+      if (use_qext_h)  call bridge_in_cell_real4(qext, qext_h)
       !
-      if (store_maximum_waterlevel_h) zsmax = zsmax_h
+      if (store_maximum_waterlevel_h) call bridge_in_cell_real4(zsmax, zsmax_h)
       !
       ! ------ Discharges -------------------------------------------------
       !
@@ -318,37 +329,42 @@ contains
       !
       ! ------ Copy-OUT ---------------------------------------------------
       !
-      zs_h       = zs
-      z_volume_h = z_volume
+      call bridge_out_cell_real8(zs_h,       zs)
+      call bridge_out_cell_real8(z_volume_h, z_volume)
       !
       if (wiggle_suppression_h) then
-         zs0_h    = zs0
-         zsderv_h = zsderv
+         call bridge_out_cell_real4(zs0_h,    zs0)
+         call bridge_out_cell_real4(zsderv_h, zsderv)
       endif
       !
-      if (use_storage_volume_h) storage_volume_h = storage_volume
+      if (use_storage_volume_h) call bridge_out_cell_real4(storage_volume_h, storage_volume)
       !
       if (snapwave_h) then
-         zsm_h    = zsm
-         maxzsm_h = maxzsm
+         call bridge_out_cell_real4(zsm_h,    zsm)
+         call bridge_out_cell_real4(maxzsm_h, maxzsm)
       endif
       !
       if (store_maximum_waterlevel_h) then
          !
          ! Host-side t_zsmax (not in catalog). See compute_water_levels_regular
-         ! for the same pattern.
+         ! for the same pattern. Iterate owned slice in rank-local order;
+         ! halo / non-owned cells stay untouched.
          !
          if (store_t_zsmax_h) then
-            do nm = 1, np_h
-               if (zs_h(nm) > zsmax_h(nm)) then
-                  if ((zs_h(nm) - subgrid_z_zmin_h(nm)) > huthresh_h) then
-                     t_zsmax_h(nm) = t
+            do nm = 1, npn_local
+               block
+                  integer :: g
+                  g = local_to_global(nm)
+                  if (zs_h(g) > zsmax_h(g)) then
+                     if ((zs_h(g) - subgrid_z_zmin_h(g)) > huthresh_h) then
+                        t_zsmax_h(g) = t
+                     endif
                   endif
-               endif
+               end block
             enddo
          endif
          !
-         zsmax_h = zsmax
+         call bridge_out_cell_real4(zsmax_h, zsmax)
          !
       endif
       !
@@ -398,13 +414,13 @@ contains
       ! aliases to default values each output interval, and no other
       ! per-step GPU bridge-IN propagates that reset to the device.
       !
-      zs = zs_h
-      q  = q_h
-      uv = uv_h
+      call bridge_in_cell_real8(zs, zs_h)
+      call bridge_in_edge_real4(q,  q_h)
+      call bridge_in_edge_real4(uv, uv_h)
       !
-      if (store_maximum_velocity_h) vmax = vmax_h
-      if (store_maximum_flux_h)     qmax = qmax_h
-      if (store_twet_h)             twet = twet_h
+      if (store_maximum_velocity_h) call bridge_in_cell_real4(vmax, vmax_h)
+      if (store_maximum_flux_h)     call bridge_in_cell_real4(qmax, qmax_h)
+      if (store_twet_h)             call bridge_in_cell_real4(twet, twet_h)
       !
       ! ------ Kernel -----------------------------------------------------
       !
@@ -419,9 +435,9 @@ contains
       !
       ! ------ Copy-OUT ---------------------------------------------------
       !
-      if (store_maximum_velocity_h) vmax_h = vmax
-      if (store_maximum_flux_h)     qmax_h = qmax
-      if (store_twet_h)             twet_h = twet
+      if (store_maximum_velocity_h) call bridge_out_cell_real4(vmax_h, vmax)
+      if (store_maximum_flux_h)     call bridge_out_cell_real4(qmax_h, qmax)
+      if (store_twet_h)             call bridge_out_cell_real4(twet_h, twet)
       !
    end subroutine compute_store_variables
    !
