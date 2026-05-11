@@ -542,11 +542,14 @@ contains
       !
       indb = ibkcuv2(ib)
       nmb  = nmbkcuv2(ib)     ! nm index of kcs=2/3/5/6 boundary point
+      nmi  = nmikcuv2(ib)     ! Index of kcs=1 point
+      ip   = index_kcuv2(ib)  ! Index in uv array of kcuv=2 velocity point
+      !
+      ! Skip boundary points that are neither owned nor halo on this rank.
+      ! On single-rank runs every boundary point is local, so this is a no-op.
+      if (nmb <= 0 .or. nmi <= 0 .or. ip <= 0) return
       !
       if (kcs(nmb) == 6) return  ! Lateral boundary: fluxes solved in sfincs_momentum.
-      !
-      nmi = nmikcuv2(ib)         ! Index of kcs=1 point
-      ip  = index_kcuv2(ib)      ! Index in uv array of kcuv=2 velocity point
       !
       zsnmi  = real(zs(nmi), kind=4)
       zsnmb  = zsb(indb)
