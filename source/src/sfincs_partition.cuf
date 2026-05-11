@@ -1083,7 +1083,9 @@ contains
       ! These keep host shape; entries (where they index cells or edges)
       ! are renumbered through the appropriate map. zsb / zsb0 / ibuvdir /
       ! uvmean carry data values, not indices, so they keep verbatim
-      ! mold/copy semantics.
+      ! mold/copy semantics. ibkcuv2 likewise stays verbatim: its entries
+      ! are grid-boundary indices (1..ngbnd) used as zsb(ibkcuv2(ib)),
+      ! not edge indices, so global_to_local_uv would corrupt them.
       !
       if (allocated(nmindbnd_h)) then
          allocate(nmindbnd, mold=nmindbnd_h)
@@ -1105,10 +1107,7 @@ contains
          allocate(nmbkcuv2, mold=nmbkcuv2_h)
          call renumber_to_local_cell(nmbkcuv2, nmbkcuv2_h)
       end if
-      if (allocated(ibkcuv2_h)) then
-         allocate(ibkcuv2, mold=ibkcuv2_h)
-         call renumber_to_local_edge(ibkcuv2, ibkcuv2_h)
-      end if
+      if (allocated(ibkcuv2_h))  then; allocate(ibkcuv2,  mold=ibkcuv2_h);  ibkcuv2  = ibkcuv2_h;  end if
       !
       ! ---- Quadtree-level-sized arrays (size nref) -------------------------
       ! Verbatim mold/copy: kernels index these by z_flags_iref / uv_flags_iref
@@ -1341,11 +1340,13 @@ contains
    !
    subroutine renumber_to_local_edge(dev, host)
       ! Other-sized int*4 with edge-index entries: keep host shape,
-      ! renumber entries through global_to_local_uv. Used for index_kcuv2,
-      ! ibkcuv2 (both nkcuv2-sized), structure_uv_index (nstruc-sized),
-      ! wavemaker_index_uv (iwm-sized). Entries can also be combined-UV
+      ! renumber entries through global_to_local_uv. Used for index_kcuv2
+      ! (nkcuv2-sized), structure_uv_index (nstruc-sized),
+      ! wavemaker_index_uv (iwm-sized), and cuv_index_uv / cuv_index_uv1 /
+      ! cuv_index_uv2 (ncuv-sized). Entries can also be combined-UV
       ! (npuv_h+1..npuv_h+ncuv_h) or sentinel (npuv_h+ncuv_h+1); the
-      ! extended global_to_local_uv covers both.
+      ! extended global_to_local_uv covers both. NOT used for ibkcuv2 —
+      ! its entries are grid-boundary indices (1..ngbnd), not edge indices.
       integer*4, device, intent(inout) :: dev(:)
       integer*4, intent(in)            :: host(:)
       integer*4, allocatable :: tmp(:)
