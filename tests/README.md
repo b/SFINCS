@@ -165,6 +165,20 @@ PASS, otherwise 1.
   `tests/run_benchmarks.sh` reports a measured speedup. Inputs are
   authored synthetically by the directory's `generate.py`.
 
+- **`case_prod_compound_snapwave`** — a 102880-cell quadtree mesh (three
+  refinement levels over a 130 × 130 base grid at 200 m spacing, no
+  rotation) with subgrid topography and the SFINCS-SnapWave coupling
+  enabled, under **simultaneous tide + wave boundaries**: a
+  multi-component M2 + M4 + sea-level tide on the SFINCS open boundary,
+  and a storm-event Hs/Tp time series (Hs ramps 1 m → 4 m → 1 m over
+  24 h, Tp tracking) on the SnapWave wave-spectrum boundary along the
+  same western edge, 24-hour run. Production-scale tier covering the
+  wave-driven boundary axis and the second simultaneous-boundary case
+  (tide + wave; the first, tide + mass-flux, lives in
+  `case_prod_riverine`). Inputs ship in-tree as zlib-compressed NetCDF
+  (≈ 3.4 MB combined). No spiderweb, no infiltration, no structures, no
+  discharges, no wavemakers.
+
 ## Where artifacts land
 
 Each (case, configuration) pair stages its inputs into a clean directory
