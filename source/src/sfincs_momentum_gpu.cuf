@@ -37,7 +37,8 @@ module sfincs_momentum
       bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
       bridge_out_cell_real4, bridge_out_cell_real8, &
       bridge_out_cell_int1, bridge_out_cell_int4, &
-      bridge_out_edge_real4, bridge_out_edge_int1
+      bridge_out_edge_real4, bridge_out_edge_int1, &
+      halo_exchange_q_uv
    !
    implicit none
    !
@@ -162,7 +163,37 @@ contains
       !
       istat = cudaDeviceSynchronize()
       !
+      ! ------ Cross-rank halo exchange of q / uv before combined-UV ------
+      !
+      ! SOR-1013 strategy (c): every rank computes the combined-UV average
+      ! below from a halo-extended view of q and uv, so that for a refinement
+      ! transition straddling the partition split each rank reads the SAME
+      ! pair of child-edge fluxes. The SOR-1013 descriptor-symmetry fix in
+      ! sfincs_partition.cuf::build_halo_descriptors makes this safe: rank
+      ! N's send slot k for neighbor M and rank M's recv slot k from N now
+      ! refer to the same global iuv for cross-refinement-level edges, so the
+      ! exchange below delivers each rank's owned q/uv into the correct halo
+      ! position on every peer. The continuity-side halo_exchange_q_uv()
+      ! call in sfincs_lib.F90 (after compute_fluxes_over_structures /
+      ! compute_nonhydrostatic) remains in place to propagate any
+      ! structure / non-hydrostatic edits of host q through the halo before
+      ! compute_water_levels reads it.
+      !
+      call halo_exchange_q_uv()
+      !
       ! ------ Combined-uv averaging post-kernel ---------------------------
+      !
+      ! SOR-1013 strategy (c): rank-divergent combined-UV slot values were
+      ! the second of the two intertwined defects identified in SOR-1013.
+      ! Every rank still runs this kernel (the icuv = 1..ncuv loop on each
+      ! rank writes to its own combined-UV tail in q / uv), but the source
+      ! q / uv at cuv_index_uv1 / cuv_index_uv2 is now drawn from the
+      ! halo-extended view populated by halo_exchange_q_uv() above, so every
+      ! rank converges to the same average per combined-UV slot. Strategies
+      ! (a) "only rank 0 runs k_combined_uv and broadcasts" and (b) "one
+      ! rank per slot averages and broadcasts" were considered and rejected
+      ! because the descriptor fix makes the strictly-local strategy (c)
+      ! viable without an extra MPI collective per step.
       !
       if (ncuv_h > 0) then
          blocks = (ncuv_h + TPB - 1) / TPB

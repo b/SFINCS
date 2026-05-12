@@ -30,7 +30,8 @@ module sfincs_meteo
       bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
       bridge_out_cell_real4, bridge_out_cell_real8, &
       bridge_out_cell_int1, bridge_out_cell_int4, &
-      bridge_out_edge_real4, bridge_out_edge_int1
+      bridge_out_edge_real4, bridge_out_edge_int1, &
+      halo_exchange_meteo
    !
    implicit none
    !
@@ -193,6 +194,26 @@ contains
       if (prcpfile_h(1:4) /= 'none') then
          call update_precipitation_from_timeseries(t, dt)
       endif
+      !
+      ! Cross-rank halo exchange of meteo cell state (SOR-3).
+      !
+      ! The k_meteo_time_interp / k_spw_spatial / k_amp_spatial /
+      ! k_amuv_spatial / k_wind_uniform kernels invoked above all iterate
+      ! nm = 1..npn_local — each rank writes patm / tauwu / tauwv only at
+      ! its owned cell slots, never at halo positions
+      ! [npn_local+1, npn_total]. The next call into compute_fluxes reads
+      ! patm(nm) - patm(nmu) for the pressure-gradient term and
+      ! tauwu(nm) / tauwv(nm) for the wind-stress term across every owned
+      ! edge — including cross-rank edges where one of nm / nmu is a halo
+      ! cell. Without this exchange the halo's patm stays at its initial
+      ! value (gapres in spiderweb cases) while the neighbor rank's owned
+      ! cells track the moving eye, producing a ~6 kPa spurious pressure
+      ! gradient at the partition boundary that drives unphysical surge
+      ! step after step. Issuing the exchange here makes the device-side
+      ! patm / tauwu / tauwv at this rank's halo positions agree with the
+      ! neighbor rank's owned values before compute_fluxes runs.
+      !
+      call halo_exchange_meteo()
       !
       call system_clock(count1, count_rate, count_max)
       tloop = tloop + 1.0 * (count1 - count0) / count_rate

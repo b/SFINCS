@@ -153,6 +153,26 @@ module sfincs_partition
    integer, parameter :: HALO_TAG_Q  = 7082
    integer, parameter :: HALO_TAG_UV = 7083
    !
+   ! Meteo cell-state halo exchange tags (SOR-3). One per array so the three
+   ! sequential exchanges in halo_exchange_meteo can never collide.
+   !
+   integer, parameter :: HALO_TAG_PATM  = 7086
+   integer, parameter :: HALO_TAG_TAUWU = 7087
+   integer, parameter :: HALO_TAG_TAUWV = 7088
+   !
+   ! Subgrid z_volume cell-state halo tag (SOR-3). Per-step exchange so the
+   ! next step's k_compute_fluxes sees a non-stale z_volume at halo cells
+   ! when it checks the `z_volume(nm/nmu) < 0` over-drainage caps.
+   !
+   integer, parameter :: HALO_TAG_ZVOL  = 7089
+   !
+   ! Tags reserved for the SOR-1013 debug-gated halo descriptor sanity
+   ! exchange. Run only when SFINCS_DEBUG_HALO_CHECK is set in the env, so
+   ! they never collide with the runtime halo exchanges above.
+   !
+   integer, parameter :: HALO_TAG_DBG_COUNT  = 7084
+   integer, parameter :: HALO_TAG_DBG_GLOBAL = 7085
+   !
    ! SOR-10: tag for the zsderv halo exchange. zsderv is written by
    ! k_subgrid_main at owned cells only and then read by k_compute_fluxes
    ! at halo cell indices via the wiggle-suppression term
@@ -182,6 +202,8 @@ module sfincs_partition
    public  :: partition_and_localize, device_finalize, &
               halo_exchange_zs, halo_exchange_q_uv, &
               halo_exchange_zsderv, &
+              halo_exchange_meteo, &
+              halo_exchange_z_volume, &
               device_to_host_for_output, &
               allocate_structure_device_shadows, &
               refresh_kcuv_device_shadow, &
@@ -195,6 +217,7 @@ module sfincs_partition
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
               build_halo_descriptors, &
+              validate_halo_descriptors, &
               copyin_phase4_degenerate, &
               sort_indices_by_key, qsort_recursive, &
               gather_to_rank0_in_global_order, &
@@ -360,6 +383,10 @@ contains
             allocate(halo_recv_buf_uv(max_recv_uv, halo_uv_n_neighbors))
          end block
       end if
+      !
+      ! --- SOR-1013 descriptor sanity check (env-gated, no-op by default) ---
+      !
+      call validate_halo_descriptors()
       !
       ! --- Phase 7: SnapWave gather/scatter metadata (SOR-711) --------------
       ! Build per-rank gather metadata for the SnapWave coupling. The CPU
@@ -2003,9 +2030,9 @@ contains
       integer, allocatable :: edge_recv_count(:), edge_send_count(:)
       integer, allocatable :: cell_recv_loc(:,:), cell_recv_rem(:,:), cell_send_loc(:,:)
       integer, allocatable :: edge_recv_loc(:,:), edge_recv_rem(:,:), edge_send_loc(:,:)
-      integer :: nm, iuv, nm_a, nm_b, nm_other
-      integer :: edge_slot
-      integer :: r, ridx, k
+      integer :: iuv, nm_a, nm_b
+      integer :: r_a, r_b, r_edge
+      integer :: ridx
       integer :: max_cell_recv, max_cell_send, max_edge_recv, max_edge_send
       integer, allocatable :: rank_to_idx(:)
       !
@@ -2059,6 +2086,18 @@ contains
       !
       ! ---- Pass 1: count per-neighbor entries ----
       !
+      ! Both passes walk iuv = 1..npuv_h in canonical (global) order. Every
+      ! rank walks the same sequence and reaches a given iuv at the same step
+      ! in its own list, so any iuv that two ranks both touch lands at
+      ! identical per-neighbor slot positions on the two sides. This is the
+      ! SOR-1013 fix for cross-refinement-level halo descriptor asymmetry: the
+      ! prior owned-cell × eight-slot walk traversed cells in nm-order, but
+      ! coarse-side (one slot per fine neighbor) and fine-side (one slot per
+      ! coarse neighbor) orderings diverged whenever the two ranks owned the
+      ! adjacent cells in different nm-orders, leaving rank N's "send slot k
+      ! for neighbor M" referring to a different global iuv than rank M's
+      ! "recv slot k from N" on the same edge.
+      !
       allocate(cell_recv_count(halo_n_neighbors)); cell_recv_count = 0
       allocate(cell_send_count(halo_n_neighbors)); cell_send_count = 0
       allocate(edge_recv_count(halo_n_neighbors)); edge_recv_count = 0
@@ -2072,65 +2111,75 @@ contains
          allocate(edge_recv_seen(max(npuv_h, 1)));              edge_recv_seen = .false.
          allocate(edge_send_seen(max(npuv_h, 1), halo_n_neighbors)); edge_send_seen = .false.
          !
-         do nm = 1, npn_h
-            if (cell_part(nm) /= mpi_rank) cycle
-            do edge_slot = 1, 8
-               select case (edge_slot)
-                  case (1); iuv = z_index_uv_md1_h(nm)
-                  case (2); iuv = z_index_uv_md2_h(nm)
-                  case (3); iuv = z_index_uv_nd1_h(nm)
-                  case (4); iuv = z_index_uv_nd2_h(nm)
-                  case (5); iuv = z_index_uv_mu1_h(nm)
-                  case (6); iuv = z_index_uv_mu2_h(nm)
-                  case (7); iuv = z_index_uv_nu1_h(nm)
-                  case (8); iuv = z_index_uv_nu2_h(nm)
-               end select
-               if (iuv <= 0 .or. iuv > npuv_h) cycle
-               nm_a = uv_index_z_nm_h(iuv)
-               nm_b = uv_index_z_nmu_h(iuv)
-               if (nm_a == nm) then
-                  nm_other = nm_b
-               else if (nm_b == nm) then
-                  nm_other = nm_a
-               else
-                  nm_other = 0
-               end if
-               !
-               if (nm_other > 0 .and. nm_other <= npn_h) then
-                  r = cell_part(nm_other)
-                  if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
-                     ridx = rank_to_idx(r)
-                     if (ridx > 0) then
-                        if (.not. cell_recv_seen(nm_other)) then
-                           cell_recv_seen(nm_other) = .true.
-                           cell_recv_count(ridx) = cell_recv_count(ridx) + 1
-                        end if
-                        if (.not. cell_send_seen(nm, ridx)) then
-                           cell_send_seen(nm, ridx) = .true.
-                           cell_send_count(ridx) = cell_send_count(ridx) + 1
-                        end if
-                     end if
+         do iuv = 1, npuv_h
+            nm_a = uv_index_z_nm_h(iuv)
+            nm_b = uv_index_z_nmu_h(iuv)
+            r_a = -1
+            r_b = -1
+            if (nm_a > 0 .and. nm_a <= npn_h) r_a = cell_part(nm_a)
+            if (nm_b > 0 .and. nm_b <= npn_h) r_b = cell_part(nm_b)
+            r_edge = edge_owner(iuv)
+            !
+            ! Cell halo when I own nm_a and the other cell is non-owned.
+            !
+            if (r_a == mpi_rank .and. r_b /= mpi_rank .and. r_b >= 0 .and. r_b < mpi_size) then
+               ridx = rank_to_idx(r_b)
+               if (ridx > 0) then
+                  if (.not. cell_recv_seen(nm_b)) then
+                     cell_recv_seen(nm_b) = .true.
+                     cell_recv_count(ridx) = cell_recv_count(ridx) + 1
+                  end if
+                  if (.not. cell_send_seen(nm_a, ridx)) then
+                     cell_send_seen(nm_a, ridx) = .true.
+                     cell_send_count(ridx) = cell_send_count(ridx) + 1
                   end if
                end if
-               !
-               r = edge_owner(iuv)
-               if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
-                  ridx = rank_to_idx(r)
+            end if
+            !
+            ! Cell halo when I own nm_b and the other cell is non-owned.
+            !
+            if (r_b == mpi_rank .and. r_a /= mpi_rank .and. r_a >= 0 .and. r_a < mpi_size) then
+               ridx = rank_to_idx(r_a)
+               if (ridx > 0) then
+                  if (.not. cell_recv_seen(nm_a)) then
+                     cell_recv_seen(nm_a) = .true.
+                     cell_recv_count(ridx) = cell_recv_count(ridx) + 1
+                  end if
+                  if (.not. cell_send_seen(nm_b, ridx)) then
+                     cell_send_seen(nm_b, ridx) = .true.
+                     cell_send_count(ridx) = cell_send_count(ridx) + 1
+                  end if
+               end if
+            end if
+            !
+            ! Edge halo. Receive if someone else owns the edge but I own an
+            ! adjacent cell; send if I own the edge and an adjacent cell is
+            ! on another rank.
+            !
+            if (r_edge == mpi_rank) then
+               if (r_a /= mpi_rank .and. r_a >= 0 .and. r_a < mpi_size) then
+                  ridx = rank_to_idx(r_a)
+                  if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
+                     edge_send_seen(iuv, ridx) = .true.
+                     edge_send_count(ridx) = edge_send_count(ridx) + 1
+                  end if
+               end if
+               if (r_b /= mpi_rank .and. r_b >= 0 .and. r_b < mpi_size) then
+                  ridx = rank_to_idx(r_b)
+                  if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
+                     edge_send_seen(iuv, ridx) = .true.
+                     edge_send_count(ridx) = edge_send_count(ridx) + 1
+                  end if
+               end if
+            else if (r_edge >= 0 .and. r_edge < mpi_size) then
+               if (r_a == mpi_rank .or. r_b == mpi_rank) then
+                  ridx = rank_to_idx(r_edge)
                   if (ridx > 0 .and. .not. edge_recv_seen(iuv)) then
                      edge_recv_seen(iuv) = .true.
                      edge_recv_count(ridx) = edge_recv_count(ridx) + 1
                   end if
-               else if (r == mpi_rank .and. nm_other > 0 .and. nm_other <= npn_h) then
-                  k = cell_part(nm_other)
-                  if (k /= mpi_rank .and. k >= 0 .and. k < mpi_size) then
-                     ridx = rank_to_idx(k)
-                     if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
-                        edge_send_seen(iuv, ridx) = .true.
-                        edge_send_count(ridx) = edge_send_count(ridx) + 1
-                     end if
-                  end if
                end if
-            end do
+            end if
          end do
          !
          ! ---- Pass 2: allocate buffers and fill index arrays ----
@@ -2161,79 +2210,77 @@ contains
             edge_recv_seen = .false.
             edge_send_seen = .false.
             !
-            ! Drive the fill via the owned-cell walk so that we only enter
-            ! cells that are genuine halos for this rank. Halo cells are
-            ! discovered in increasing global-index order; build_local_index_maps
-            ! laid out the halo region of local_to_global in the same order
-            ! (ranks ordered by halo_neighbor_ranks, then global index within
-            ! a rank), so the entries we write to halo_recv_local_idx via
-            ! global_to_local stay contiguous within each per-neighbor slice.
-            !
-            do nm = 1, npn_h
-               if (cell_part(nm) /= mpi_rank) cycle
-               do edge_slot = 1, 8
-                  select case (edge_slot)
-                     case (1); iuv = z_index_uv_md1_h(nm)
-                     case (2); iuv = z_index_uv_md2_h(nm)
-                     case (3); iuv = z_index_uv_nd1_h(nm)
-                     case (4); iuv = z_index_uv_nd2_h(nm)
-                     case (5); iuv = z_index_uv_mu1_h(nm)
-                     case (6); iuv = z_index_uv_mu2_h(nm)
-                     case (7); iuv = z_index_uv_nu1_h(nm)
-                     case (8); iuv = z_index_uv_nu2_h(nm)
-                  end select
-                  if (iuv <= 0 .or. iuv > npuv_h) cycle
-                  nm_a = uv_index_z_nm_h(iuv)
-                  nm_b = uv_index_z_nmu_h(iuv)
-                  if (nm_a == nm) then
-                     nm_other = nm_b
-                  else if (nm_b == nm) then
-                     nm_other = nm_a
-                  else
-                     nm_other = 0
-                  end if
-                  !
-                  if (nm_other > 0 .and. nm_other <= npn_h) then
-                     r = cell_part(nm_other)
-                     if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
-                        ridx = rank_to_idx(r)
-                        if (ridx > 0) then
-                           if (.not. cell_recv_seen(nm_other)) then
-                              cell_recv_seen(nm_other) = .true.
-                              c_recv_pos(ridx) = c_recv_pos(ridx) + 1
-                              cell_recv_loc(c_recv_pos(ridx), ridx) = global_to_local(nm_other)
-                              cell_recv_rem(c_recv_pos(ridx), ridx) = nm_other
-                           end if
-                           if (.not. cell_send_seen(nm, ridx)) then
-                              cell_send_seen(nm, ridx) = .true.
-                              c_send_pos(ridx) = c_send_pos(ridx) + 1
-                              cell_send_loc(c_send_pos(ridx), ridx) = global_to_local(nm)
-                           end if
-                        end if
+            do iuv = 1, npuv_h
+               nm_a = uv_index_z_nm_h(iuv)
+               nm_b = uv_index_z_nmu_h(iuv)
+               r_a = -1
+               r_b = -1
+               if (nm_a > 0 .and. nm_a <= npn_h) r_a = cell_part(nm_a)
+               if (nm_b > 0 .and. nm_b <= npn_h) r_b = cell_part(nm_b)
+               r_edge = edge_owner(iuv)
+               !
+               if (r_a == mpi_rank .and. r_b /= mpi_rank .and. r_b >= 0 .and. r_b < mpi_size) then
+                  ridx = rank_to_idx(r_b)
+                  if (ridx > 0) then
+                     if (.not. cell_recv_seen(nm_b)) then
+                        cell_recv_seen(nm_b) = .true.
+                        c_recv_pos(ridx) = c_recv_pos(ridx) + 1
+                        cell_recv_loc(c_recv_pos(ridx), ridx) = global_to_local(nm_b)
+                        cell_recv_rem(c_recv_pos(ridx), ridx) = nm_b
+                     end if
+                     if (.not. cell_send_seen(nm_a, ridx)) then
+                        cell_send_seen(nm_a, ridx) = .true.
+                        c_send_pos(ridx) = c_send_pos(ridx) + 1
+                        cell_send_loc(c_send_pos(ridx), ridx) = global_to_local(nm_a)
                      end if
                   end if
-                  !
-                  r = edge_owner(iuv)
-                  if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
-                     ridx = rank_to_idx(r)
+               end if
+               !
+               if (r_b == mpi_rank .and. r_a /= mpi_rank .and. r_a >= 0 .and. r_a < mpi_size) then
+                  ridx = rank_to_idx(r_a)
+                  if (ridx > 0) then
+                     if (.not. cell_recv_seen(nm_a)) then
+                        cell_recv_seen(nm_a) = .true.
+                        c_recv_pos(ridx) = c_recv_pos(ridx) + 1
+                        cell_recv_loc(c_recv_pos(ridx), ridx) = global_to_local(nm_a)
+                        cell_recv_rem(c_recv_pos(ridx), ridx) = nm_a
+                     end if
+                     if (.not. cell_send_seen(nm_b, ridx)) then
+                        cell_send_seen(nm_b, ridx) = .true.
+                        c_send_pos(ridx) = c_send_pos(ridx) + 1
+                        cell_send_loc(c_send_pos(ridx), ridx) = global_to_local(nm_b)
+                     end if
+                  end if
+               end if
+               !
+               if (r_edge == mpi_rank) then
+                  if (r_a /= mpi_rank .and. r_a >= 0 .and. r_a < mpi_size) then
+                     ridx = rank_to_idx(r_a)
+                     if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
+                        edge_send_seen(iuv, ridx) = .true.
+                        e_send_pos(ridx) = e_send_pos(ridx) + 1
+                        edge_send_loc(e_send_pos(ridx), ridx) = global_to_local_uv(iuv)
+                     end if
+                  end if
+                  if (r_b /= mpi_rank .and. r_b >= 0 .and. r_b < mpi_size) then
+                     ridx = rank_to_idx(r_b)
+                     if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
+                        edge_send_seen(iuv, ridx) = .true.
+                        e_send_pos(ridx) = e_send_pos(ridx) + 1
+                        edge_send_loc(e_send_pos(ridx), ridx) = global_to_local_uv(iuv)
+                     end if
+                  end if
+               else if (r_edge >= 0 .and. r_edge < mpi_size) then
+                  if (r_a == mpi_rank .or. r_b == mpi_rank) then
+                     ridx = rank_to_idx(r_edge)
                      if (ridx > 0 .and. .not. edge_recv_seen(iuv)) then
                         edge_recv_seen(iuv) = .true.
                         e_recv_pos(ridx) = e_recv_pos(ridx) + 1
                         edge_recv_loc(e_recv_pos(ridx), ridx) = global_to_local_uv(iuv)
                         edge_recv_rem(e_recv_pos(ridx), ridx) = iuv
                      end if
-                  else if (r == mpi_rank .and. nm_other > 0 .and. nm_other <= npn_h) then
-                     k = cell_part(nm_other)
-                     if (k /= mpi_rank .and. k >= 0 .and. k < mpi_size) then
-                        ridx = rank_to_idx(k)
-                        if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
-                           edge_send_seen(iuv, ridx) = .true.
-                           e_send_pos(ridx) = e_send_pos(ridx) + 1
-                           edge_send_loc(e_send_pos(ridx), ridx) = global_to_local_uv(iuv)
-                        end if
-                     end if
                   end if
-               end do
+               end if
             end do
             !
             deallocate(c_recv_pos)
@@ -2281,6 +2328,108 @@ contains
       deallocate(edge_owner)
       !
    end subroutine build_halo_descriptors
+   !
+   subroutine validate_halo_descriptors()
+      !
+      ! SOR-1013: optional cross-rank halo descriptor symmetry check.
+      !
+      ! For each neighbor pair (mpi_rank, nbr) the routine verifies that the
+      ! global-iuv sequence this rank places in its send-list-for-nbr matches,
+      ! slot-by-slot, the global-iuv sequence nbr expects in its
+      ! recv-list-from-this-rank. A mismatch means halo_exchange_q_uv would
+      ! deliver each rank's owned q value into the wrong halo slot on the
+      ! receiver, which is what produced the cross-refinement-level
+      ! over-flooding observed before the canonical-iuv-walk descriptor fix.
+      !
+      ! Gated by the env var SFINCS_DEBUG_HALO_CHECK. Unset / empty / "0" /
+      ! "false" makes this routine a no-op so release runs pay zero overhead.
+      ! On the first per-slot mismatch the helper prints
+      ! `rank, neighbor, slot, expected, got` and calls MPI_ABORT.
+      !
+      implicit none
+      character(len=64) :: env_val
+      integer :: status_env
+      integer :: nbr_idx, nbr_rank, k
+      integer :: n_send, n_recv
+      integer :: nbr_send_count
+      integer :: ierr
+      integer :: status_arr(MPI_STATUS_SIZE)
+      integer, allocatable :: my_send_global(:), nbr_send_global(:)
+      integer, allocatable :: send_idx_h(:,:), recv_rem_h(:,:)
+      logical :: enabled
+      !
+      call get_environment_variable("SFINCS_DEBUG_HALO_CHECK", env_val, status=status_env)
+      enabled = .false.
+      if (status_env == 0 .and. len_trim(env_val) > 0) then
+         if (trim(env_val) /= "0" .and. trim(env_val) /= "false") enabled = .true.
+      end if
+      if (.not. enabled) return
+      !
+      if (mpi_size <= 1 .or. halo_uv_n_neighbors <= 0) return
+      if (.not. allocated(halo_uv_send_local_idx))  return
+      if (.not. allocated(halo_uv_recv_remote_idx)) return
+      !
+      ! D2H pulls of the two descriptor arrays we need on host. CUDA Fortran
+      ! translates these to cudaMemcpy at the assignment level.
+      !
+      allocate(send_idx_h(size(halo_uv_send_local_idx, 1), size(halo_uv_send_local_idx, 2)))
+      send_idx_h = halo_uv_send_local_idx
+      allocate(recv_rem_h(size(halo_uv_recv_remote_idx, 1), size(halo_uv_recv_remote_idx, 2)))
+      recv_rem_h = halo_uv_recv_remote_idx
+      !
+      do nbr_idx = 1, halo_uv_n_neighbors
+         nbr_rank = halo_neighbor_ranks(nbr_idx)
+         n_send = halo_uv_send_count(nbr_idx)
+         n_recv = halo_uv_recv_count(nbr_idx)
+         !
+         ! Exchange counts first so a count-level asymmetry is caught with a
+         ! clearer error than a silent per-slot truncation later.
+         !
+         nbr_send_count = -1
+         call MPI_Sendrecv(n_send,         1, MPI_INTEGER, nbr_rank, HALO_TAG_DBG_COUNT, &
+                           nbr_send_count, 1, MPI_INTEGER, nbr_rank, HALO_TAG_DBG_COUNT, &
+                           MPI_COMM_WORLD, status_arr, ierr)
+         if (nbr_send_count /= n_recv) then
+            write(*, '(a,i0,a,i0,a,i0,a,i0)') &
+               'SFINCS_DEBUG_HALO_CHECK: edge halo COUNT mismatch rank=', mpi_rank, &
+               ' neighbor=', nbr_rank, &
+               ' my_recv_count=', n_recv, &
+               ' nbr_send_count=', nbr_send_count
+            call MPI_Abort(MPI_COMM_WORLD, 1, ierr)
+         end if
+         !
+         allocate(my_send_global (max(n_send, 1))); my_send_global  = 0
+         allocate(nbr_send_global(max(n_recv, 1))); nbr_send_global = 0
+         do k = 1, n_send
+            my_send_global(k) = local_to_global_uv(send_idx_h(k, nbr_idx))
+         end do
+         call MPI_Sendrecv(my_send_global,  n_send, MPI_INTEGER, nbr_rank, HALO_TAG_DBG_GLOBAL, &
+                           nbr_send_global, n_recv, MPI_INTEGER, nbr_rank, HALO_TAG_DBG_GLOBAL, &
+                           MPI_COMM_WORLD, status_arr, ierr)
+         !
+         do k = 1, n_recv
+            if (nbr_send_global(k) /= recv_rem_h(k, nbr_idx)) then
+               write(*, '(a,i0,a,i0,a,i0,a,i0,a,i0)') &
+                  'SFINCS_DEBUG_HALO_CHECK: edge halo descriptor MISMATCH rank=', mpi_rank, &
+                  ' neighbor=', nbr_rank, &
+                  ' slot=', k, &
+                  ' expected_global_iuv=', recv_rem_h(k, nbr_idx), &
+                  ' got_global_iuv=', nbr_send_global(k)
+               call MPI_Abort(MPI_COMM_WORLD, 1, ierr)
+            end if
+         end do
+         deallocate(my_send_global)
+         deallocate(nbr_send_global)
+      end do
+      !
+      deallocate(send_idx_h)
+      deallocate(recv_rem_h)
+      !
+      if (mpi_rank == 0) then
+         write(*, '(a)') 'SFINCS_DEBUG_HALO_CHECK: edge halo descriptors symmetric across all neighbor pairs.'
+      end if
+      !
+   end subroutine validate_halo_descriptors
    !
    subroutine device_finalize()
       !
@@ -2705,6 +2854,275 @@ contains
       deallocate(request_recv, request_send, statuses_recv, statuses_send)
       !
    end subroutine halo_exchange_q_uv
+   !
+   subroutine halo_exchange_meteo()
+      !
+      ! Per-step halo exchange of meteo cell state across rank boundaries
+      ! (SOR-3). Synchronizes patm, tauwu, tauwv at this rank's halo cell
+      ! positions with the neighbor-rank owned values written there.
+      !
+      ! Structural root cause: spiderweb / amp / amuv / wind-timeseries
+      ! kernels in sfincs_meteo_gpu.cuf (k_spw_spatial, k_amp_spatial,
+      ! k_amuv_spatial, k_meteo_time_interp, k_wind_uniform) all iterate
+      ! nm = 1..npn_local — each rank writes patm / tauwu / tauwv only at
+      ! its OWNED cell positions, leaving the halo slots [npn_local+1,
+      ! npn_total] unwritten from one step to the next. The momentum
+      ! kernel k_compute_fluxes then reads patm(nm) - patm(nmu) for the
+      ! pressure-gradient term and tauwu(nm) / tauwv(nm) for the wind-
+      ! stress term across every owned edge — including edges at the
+      ! partition boundary where nm or nmu is a halo cell. With the
+      ! halo's patm stuck at its initial value (gapres for spiderweb
+      ! cases) while the neighbor rank's owned cells track the moving
+      ! eye's pressure deficit, the cross-rank pressure gradient term
+      ! spans ~6 kPa per spw step, driving spurious surge that
+      ! accumulates step-after-step. tauwu / tauwv at halo positions
+      ! cause an analogous wind-stress mismatch on rank-boundary edges.
+      !
+      ! Why SOR-1013's halo_exchange_q_uv + halo_exchange_zs chain alone
+      ! does not cover this: that chain propagates q / uv / zs through
+      ! halos but never touches meteo state — patm / tauwu / tauwv are
+      ! written by the meteo path, not the momentum/continuity path.
+      !
+      ! Three sequential exchanges (one per array) modeled on
+      ! halo_exchange_zs. allocated() guards keep this a no-op when the
+      ! corresponding meteo path isn't active (e.g., patmos == .false.
+      ! leaves patm unallocated, in which case the patm exchange is
+      ! skipped). Reuses halo_send_buf_zs / halo_recv_buf_zs (both real*4,
+      ! sized to max(halo_*_count)) since the meteo arrays share zs's
+      ! cell-shape and per-neighbor counts.
+      !
+      integer :: nbr_slot, i, n
+      integer :: ierr, istat
+      integer, allocatable :: request_recv(:), request_send(:)
+      integer, allocatable :: statuses_recv(:,:), statuses_send(:,:)
+      !
+      ! Single-rank fast path: no neighbors, nothing to exchange.
+      !
+      if (halo_n_neighbors == 0) return
+      !
+      allocate(request_recv(halo_n_neighbors))
+      allocate(request_send(halo_n_neighbors))
+      allocate(statuses_recv(MPI_STATUS_SIZE, halo_n_neighbors))
+      allocate(statuses_send(MPI_STATUS_SIZE, halo_n_neighbors))
+      !
+      ! ===== Exchange #1: patm ==============================================
+      !
+      if (allocated(patm)) then
+         do nbr_slot = 1, halo_n_neighbors
+            call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
+                           MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_PATM, &
+                           MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
+         end do
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            n = halo_send_count(nbr_slot)
+            !$cuf kernel do(1) <<<*,*>>>
+            do i = 1, n
+               halo_send_buf_zs(i, nbr_slot) = patm( halo_send_local_idx(i, nbr_slot) )
+            end do
+         end do
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
+                           MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_PATM, &
+                           MPI_COMM_WORLD, request_send(nbr_slot), ierr)
+         end do
+         !
+         call MPI_Waitall(halo_n_neighbors, request_recv, statuses_recv, ierr)
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            n = halo_recv_count(nbr_slot)
+            !$cuf kernel do(1) <<<*,*>>>
+            do i = 1, n
+               patm( halo_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_zs(i, nbr_slot)
+            end do
+         end do
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         call MPI_Waitall(halo_n_neighbors, request_send, statuses_send, ierr)
+      end if
+      !
+      ! ===== Exchange #2: tauwu =============================================
+      !
+      if (allocated(tauwu)) then
+         do nbr_slot = 1, halo_n_neighbors
+            call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
+                           MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_TAUWU, &
+                           MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
+         end do
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            n = halo_send_count(nbr_slot)
+            !$cuf kernel do(1) <<<*,*>>>
+            do i = 1, n
+               halo_send_buf_zs(i, nbr_slot) = tauwu( halo_send_local_idx(i, nbr_slot) )
+            end do
+         end do
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
+                           MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_TAUWU, &
+                           MPI_COMM_WORLD, request_send(nbr_slot), ierr)
+         end do
+         !
+         call MPI_Waitall(halo_n_neighbors, request_recv, statuses_recv, ierr)
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            n = halo_recv_count(nbr_slot)
+            !$cuf kernel do(1) <<<*,*>>>
+            do i = 1, n
+               tauwu( halo_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_zs(i, nbr_slot)
+            end do
+         end do
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         call MPI_Waitall(halo_n_neighbors, request_send, statuses_send, ierr)
+      end if
+      !
+      ! ===== Exchange #3: tauwv =============================================
+      !
+      if (allocated(tauwv)) then
+         do nbr_slot = 1, halo_n_neighbors
+            call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
+                           MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_TAUWV, &
+                           MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
+         end do
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            n = halo_send_count(nbr_slot)
+            !$cuf kernel do(1) <<<*,*>>>
+            do i = 1, n
+               halo_send_buf_zs(i, nbr_slot) = tauwv( halo_send_local_idx(i, nbr_slot) )
+            end do
+         end do
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
+                           MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_TAUWV, &
+                           MPI_COMM_WORLD, request_send(nbr_slot), ierr)
+         end do
+         !
+         call MPI_Waitall(halo_n_neighbors, request_recv, statuses_recv, ierr)
+         !
+         do nbr_slot = 1, halo_n_neighbors
+            n = halo_recv_count(nbr_slot)
+            !$cuf kernel do(1) <<<*,*>>>
+            do i = 1, n
+               tauwv( halo_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_zs(i, nbr_slot)
+            end do
+         end do
+         !
+         istat = cudaDeviceSynchronize()
+         !
+         call MPI_Waitall(halo_n_neighbors, request_send, statuses_send, ierr)
+      end if
+      !
+      deallocate(request_recv, request_send, statuses_recv, statuses_send)
+      !
+   end subroutine halo_exchange_meteo
+   !
+   subroutine halo_exchange_z_volume()
+      !
+      ! Per-step halo exchange of subgrid cell volume (z_volume) across rank
+      ! boundaries (SOR-3). Synchronizes z_volume at this rank's halo cell
+      ! positions with the neighbor-rank owned values written by the
+      ! previous step's continuity update.
+      !
+      ! Structural root cause: subgrid continuity (k_subgrid_main in
+      ! sfincs_continuity_gpu.cuf) iterates nm = 1..npn_local and writes
+      ! z_volume(nm) only at owned cells. The next step's momentum kernel
+      ! k_compute_fluxes (sfincs_momentum_gpu.cuf:632-633) reads
+      ! z_volume(nm) AND z_volume(nmu) at every owned edge — including
+      ! cross-rank edges where one of nm/nmu is a halo cell — to apply
+      ! the over-drainage cap `if z_volume(nm/nmu) < 0 then clamp q`.
+      ! Without this exchange the halo's z_volume stays at its
+      ! initialize_initial_conditions value while the neighbor rank's
+      ! owned cell drains negative; this rank's view misses the cap and
+      ! lets q flow OUT of a cell that is physically empty on the
+      ! neighbor, producing a small spurious mass injection at the
+      ! partition boundary that accumulates step-after-step into
+      ! observable ratio drift on long subgrid+SPW+QINF runs (case
+      ! production: ~9 mm at the storm-surge hot spot).
+      !
+      ! Why neither halo_exchange_zs nor halo_exchange_meteo covers this:
+      ! zs propagates the surface water level (read at the edge cap
+      ! `zs < zb`), patm/tauwu/tauwv propagate the meteo forcing, but
+      ! z_volume is the subgrid catalog's primary state variable —
+      ! its halo staleness is invisible to those two surfaces.
+      !
+      ! Modeled on halo_exchange_zs: same descriptor (halo_*_local_idx /
+      ! halo_*_count, halo_send_buf_zs / halo_recv_buf_zs sized for cell
+      ! rank), real*8 device shadow truncated to real*4 on the wire (cap
+      ! detection at zero is unaffected by the truncation, and z_volume's
+      ! consumer at the halo position is solely the cap predicate).
+      ! Guarded by allocated(z_volume) — single-precision (non-subgrid)
+      ! runs have no z_volume and this routine is a no-op.
+      !
+      integer :: nbr_slot, i, n
+      integer :: ierr, istat
+      integer, allocatable :: request_recv(:), request_send(:)
+      integer, allocatable :: statuses_recv(:,:), statuses_send(:,:)
+      !
+      ! Single-rank fast path: no neighbors, nothing to exchange.
+      !
+      if (halo_n_neighbors == 0) return
+      !
+      ! Subgrid disabled (no z_volume allocated): nothing to exchange.
+      !
+      if (.not. allocated(z_volume)) return
+      !
+      allocate(request_recv(halo_n_neighbors))
+      allocate(request_send(halo_n_neighbors))
+      allocate(statuses_recv(MPI_STATUS_SIZE, halo_n_neighbors))
+      allocate(statuses_send(MPI_STATUS_SIZE, halo_n_neighbors))
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
+                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZVOL, &
+                        MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
+      end do
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         n = halo_send_count(nbr_slot)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            halo_send_buf_zs(i, nbr_slot) = real( z_volume( halo_send_local_idx(i, nbr_slot) ), kind=4 )
+         end do
+      end do
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
+                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZVOL, &
+                        MPI_COMM_WORLD, request_send(nbr_slot), ierr)
+      end do
+      !
+      call MPI_Waitall(halo_n_neighbors, request_recv, statuses_recv, ierr)
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         n = halo_recv_count(nbr_slot)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            z_volume( halo_recv_local_idx(i, nbr_slot) ) = real( halo_recv_buf_zs(i, nbr_slot), kind=8 )
+         end do
+      end do
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      call MPI_Waitall(halo_n_neighbors, request_send, statuses_send, ierr)
+      !
+      deallocate(request_recv, request_send, statuses_recv, statuses_send)
+      !
+   end subroutine halo_exchange_z_volume
    !
    ! ===================================================================
    ! SOR-10 cross-rank halo exchange of zsderv (subgrid second derivative

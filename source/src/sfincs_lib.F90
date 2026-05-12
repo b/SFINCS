@@ -700,6 +700,13 @@ module sfincs_lib
          !
          call halo_exchange_zsderv()
          !
+         ! Synchronize halo-cell subgrid volumes (SOR-3). compute_water_levels
+         ! above wrote z_volume at owned cells only; the next step's
+         ! k_compute_fluxes reads z_volume at both endpoints of every owned
+         ! edge for the over-drainage cap. No-op when subgrid is disabled.
+         !
+         call halo_exchange_z_volume()
+         !
          ! SOR-10 env-gated halo diagnostic. No-op unless SFINCS_DEBUG_HALO_DUMP
          ! is set to a positive integer N; then every Nth call dumps suspect
          ! device arrays (z_volume, zsderv, patm, tauwu, tauwv, fcorio2d,
