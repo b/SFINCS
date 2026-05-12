@@ -690,6 +690,20 @@ module sfincs_lib
          ! next compute_fluxes sees fresh zs at rank-boundary edges.
          !
          call halo_exchange_zs()
+         !
+         ! SOR-10 env-gated halo diagnostic. No-op unless SFINCS_DEBUG_HALO_DUMP
+         ! is set to a positive integer N; then every Nth call dumps suspect
+         ! device arrays (z_volume, zsderv, patm, tauwu, tauwv, fcorio2d,
+         ! prcp, netprcp, zsmax) at owned + halo cell positions inside the
+         ! case_production storm-surge hot-spot to a per-rank CSV. Comparing
+         ! rank 0's owned value at global index G against rank 1's halo
+         ! value at the same G (or vice-versa) flags any array whose halo
+         ! cell value diverges from its owning rank's owned value — that is
+         ! the array whose halo-exchange / bridge / renumber path is missing.
+         ! Called at the end of every step's compute_water_levels so the
+         ! snapshot reflects what the next step's k_compute_fluxes will see.
+         !
+         call dump_halo_diagnostic(nt, t)
 #endif
          !
       endif

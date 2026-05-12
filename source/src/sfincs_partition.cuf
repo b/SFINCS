@@ -175,7 +175,8 @@ module sfincs_partition
               bridge_in_cell_real4, bridge_in_cell_real8, &
               bridge_in_edge_real4, &
               bridge_out_cell_real4, bridge_out_cell_real8, bridge_out_cell_int1, bridge_out_cell_int4, &
-              bridge_out_edge_real4, bridge_out_edge_int1
+              bridge_out_edge_real4, bridge_out_edge_int1, &
+              dump_halo_diagnostic
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
               build_halo_descriptors, &
@@ -188,7 +189,8 @@ module sfincs_partition
               gather_edge_wide_int1, gather_edge_wide_real4, &
               gather_cell_int4_renumber_edge, &
               gather_edge_int4_renumber_cell, gather_edge_int4_renumber_edge, &
-              renumber_to_local_cell, renumber_to_local_edge
+              renumber_to_local_cell, renumber_to_local_edge, &
+              write_diag_row
    !
    ! SOR-712: per-array gather of the rank-local slice of a device shadow
    ! into rank 0's full-size global host array. The two MPI types we need
@@ -2688,6 +2690,226 @@ contains
       deallocate(request_recv, request_send, statuses_recv, statuses_send)
       !
    end subroutine halo_exchange_q_uv
+   !
+   ! ===================================================================
+   ! SOR-10 env-gated halo diagnostic dump.
+   !
+   ! When SFINCS_DEBUG_HALO_DUMP is set to a positive integer N, every Nth
+   ! call writes per-rank CSV rows for the suspect device arrays sampled at
+   ! both OWNED and HALO cell positions whose host (x, y) lies inside the
+   ! diagnostic spatial box (case_production storm-surge hot-spot at the
+   ! partition split):
+   !
+   !   x in [SFINCS_DEBUG_HALO_DUMP_XMIN .. _XMAX]   (default 322900..323400)
+   !   y in [SFINCS_DEBUG_HALO_DUMP_YMIN .. _YMAX]   (default 5043800..5044700)
+   !
+   ! Output: sfincs_halo_dump_rank<N>.csv in the current working directory.
+   ! Each row carries (step, t, rank, kind, global_index, x, y, dx_from_split,
+   ! array_name, value) so a small post-processing script can pivot per
+   ! (step, global_index, array_name) and compare rank0's owned value
+   ! against rank1's halo value (and vice versa). An array whose halo cell
+   ! diverges from the owning rank's owned cell at the same global index
+   ! is missing a halo-exchange / bridge / renumber path covering it.
+   !
+   ! Cost: zero when SFINCS_DEBUG_HALO_DUMP is unset (single getenv at call
+   ! site, integer parse, early-return on N <= 0). When enabled, the dump
+   ! reads device shadows back to small host workbufs (one per array, sized
+   ! to the diagnostic box), so the runtime cost is bounded by box size
+   ! rather than full domain size.
+   !
+   ! The dump persists in-tree behind the gate so future cross-rank
+   ! regressions in the same kernel-level halo machinery can be triaged
+   ! with the same harness.
+   ! ===================================================================
+   subroutine dump_halo_diagnostic(step, t)
+      !
+      use sfincs_data, only: z_xz_h => z_xz, z_yz_h => z_yz, &
+                             subgrid_h => subgrid, &
+                             coriolis_h => coriolis, &
+                             wiggle_suppression_h => wiggle_suppression, &
+                             wind_h => wind, patmos_h => patmos, &
+                             precip_h => precip
+      !
+      implicit none
+      !
+      integer, intent(in) :: step
+      real*8,  intent(in) :: t
+      !
+      character(len=64)  :: env_period, env_xmin, env_xmax, env_ymin, env_ymax, env_xsplit
+      character(len=256) :: filename
+      integer :: period
+      integer :: ios
+      integer :: i, g
+      integer :: unit
+      logical :: opened
+      real*4  :: xmin, xmax, ymin, ymax, xsplit
+      real*4  :: xv, yv, dx
+      character(len=16) :: kind
+      logical, save :: header_written = .false.
+      !
+      ! Cell-rank workbufs for snapshot of device arrays.
+      !
+      real*8, allocatable :: zs_buf(:)
+      real*8, allocatable :: z_volume_buf(:)
+      real*4, allocatable :: zsderv_buf(:)
+      real*4, allocatable :: patm_buf(:)
+      real*4, allocatable :: tauwu_buf(:)
+      real*4, allocatable :: tauwv_buf(:)
+      real*4, allocatable :: fcorio2d_buf(:)
+      real*4, allocatable :: prcp_buf(:)
+      real*4, allocatable :: netprcp_buf(:)
+      real*4, allocatable :: zsmax_buf(:)
+      integer :: nc
+      !
+      ! Read the env var. The runtime cost when the var is unset is just
+      ! this getenv + integer parse.
+      !
+      call get_environment_variable('SFINCS_DEBUG_HALO_DUMP', env_period)
+      if (len_trim(env_period) == 0) return
+      !
+      read(env_period, *, iostat=ios) period
+      if (ios /= 0 .or. period <= 0) return
+      if (mod(step, period) /= 0) return
+      !
+      ! Optional override of the diagnostic box (defaults are the
+      ! case_production storm-surge hot-spot at the partition split).
+      !
+      xmin   = 322900.0
+      xmax   = 323400.0
+      ymin   = 5043800.0
+      ymax   = 5044700.0
+      xsplit = 322906.0
+      call get_environment_variable('SFINCS_DEBUG_HALO_DUMP_XMIN', env_xmin)
+      if (len_trim(env_xmin) > 0) read(env_xmin, *, iostat=ios) xmin
+      call get_environment_variable('SFINCS_DEBUG_HALO_DUMP_XMAX', env_xmax)
+      if (len_trim(env_xmax) > 0) read(env_xmax, *, iostat=ios) xmax
+      call get_environment_variable('SFINCS_DEBUG_HALO_DUMP_YMIN', env_ymin)
+      if (len_trim(env_ymin) > 0) read(env_ymin, *, iostat=ios) ymin
+      call get_environment_variable('SFINCS_DEBUG_HALO_DUMP_YMAX', env_ymax)
+      if (len_trim(env_ymax) > 0) read(env_ymax, *, iostat=ios) ymax
+      call get_environment_variable('SFINCS_DEBUG_HALO_DUMP_XSPLIT', env_xsplit)
+      if (len_trim(env_xsplit) > 0) read(env_xsplit, *, iostat=ios) xsplit
+      !
+      nc = npn_local + halo_cell_count
+      if (nc <= 0) return
+      !
+      ! Snapshot the suspect cell-rank device arrays into host workbufs
+      ! covering the full local range (owned + halo). The kernel-read sites
+      ! whose halo cells could leak (k_compute_fluxes at nm / nmu of owned
+      ! edges crossing the partition split) span exactly this range, so
+      ! sampling here captures the value the next kernel will see.
+      !
+      if (allocated(zs)) then
+         allocate(zs_buf(nc));         zs_buf       = zs(1:nc)
+      end if
+      if (allocated(z_volume)) then
+         allocate(z_volume_buf(nc));   z_volume_buf = z_volume(1:nc)
+      end if
+      if (allocated(zsderv)) then
+         allocate(zsderv_buf(nc));     zsderv_buf   = zsderv(1:nc)
+      end if
+      if (allocated(patm)) then
+         allocate(patm_buf(nc));       patm_buf     = patm(1:nc)
+      end if
+      if (allocated(tauwu)) then
+         allocate(tauwu_buf(nc));      tauwu_buf    = tauwu(1:nc)
+      end if
+      if (allocated(tauwv)) then
+         allocate(tauwv_buf(nc));      tauwv_buf    = tauwv(1:nc)
+      end if
+      if (allocated(fcorio2d)) then
+         allocate(fcorio2d_buf(nc));   fcorio2d_buf = fcorio2d(1:nc)
+      end if
+      if (allocated(prcp)) then
+         allocate(prcp_buf(nc));       prcp_buf     = prcp(1:nc)
+      end if
+      if (allocated(netprcp)) then
+         allocate(netprcp_buf(nc));    netprcp_buf  = netprcp(1:nc)
+      end if
+      if (allocated(zsmax)) then
+         allocate(zsmax_buf(nc));      zsmax_buf    = zsmax(1:nc)
+      end if
+      !
+      write(filename, '(a,i0,a)') 'sfincs_halo_dump_rank', mpi_rank, '.csv'
+      unit = 50 + mpi_rank
+      inquire(unit=unit, opened=opened)
+      if (.not. opened) then
+         if (header_written) then
+            open(unit=unit, file=trim(filename), status='old', position='append', action='write')
+         else
+            open(unit=unit, file=trim(filename), status='replace', action='write')
+            write(unit, '(a)') 'step,t,rank,kind,global_index,x,y,dx_from_split,array,value'
+            header_written = .true.
+         end if
+      end if
+      !
+      do i = 1, nc
+         g = local_to_global(i)
+         if (g <= 0) cycle
+         if (.not. allocated(z_xz_h) .or. .not. allocated(z_yz_h)) cycle
+         if (g > size(z_xz_h) .or. g > size(z_yz_h)) cycle
+         xv = real(z_xz_h(g), kind=4)
+         yv = real(z_yz_h(g), kind=4)
+         if (xv < xmin .or. xv > xmax) cycle
+         if (yv < ymin .or. yv > ymax) cycle
+         dx = xv - xsplit
+         if (i <= npn_local) then
+            kind = 'cell-owned'
+         else
+            kind = 'cell-halo'
+         end if
+         !
+         if (allocated(zs_buf)) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'zs', real(zs_buf(i), kind=8))
+         if (allocated(z_volume_buf)) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'z_volume', real(z_volume_buf(i), kind=8))
+         if (allocated(zsderv_buf) .and. (subgrid_h .and. wiggle_suppression_h)) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'zsderv', real(zsderv_buf(i), kind=8))
+         if (allocated(patm_buf) .and. patmos_h) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'patm', real(patm_buf(i), kind=8))
+         if (allocated(tauwu_buf) .and. wind_h) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'tauwu', real(tauwu_buf(i), kind=8))
+         if (allocated(tauwv_buf) .and. wind_h) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'tauwv', real(tauwv_buf(i), kind=8))
+         if (allocated(fcorio2d_buf) .and. coriolis_h) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'fcorio2d', real(fcorio2d_buf(i), kind=8))
+         if (allocated(prcp_buf) .and. precip_h) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'prcp', real(prcp_buf(i), kind=8))
+         if (allocated(netprcp_buf) .and. precip_h) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'netprcp', real(netprcp_buf(i), kind=8))
+         if (allocated(zsmax_buf)) &
+            call write_diag_row(unit, step, t, mpi_rank, trim(kind), g, xv, yv, dx, 'zsmax', real(zsmax_buf(i), kind=8))
+      end do
+      !
+      flush(unit)
+      !
+      if (allocated(zs_buf))       deallocate(zs_buf)
+      if (allocated(z_volume_buf)) deallocate(z_volume_buf)
+      if (allocated(zsderv_buf))   deallocate(zsderv_buf)
+      if (allocated(patm_buf))     deallocate(patm_buf)
+      if (allocated(tauwu_buf))    deallocate(tauwu_buf)
+      if (allocated(tauwv_buf))    deallocate(tauwv_buf)
+      if (allocated(fcorio2d_buf)) deallocate(fcorio2d_buf)
+      if (allocated(prcp_buf))     deallocate(prcp_buf)
+      if (allocated(netprcp_buf))  deallocate(netprcp_buf)
+      if (allocated(zsmax_buf))    deallocate(zsmax_buf)
+      !
+   end subroutine dump_halo_diagnostic
+   !
+   subroutine write_diag_row(unit, step, t, rank, kind, g, x, y, dx, name, value)
+      integer,          intent(in) :: unit
+      integer,          intent(in) :: step
+      real*8,           intent(in) :: t
+      integer,          intent(in) :: rank
+      character(len=*), intent(in) :: kind
+      integer,          intent(in) :: g
+      real*4,           intent(in) :: x, y, dx
+      character(len=*), intent(in) :: name
+      real*8,           intent(in) :: value
+      !
+      write(unit, '(i0,",",es24.16,",",i0,",",a,",",i0,",",es16.8,",",es16.8,",",es16.8,",",a,",",es24.16)') &
+         step, t, rank, kind, g, x, y, dx, name, value
+   end subroutine write_diag_row
    !
    subroutine device_to_host_for_output()
       !
