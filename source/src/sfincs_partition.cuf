@@ -153,6 +153,20 @@ module sfincs_partition
    integer, parameter :: HALO_TAG_Q  = 7082
    integer, parameter :: HALO_TAG_UV = 7083
    !
+   ! SOR-10: tag for the zsderv halo exchange. zsderv is written by
+   ! k_subgrid_main at owned cells only and then read by k_compute_fluxes
+   ! at halo cell indices via the wiggle-suppression term
+   ! `abs(zsderv(nm) - zsderv(nmu))` for owned edges that straddle the
+   ! partition boundary. Without the exchange the halo positions stay at
+   ! their init value (0.0), so the cross-rank wiggle-suppression view
+   ! diverges from the single-rank view whenever |zsderv| crosses
+   ! wiggle_threshold. The SOR-10 env-gated diagnostic confirms the
+   ! divergence (rank 0 halo zsderv(1423) = 0 at step 50 while rank 1
+   ! owned zsderv(1423) = 1.44e-3; analogous mismatches at every
+   ! diagnostic step in the case_production hotspot).
+   !
+   integer, parameter :: HALO_TAG_ZSDERV = 7090
+   !
    ! CUDA-aware MPI confirmation. HPC-X / UCX bundled in NVHPC SDK 25.9
    ! provides MPIX_Query_cuda_support; declare an explicit C interface so
    ! the call doesn't depend on whether the host MPI's `mpi_ext` Fortran
@@ -167,6 +181,7 @@ module sfincs_partition
    !
    public  :: partition_and_localize, device_finalize, &
               halo_exchange_zs, halo_exchange_q_uv, &
+              halo_exchange_zsderv, &
               device_to_host_for_output, &
               allocate_structure_device_shadows, &
               refresh_kcuv_device_shadow, &
@@ -2690,6 +2705,109 @@ contains
       deallocate(request_recv, request_send, statuses_recv, statuses_send)
       !
    end subroutine halo_exchange_q_uv
+   !
+   ! ===================================================================
+   ! SOR-10 cross-rank halo exchange of zsderv (subgrid second derivative
+   ! of the water level).
+   !
+   ! Structural defect this closes (identified by the env-gated diagnostic
+   ! at the top of dump_halo_diagnostic, confirmed on the SOR-3
+   ! pre-cherry-picked build of case_production:gpu_n2):
+   !
+   !   * Writer: k_subgrid_main in sfincs_continuity_gpu.cuf iterates
+   !     nm = 1..npn_local and writes zsderv(nm) only at OWNED cell
+   !     positions. The halo slots [npn_local+1, npn_total] are left at
+   !     their Phase-4 init value (zero from the read_initial_conditions
+   !     allocation in initialize_domain).
+   !
+   !   * Reader: k_compute_fluxes in sfincs_momentum_gpu.cuf reads
+   !     `abs(zsderv(nm) - zsderv(nmu))` for the wiggle-suppression term
+   !     across every owned edge whose endpoints (nm, nmu) span the
+   !     partition boundary -- nm or nmu is then a halo cell.
+   !
+   !   * Diagnostic finding: with SOR-3's parallel halo additions
+   !     cherry-picked in to mask the dominant SPW / z_volume defects,
+   !     the env-gated dump shows 81/108 zsderv samples diverging across
+   !     ranks (rank 0 halo zsderv = 0.0 vs rank 1 owned zsderv = 1.44e-3
+   !     at the first diagnostic step, analogous mismatches every step in
+   !     the case_production hotspot 322900..323400 x 5043800..5044700).
+   !     The dominant SPW / wind-stress / z_volume halo paths show zero
+   !     mismatches; zsderv is the residual surface.
+   !
+   !   * Why the SOR-708 halo_exchange_zs / SOR-709 halo_exchange_q_uv
+   !     chain does not cover this: those exchanges propagate zs / q / uv
+   !     through halos but never touch zsderv -- zsderv is a per-step
+   !     derived quantity (`zs - 2*zs0 + zs00`) written by the continuity
+   !     update, not the momentum update.
+   !
+   ! Modeled on halo_exchange_zs: same single-array exchange pattern,
+   ! distinct MPI tag (HALO_TAG_ZSDERV) so concurrent exchanges cannot
+   ! collide. zsderv is real*4 on host and device, so no wire-format
+   ! conversion is needed (the zs exchange downcasts real*8 to real*4 for
+   ! the wire; this one does not). Reuses halo_send_buf_zs /
+   ! halo_recv_buf_zs (both real*4, sized to max(halo_*_count)) since the
+   ! per-neighbor cell counts and layouts are identical to zs.
+   !
+   ! No-op for mpi_size == 1 (halo_n_neighbors == 0) and for builds
+   ! without wiggle_suppression (`if (allocated(zsderv))` guard); the
+   ! cost on multi-rank wiggle-suppression builds is one gather kernel +
+   ! one MPI_Isend/Irecv pair per neighbor per step, identical to the
+   ! existing halo_exchange_zs and bounded by the rank-pair halo size.
+   ! ===================================================================
+   subroutine halo_exchange_zsderv()
+      !
+      integer :: nbr_slot, i, n
+      integer :: ierr, istat
+      integer, allocatable :: request_recv(:), request_send(:)
+      integer, allocatable :: statuses_recv(:,:), statuses_send(:,:)
+      !
+      if (halo_n_neighbors == 0) return
+      if (.not. allocated(zsderv)) return
+      !
+      allocate(request_recv(halo_n_neighbors))
+      allocate(request_send(halo_n_neighbors))
+      allocate(statuses_recv(MPI_STATUS_SIZE, halo_n_neighbors))
+      allocate(statuses_send(MPI_STATUS_SIZE, halo_n_neighbors))
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
+                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZSDERV, &
+                        MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
+      end do
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         n = halo_send_count(nbr_slot)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            halo_send_buf_zs(i, nbr_slot) = zsderv( halo_send_local_idx(i, nbr_slot) )
+         end do
+      end do
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
+                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZSDERV, &
+                        MPI_COMM_WORLD, request_send(nbr_slot), ierr)
+      end do
+      !
+      call MPI_Waitall(halo_n_neighbors, request_recv, statuses_recv, ierr)
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         n = halo_recv_count(nbr_slot)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            zsderv( halo_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_zs(i, nbr_slot)
+         end do
+      end do
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      call MPI_Waitall(halo_n_neighbors, request_send, statuses_send, ierr)
+      !
+      deallocate(request_recv, request_send, statuses_recv, statuses_send)
+      !
+   end subroutine halo_exchange_zsderv
    !
    ! ===================================================================
    ! SOR-10 env-gated halo diagnostic dump.

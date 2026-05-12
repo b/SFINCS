@@ -691,6 +691,15 @@ module sfincs_lib
          !
          call halo_exchange_zs()
          !
+         ! SOR-10 cross-rank halo exchange of the subgrid second derivative
+         ! zsderv. k_subgrid_main writes zsderv at owned cells only; the
+         ! next step's k_compute_fluxes reads `abs(zsderv(nm) - zsderv(nmu))`
+         ! for the wiggle-suppression term at owned edges spanning the
+         ! partition boundary, where nm or nmu is a halo cell. No-op when
+         ! mpi_size == 1 or when zsderv is not allocated (non-wiggle build).
+         !
+         call halo_exchange_zsderv()
+         !
          ! SOR-10 env-gated halo diagnostic. No-op unless SFINCS_DEBUG_HALO_DUMP
          ! is set to a positive integer N; then every Nth call dumps suspect
          ! device arrays (z_volume, zsderv, patm, tauwu, tauwv, fcorio2d,
