@@ -1745,6 +1745,7 @@ contains
       integer, allocatable :: nbr_ranks(:)
       integer :: nm, iuv, nm_a, nm_b, nm_other
       integer :: edge_slot
+      integer :: iuv_target
       integer :: i, k, r, ridx, n_neighbors
       !
       ! Initialise scalars/output arrays to safe defaults for the
@@ -1853,6 +1854,63 @@ contains
                   if (cell_part(nm_other) /= mpi_rank) is_halo_cell(nm_other) = .true.
                end if
                if (edge_owner(iuv) /= mpi_rank) is_halo_edge(iuv) = .true.
+            end do
+         end do
+      end if
+      !
+      ! Second-hop advection-neighbor edge halo (SOR-3 residual fix).
+      !
+      ! k_compute_fluxes in sfincs_momentum_gpu.cuf reads q0 and uv0 at
+      ! eight advection-neighbor edges per owned edge ip:
+      !   q0(uv_index_u_nmd(ip)), q0(uv_index_u_nmu(ip)),
+      !   q0(uv_index_v_nm (ip)), q0(uv_index_v_nmu(ip)),
+      !   q0(uv_index_v_ndm(ip)), q0(uv_index_v_ndmu(ip)),
+      !   uv0(uv_index_u_ndm(ip)), uv0(uv_index_u_num(ip)), ... (same set).
+      ! For an owned edge that straddles the partition boundary, several of
+      ! those neighbor-edge targets lie ENTIRELY in the neighbor rank's
+      ! territory: both flanking cells are on the neighbor rank, so the
+      ! owned-cell × 8-edge-slot walk above leaves the target edge with
+      ! is_halo_edge == .false.. After build_local_index_maps,
+      ! global_to_local_uv(target) == 0, and gather_edge_int4_renumber_edge
+      ! replaces the connectivity reference with 0. On the device,
+      ! q0(0) is an out-of-bounds read at offset -sizeof(real) before
+      ! q0(1) — undefined, rank-dependent garbage that contaminates the
+      ! advection / viscosity / theta-smoothing terms across cross-rank
+      ! edges and feeds a small per-step bias into compute_water_levels.
+      ! The dominant ~99.9% of case_production:gpu_n2 over-flooding was the
+      ! SPW pressure-gradient halo path (patm/tauwu/tauwv exchange above);
+      ! the residual ~9 mm rank-effect is the advection-neighbor path here.
+      ! Marking the second-hop target as is_halo_edge here gives it a slot
+      ! in global_to_local_uv and lets halo_exchange_q_uv deliver the
+      ! neighbor rank's value into it before the next compute_fluxes.
+      !
+      ! Symmetric across ranks: every rank walks iuv = 1..npuv_h in canonical
+      ! order and, for each iuv it owns, marks any unowned advection-neighbor
+      ! target as halo. The neighbor rank performs the same walk over ITS
+      ! owned edges and reaches the inverse pair (uv_index_u_nmd is the
+      ! inverse of uv_index_u_nmu, etc.) at the same step in its own walk,
+      ! so build_halo_descriptors below recovers send/recv slot symmetry.
+      !
+      if (mpi_size > 1 .and. allocated(uv_index_u_nmd_h) .and. allocated(uv_index_u_nmu_h) .and. &
+          allocated(uv_index_u_ndm_h) .and. allocated(uv_index_u_num_h) .and. &
+          allocated(uv_index_v_nm_h)  .and. allocated(uv_index_v_nmu_h)  .and. &
+          allocated(uv_index_v_ndm_h) .and. allocated(uv_index_v_ndmu_h)) then
+         do iuv = 1, npuv_h
+            if (edge_owner(iuv) /= mpi_rank) cycle
+            do edge_slot = 1, 8
+               select case (edge_slot)
+                  case (1); iuv_target = uv_index_u_nmd_h(iuv)
+                  case (2); iuv_target = uv_index_u_nmu_h(iuv)
+                  case (3); iuv_target = uv_index_u_ndm_h(iuv)
+                  case (4); iuv_target = uv_index_u_num_h(iuv)
+                  case (5); iuv_target = uv_index_v_nm_h(iuv)
+                  case (6); iuv_target = uv_index_v_nmu_h(iuv)
+                  case (7); iuv_target = uv_index_v_ndm_h(iuv)
+                  case (8); iuv_target = uv_index_v_ndmu_h(iuv)
+               end select
+               if (iuv_target <= 0 .or. iuv_target > npuv_h) cycle
+               if (iuv_target == iuv) cycle   ! self-fallback at sfincs_domain.f90:1244-1245
+               if (edge_owner(iuv_target) /= mpi_rank) is_halo_edge(iuv_target) = .true.
             end do
          end do
       end if
@@ -2035,6 +2093,7 @@ contains
       integer :: ridx
       integer :: max_cell_recv, max_cell_send, max_edge_recv, max_edge_send
       integer, allocatable :: rank_to_idx(:)
+      integer :: slot_idx, iuv_target, r_target
       !
       ! Reset previous-run device-side allocations defensively. For N=1 the
       ! call returns here with zero allocations.
@@ -2180,6 +2239,60 @@ contains
                   end if
                end if
             end if
+            !
+            ! Second-hop advection-neighbor edge halo (SOR-3 residual fix).
+            ! Always add iuv (the loop variable) — never the slot target —
+            ! so every rank reaches the same iuv at the same step of its
+            ! own canonical walk and rank A's send-to-B slot k matches
+            ! rank B's recv-from-A slot k. See the matching walk in
+            ! build_local_index_maps that marks the slot targets as
+            ! is_halo_edge so global_to_local_uv assigns them a slot.
+            !
+            if (allocated(uv_index_u_nmd_h) .and. allocated(uv_index_u_nmu_h) .and. &
+                allocated(uv_index_u_ndm_h) .and. allocated(uv_index_u_num_h) .and. &
+                allocated(uv_index_v_nm_h)  .and. allocated(uv_index_v_nmu_h)  .and. &
+                allocated(uv_index_v_ndm_h) .and. allocated(uv_index_v_ndmu_h)) then
+               if (r_edge >= 0 .and. r_edge < mpi_size) then
+                  do slot_idx = 1, 8
+                     select case (slot_idx)
+                        case (1); iuv_target = uv_index_u_nmd_h(iuv)
+                        case (2); iuv_target = uv_index_u_nmu_h(iuv)
+                        case (3); iuv_target = uv_index_u_ndm_h(iuv)
+                        case (4); iuv_target = uv_index_u_num_h(iuv)
+                        case (5); iuv_target = uv_index_v_nm_h(iuv)
+                        case (6); iuv_target = uv_index_v_nmu_h(iuv)
+                        case (7); iuv_target = uv_index_v_ndm_h(iuv)
+                        case (8); iuv_target = uv_index_v_ndmu_h(iuv)
+                     end select
+                     if (iuv_target <= 0 .or. iuv_target > npuv_h) cycle
+                     if (iuv_target == iuv) cycle   ! self-fallback at sfincs_domain.f90:1244-1245
+                     r_target = edge_owner(iuv_target)
+                     if (r_target < 0 .or. r_target >= mpi_size) cycle
+                     if (r_target == r_edge) cycle
+                     !
+                     ! I own iuv (r_edge == mpi_rank): r_target's owned edge iuv_target
+                     ! needs my iuv for its advection — send iuv to r_target.
+                     !
+                     if (r_edge == mpi_rank) then
+                        ridx = rank_to_idx(r_target)
+                        if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
+                           edge_send_seen(iuv, ridx) = .true.
+                           edge_send_count(ridx) = edge_send_count(ridx) + 1
+                        end if
+                     !
+                     ! I own iuv_target (r_target == mpi_rank): my iuv_target's advection
+                     ! reads q0/uv0 at iuv — receive iuv from r_edge.
+                     !
+                     else if (r_target == mpi_rank) then
+                        ridx = rank_to_idx(r_edge)
+                        if (ridx > 0 .and. .not. edge_recv_seen(iuv)) then
+                           edge_recv_seen(iuv) = .true.
+                           edge_recv_count(ridx) = edge_recv_count(ridx) + 1
+                        end if
+                     end if
+                  end do
+               end if
+            end if
          end do
          !
          ! ---- Pass 2: allocate buffers and fill index arrays ----
@@ -2279,6 +2392,51 @@ contains
                         edge_recv_loc(e_recv_pos(ridx), ridx) = global_to_local_uv(iuv)
                         edge_recv_rem(e_recv_pos(ridx), ridx) = iuv
                      end if
+                  end if
+               end if
+               !
+               ! Second-hop advection-neighbor edge halo (SOR-3 residual fix).
+               ! Mirrors the Pass 1 walk; canonical (iuv, slot_idx) order keeps
+               ! send/recv slot positions symmetric across ranks.
+               !
+               if (allocated(uv_index_u_nmd_h) .and. allocated(uv_index_u_nmu_h) .and. &
+                   allocated(uv_index_u_ndm_h) .and. allocated(uv_index_u_num_h) .and. &
+                   allocated(uv_index_v_nm_h)  .and. allocated(uv_index_v_nmu_h)  .and. &
+                   allocated(uv_index_v_ndm_h) .and. allocated(uv_index_v_ndmu_h)) then
+                  if (r_edge >= 0 .and. r_edge < mpi_size) then
+                     do slot_idx = 1, 8
+                        select case (slot_idx)
+                           case (1); iuv_target = uv_index_u_nmd_h(iuv)
+                           case (2); iuv_target = uv_index_u_nmu_h(iuv)
+                           case (3); iuv_target = uv_index_u_ndm_h(iuv)
+                           case (4); iuv_target = uv_index_u_num_h(iuv)
+                           case (5); iuv_target = uv_index_v_nm_h(iuv)
+                           case (6); iuv_target = uv_index_v_nmu_h(iuv)
+                           case (7); iuv_target = uv_index_v_ndm_h(iuv)
+                           case (8); iuv_target = uv_index_v_ndmu_h(iuv)
+                        end select
+                        if (iuv_target <= 0 .or. iuv_target > npuv_h) cycle
+                        if (iuv_target == iuv) cycle
+                        r_target = edge_owner(iuv_target)
+                        if (r_target < 0 .or. r_target >= mpi_size) cycle
+                        if (r_target == r_edge) cycle
+                        if (r_edge == mpi_rank) then
+                           ridx = rank_to_idx(r_target)
+                           if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
+                              edge_send_seen(iuv, ridx) = .true.
+                              e_send_pos(ridx) = e_send_pos(ridx) + 1
+                              edge_send_loc(e_send_pos(ridx), ridx) = global_to_local_uv(iuv)
+                           end if
+                        else if (r_target == mpi_rank) then
+                           ridx = rank_to_idx(r_edge)
+                           if (ridx > 0 .and. .not. edge_recv_seen(iuv)) then
+                              edge_recv_seen(iuv) = .true.
+                              e_recv_pos(ridx) = e_recv_pos(ridx) + 1
+                              edge_recv_loc(e_recv_pos(ridx), ridx) = global_to_local_uv(iuv)
+                              edge_recv_rem(e_recv_pos(ridx), ridx) = iuv
+                           end if
+                        end if
+                     end do
                   end if
                end if
             end do
