@@ -678,6 +678,15 @@ module sfincs_lib
          ! the continuity update sees the full set of incoming fluxes.
          !
          call halo_exchange_q_uv()
+         !
+         ! Combined-UV averaging at quadtree refinement transitions
+         ! (SOR-1013). Runs AFTER halo_exchange_q_uv so every rank reads
+         ! consistent q / uv at child edges (owned or halo) and produces
+         ! the same averaged value at every combined-UV slot. See the
+         ! comment block above k_combined_uv in sfincs_momentum_gpu.cuf
+         ! for the authority rationale.
+         !
+         call compute_combined_uv(tloopflux)
 #endif
          !
          ! Update water levels

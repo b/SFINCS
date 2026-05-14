@@ -191,10 +191,12 @@ module sfincs_partition
               bridge_in_edge_real4, &
               bridge_out_cell_real4, bridge_out_cell_real8, bridge_out_cell_int1, bridge_out_cell_int4, &
               bridge_out_edge_real4, bridge_out_edge_int1, &
+              bridge_out_edge_tail_real4, &
               dump_halo_diagnostic
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
               build_halo_descriptors, &
+              verify_halo_descriptor_symmetry, &
               copyin_phase4_degenerate, &
               sort_indices_by_key, qsort_recursive, &
               gather_to_rank0_in_global_order, &
@@ -323,6 +325,13 @@ contains
       ! beyond the zero-length neighbor-rank vector.
       !
       call build_halo_descriptors(cell_part)
+      !
+      ! --- Phase 5b: Optional halo-descriptor symmetry diagnostic (SOR-35).
+      ! Runs only when SFINCS_DEBUG_HALO_DESC_CHECK is set to a positive
+      ! integer; otherwise an immediate-return no-op so release runs pay
+      ! one getenv per partition_and_localize and nothing more.
+      !
+      call verify_halo_descriptor_symmetry()
       !
       ! --- Phase 6: Halo-exchange runtime allocations -----------------------
       ! Mirror local_to_global to the device so the gather/scatter kernels in
@@ -1537,6 +1546,29 @@ contains
       deallocate(tmp)
    end subroutine bridge_out_edge_real4
    !
+   subroutine bridge_out_edge_tail_real4(host, dev)
+      ! Scatter ONLY the combined-UV tail of dev -> host. Used by the
+      ! post-halo k_combined_uv pass (SOR-1013) when the owned slice on
+      ! host may already carry edits from compute_fluxes_over_structures
+      ! or compute_nonhydrostatic that have not been propagated to
+      ! device and would otherwise be clobbered by a full bridge_out.
+      ! Halo entries (between owned and tail) stay untouched, same
+      ! convention as bridge_out_edge_real4.
+      real*4, intent(inout)         :: host(:)
+      real*4, device, intent(in)    :: dev(:)
+      real*4, allocatable :: tmp(:)
+      integer :: i, n_total, narrow
+      n_total = size(dev)
+      narrow  = npuv_local + halo_edge_count
+      if (n_total <= narrow) return
+      allocate(tmp(n_total - narrow))
+      tmp = dev(narrow + 1:n_total)
+      do i = narrow + 1, n_total
+         host(local_to_global_uv(i)) = tmp(i - narrow)
+      end do
+      deallocate(tmp)
+   end subroutine bridge_out_edge_tail_real4
+   !
    subroutine bridge_out_edge_int1(host, dev)
       integer*1, intent(inout)         :: host(:)
       integer*1, device, intent(in)    :: dev(:)
@@ -1716,8 +1748,8 @@ contains
       integer, allocatable :: edge_owner(:)
       logical, allocatable :: neighbor_present(:)
       integer, allocatable :: nbr_ranks(:)
-      integer :: nm, iuv, nm_a, nm_b, nm_other
-      integer :: edge_slot
+      integer :: nm, iuv, nm_a, nm_b
+      integer :: r_a, r_b
       integer :: i, k, r, ridx, n_neighbors
       !
       ! Initialise scalars/output arrays to safe defaults for the
@@ -1773,60 +1805,34 @@ contains
          end do
       end if
       !
-      ! Halo discovery: walk owned cells, classify referenced neighbors and
-      ! edges. Each rank's halo_send_to_rank / halo_uv_send_to_rank flags
-      ! are reconstructed by build_halo_descriptors from cell_part + the
-      ! same neighbor walk; here we only need the receive flags because
-      ! they are what defines local_to_global's halo region.
+      ! Halo discovery: walk edges in canonical global-iuv ascending
+      ! order. An edge with both endpoints (uv_index_z_nm, uv_index_z_nmu)
+      ! valid, on different ranks, and with at least one endpoint on
+      ! this rank introduces a cross-rank halo. Cells flagged as
+      ! is_halo_cell here drive the layout of local_to_global's halo
+      ! region; the same walk shape is used by build_halo_descriptors so
+      ! the descriptor's per-neighbor send/recv slot order is symmetric
+      ! across ranks (SOR-1013).
       !
-      ! For cross-refinement-level quadtree edges we MUST enumerate the
-      ! split *_md1/md2/mu1/mu2/nd1/nd2/nu1/nu2 arrays rather than the
-      ! collapsed *_md/_mu/_nd/_nu arrays. When a coarse cell has finer
-      ! neighbors on a side, sfincs_domain assigns the collapsed slot to
-      ! a "combined" cuv_index_uv pseudo-index that lies outside the
-      ! 1..npuv range, so the coarse-owning rank skips that slot and
-      ! never sees the cross-level halo cells / edges. The fine-owning
-      ! rank, in contrast, walks each fine cell's md1/mu1/nd1/nu1 (which
-      ! is a real iuv) and enumerates the cross-level edge -- producing
-      ! send/recv counts that the coarse rank does not match. The split
-      ! arrays always store real iuv values and are populated on both
-      ! sides of every cross-level edge, so walking them recovers
-      ! send/recv symmetry on the cross-rank quadtree boundary.
-      !
-      if (mpi_size > 1 .and. allocated(z_index_uv_md1_h) .and. &
-          allocated(z_index_uv_md2_h) .and. &
-          allocated(z_index_uv_mu1_h) .and. allocated(z_index_uv_mu2_h) .and. &
-          allocated(z_index_uv_nd1_h) .and. allocated(z_index_uv_nd2_h) .and. &
-          allocated(z_index_uv_nu1_h) .and. allocated(z_index_uv_nu2_h) .and. &
-          allocated(uv_index_z_nm_h) .and. allocated(uv_index_z_nmu_h)) then
-         do nm = 1, npn_h
-            if (cell_part(nm) /= mpi_rank) cycle
-            do edge_slot = 1, 8
-               select case (edge_slot)
-                  case (1); iuv = z_index_uv_md1_h(nm)
-                  case (2); iuv = z_index_uv_md2_h(nm)
-                  case (3); iuv = z_index_uv_nd1_h(nm)
-                  case (4); iuv = z_index_uv_nd2_h(nm)
-                  case (5); iuv = z_index_uv_mu1_h(nm)
-                  case (6); iuv = z_index_uv_mu2_h(nm)
-                  case (7); iuv = z_index_uv_nu1_h(nm)
-                  case (8); iuv = z_index_uv_nu2_h(nm)
-               end select
-               if (iuv <= 0 .or. iuv > npuv_h) cycle
-               nm_a = uv_index_z_nm_h(iuv)
-               nm_b = uv_index_z_nmu_h(iuv)
-               if (nm_a == nm) then
-                  nm_other = nm_b
-               else if (nm_b == nm) then
-                  nm_other = nm_a
-               else
-                  nm_other = 0
-               end if
-               if (nm_other > 0 .and. nm_other <= npn_h) then
-                  if (cell_part(nm_other) /= mpi_rank) is_halo_cell(nm_other) = .true.
-               end if
-               if (edge_owner(iuv) /= mpi_rank) is_halo_edge(iuv) = .true.
-            end do
+      if (mpi_size > 1 .and. allocated(uv_index_z_nm_h) .and. &
+          allocated(uv_index_z_nmu_h)) then
+         do iuv = 1, npuv_h
+            nm_a = uv_index_z_nm_h(iuv)
+            nm_b = uv_index_z_nmu_h(iuv)
+            if (nm_a <= 0 .or. nm_a > npn_h) cycle
+            if (nm_b <= 0 .or. nm_b > npn_h) cycle
+            r_a = cell_part(nm_a)
+            r_b = cell_part(nm_b)
+            if (r_a == r_b) cycle
+            if (r_a < 0 .or. r_a >= mpi_size) cycle
+            if (r_b < 0 .or. r_b >= mpi_size) cycle
+            if (r_a /= mpi_rank .and. r_b /= mpi_rank) cycle
+            if (r_a == mpi_rank) then
+               is_halo_cell(nm_b) = .true.
+            else
+               is_halo_cell(nm_a) = .true.
+            end if
+            if (edge_owner(iuv) /= mpi_rank) is_halo_edge(iuv) = .true.
          end do
       end if
       !
@@ -1996,6 +2002,31 @@ contains
       ! and outlive this routine for use by Phase 4 copyin and the deferred
       ! shadow allocators.
       !
+      ! ENUMERATION ORDER (SOR-1013). For a pair of ranks (N, M) that
+      ! share a halo, the runtime exchange in halo_exchange_q_uv copies
+      ! halo_send_buf_q(i, slot) from N to M's halo_recv_buf_q(i, slot)
+      ! position-by-position, so the i-th entry of N's send list to M
+      ! must reference the SAME global iuv as the i-th entry of M's recv
+      ! list from N. The pre-SOR-1013 implementation populated both lists
+      ! through the owned-cell-times-eight-slot walk introduced in SOR-836.
+      ! That walk visits a different set of cells on each side of a
+      ! coarse-fine quadtree boundary (one coarse owned cell on the
+      ! coarse-owning rank vs two fine owned cells on the fine-owning
+      ! rank), so the slot order of the two child edges across the
+      ! refinement transition agreed only when the fine cells happened to
+      ! be numbered globally with the lower-half cell before the
+      ! upper-half cell. Quadtree refinement does not guarantee that
+      ! invariant, so on case_quadtree_tide:gpu_n2 the send/recv lists
+      ! were CONTENT-asymmetric on cross-level edges (the COUNTs already
+      ! matched after SOR-836) and halo_exchange_q_uv delivered q values
+      ! into wrong local edge positions, leaking ~0.8-1.7 m of spurious
+      ! flooding inland. The fix enumerates edges in canonical global-iuv
+      ! ascending order on both passes; both ranks iterate the same
+      ! global iuv sequence and produce identical per-slot orderings of
+      ! the same iuv set. Cells touched by those edges are discovered in
+      ! the same canonical order so the cell halo descriptor is
+      ! symmetric for free.
+      !
       integer, intent(in) :: cell_part(:)
       !
       integer, allocatable :: edge_owner(:)
@@ -2003,9 +2034,8 @@ contains
       integer, allocatable :: edge_recv_count(:), edge_send_count(:)
       integer, allocatable :: cell_recv_loc(:,:), cell_recv_rem(:,:), cell_send_loc(:,:)
       integer, allocatable :: edge_recv_loc(:,:), edge_recv_rem(:,:), edge_send_loc(:,:)
-      integer :: nm, iuv, nm_a, nm_b, nm_other
-      integer :: edge_slot
-      integer :: r, ridx, k
+      integer :: iuv, nm_a, nm_b, r_a, r_b, r_own, r_other
+      integer :: ridx
       integer :: max_cell_recv, max_cell_send, max_edge_recv, max_edge_send
       integer, allocatable :: rank_to_idx(:)
       !
@@ -2072,65 +2102,71 @@ contains
          allocate(edge_recv_seen(max(npuv_h, 1)));              edge_recv_seen = .false.
          allocate(edge_send_seen(max(npuv_h, 1), halo_n_neighbors)); edge_send_seen = .false.
          !
-         do nm = 1, npn_h
-            if (cell_part(nm) /= mpi_rank) cycle
-            do edge_slot = 1, 8
-               select case (edge_slot)
-                  case (1); iuv = z_index_uv_md1_h(nm)
-                  case (2); iuv = z_index_uv_md2_h(nm)
-                  case (3); iuv = z_index_uv_nd1_h(nm)
-                  case (4); iuv = z_index_uv_nd2_h(nm)
-                  case (5); iuv = z_index_uv_mu1_h(nm)
-                  case (6); iuv = z_index_uv_mu2_h(nm)
-                  case (7); iuv = z_index_uv_nu1_h(nm)
-                  case (8); iuv = z_index_uv_nu2_h(nm)
-               end select
-               if (iuv <= 0 .or. iuv > npuv_h) cycle
-               nm_a = uv_index_z_nm_h(iuv)
-               nm_b = uv_index_z_nmu_h(iuv)
-               if (nm_a == nm) then
-                  nm_other = nm_b
-               else if (nm_b == nm) then
-                  nm_other = nm_a
-               else
-                  nm_other = 0
+         ! Canonical iuv walk. Every rank sees the same `(nm_a, nm_b,
+         ! cell_part, edge_owner)` tuples for every iuv, so both sides of
+         ! every cross-rank edge classify the edge the same way and add
+         ! it to their respective send/recv lists at the same ordinal
+         ! position. Inactive iuvs (no cells, both cells on the same
+         ! rank, or one cell off-grid) are skipped uniformly on every
+         ! rank.
+         !
+         do iuv = 1, npuv_h
+            nm_a = uv_index_z_nm_h(iuv)
+            nm_b = uv_index_z_nmu_h(iuv)
+            if (nm_a <= 0 .or. nm_a > npn_h) cycle
+            if (nm_b <= 0 .or. nm_b > npn_h) cycle
+            r_a = cell_part(nm_a)
+            r_b = cell_part(nm_b)
+            if (r_a < 0 .or. r_a >= mpi_size) cycle
+            if (r_b < 0 .or. r_b >= mpi_size) cycle
+            if (r_a == r_b) cycle
+            if (r_a /= mpi_rank .and. r_b /= mpi_rank) cycle
+            !
+            if (r_a == mpi_rank) then
+               r_other = r_b
+            else
+               r_other = r_a
+            end if
+            ridx = rank_to_idx(r_other)
+            if (ridx <= 0) cycle
+            r_own = edge_owner(iuv)
+            !
+            ! Cell-rank halos: we send our owned-side cell and recv the
+            ! foreign-side cell.
+            !
+            if (r_a == mpi_rank) then
+               if (.not. cell_send_seen(nm_a, ridx)) then
+                  cell_send_seen(nm_a, ridx) = .true.
+                  cell_send_count(ridx) = cell_send_count(ridx) + 1
                end if
-               !
-               if (nm_other > 0 .and. nm_other <= npn_h) then
-                  r = cell_part(nm_other)
-                  if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
-                     ridx = rank_to_idx(r)
-                     if (ridx > 0) then
-                        if (.not. cell_recv_seen(nm_other)) then
-                           cell_recv_seen(nm_other) = .true.
-                           cell_recv_count(ridx) = cell_recv_count(ridx) + 1
-                        end if
-                        if (.not. cell_send_seen(nm, ridx)) then
-                           cell_send_seen(nm, ridx) = .true.
-                           cell_send_count(ridx) = cell_send_count(ridx) + 1
-                        end if
-                     end if
-                  end if
+               if (.not. cell_recv_seen(nm_b)) then
+                  cell_recv_seen(nm_b) = .true.
+                  cell_recv_count(ridx) = cell_recv_count(ridx) + 1
                end if
-               !
-               r = edge_owner(iuv)
-               if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
-                  ridx = rank_to_idx(r)
-                  if (ridx > 0 .and. .not. edge_recv_seen(iuv)) then
-                     edge_recv_seen(iuv) = .true.
-                     edge_recv_count(ridx) = edge_recv_count(ridx) + 1
-                  end if
-               else if (r == mpi_rank .and. nm_other > 0 .and. nm_other <= npn_h) then
-                  k = cell_part(nm_other)
-                  if (k /= mpi_rank .and. k >= 0 .and. k < mpi_size) then
-                     ridx = rank_to_idx(k)
-                     if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
-                        edge_send_seen(iuv, ridx) = .true.
-                        edge_send_count(ridx) = edge_send_count(ridx) + 1
-                     end if
-                  end if
+            else
+               if (.not. cell_send_seen(nm_b, ridx)) then
+                  cell_send_seen(nm_b, ridx) = .true.
+                  cell_send_count(ridx) = cell_send_count(ridx) + 1
                end if
-            end do
+               if (.not. cell_recv_seen(nm_a)) then
+                  cell_recv_seen(nm_a) = .true.
+                  cell_recv_count(ridx) = cell_recv_count(ridx) + 1
+               end if
+            end if
+            !
+            ! Edge-rank halo: we send if we own the edge, recv otherwise.
+            !
+            if (r_own == mpi_rank) then
+               if (.not. edge_send_seen(iuv, ridx)) then
+                  edge_send_seen(iuv, ridx) = .true.
+                  edge_send_count(ridx) = edge_send_count(ridx) + 1
+               end if
+            else
+               if (.not. edge_recv_seen(iuv)) then
+                  edge_recv_seen(iuv) = .true.
+                  edge_recv_count(ridx) = edge_recv_count(ridx) + 1
+               end if
+            end if
          end do
          !
          ! ---- Pass 2: allocate buffers and fill index arrays ----
@@ -2149,6 +2185,8 @@ contains
          !
          block
             integer, allocatable :: c_recv_pos(:), c_send_pos(:), e_recv_pos(:), e_send_pos(:)
+            integer :: cell_local
+            integer :: cell_owned, cell_foreign
             allocate(c_recv_pos(halo_n_neighbors)); c_recv_pos = 0
             allocate(c_send_pos(halo_n_neighbors)); c_send_pos = 0
             allocate(e_recv_pos(halo_n_neighbors)); e_recv_pos = 0
@@ -2161,79 +2199,63 @@ contains
             edge_recv_seen = .false.
             edge_send_seen = .false.
             !
-            ! Drive the fill via the owned-cell walk so that we only enter
-            ! cells that are genuine halos for this rank. Halo cells are
-            ! discovered in increasing global-index order; build_local_index_maps
-            ! laid out the halo region of local_to_global in the same order
-            ! (ranks ordered by halo_neighbor_ranks, then global index within
-            ! a rank), so the entries we write to halo_recv_local_idx via
-            ! global_to_local stay contiguous within each per-neighbor slice.
+            ! Same canonical iuv walk as Pass 1 — the position of each
+            ! send/recv entry in its per-neighbor slice is determined by
+            ! the order in which the iuv is encountered, and the iuv
+            ! sequence is identical on every rank.
             !
-            do nm = 1, npn_h
-               if (cell_part(nm) /= mpi_rank) cycle
-               do edge_slot = 1, 8
-                  select case (edge_slot)
-                     case (1); iuv = z_index_uv_md1_h(nm)
-                     case (2); iuv = z_index_uv_md2_h(nm)
-                     case (3); iuv = z_index_uv_nd1_h(nm)
-                     case (4); iuv = z_index_uv_nd2_h(nm)
-                     case (5); iuv = z_index_uv_mu1_h(nm)
-                     case (6); iuv = z_index_uv_mu2_h(nm)
-                     case (7); iuv = z_index_uv_nu1_h(nm)
-                     case (8); iuv = z_index_uv_nu2_h(nm)
-                  end select
-                  if (iuv <= 0 .or. iuv > npuv_h) cycle
-                  nm_a = uv_index_z_nm_h(iuv)
-                  nm_b = uv_index_z_nmu_h(iuv)
-                  if (nm_a == nm) then
-                     nm_other = nm_b
-                  else if (nm_b == nm) then
-                     nm_other = nm_a
-                  else
-                     nm_other = 0
+            do iuv = 1, npuv_h
+               nm_a = uv_index_z_nm_h(iuv)
+               nm_b = uv_index_z_nmu_h(iuv)
+               if (nm_a <= 0 .or. nm_a > npn_h) cycle
+               if (nm_b <= 0 .or. nm_b > npn_h) cycle
+               r_a = cell_part(nm_a)
+               r_b = cell_part(nm_b)
+               if (r_a < 0 .or. r_a >= mpi_size) cycle
+               if (r_b < 0 .or. r_b >= mpi_size) cycle
+               if (r_a == r_b) cycle
+               if (r_a /= mpi_rank .and. r_b /= mpi_rank) cycle
+               !
+               if (r_a == mpi_rank) then
+                  r_other = r_b
+                  cell_owned   = nm_a
+                  cell_foreign = nm_b
+               else
+                  r_other = r_a
+                  cell_owned   = nm_b
+                  cell_foreign = nm_a
+               end if
+               ridx = rank_to_idx(r_other)
+               if (ridx <= 0) cycle
+               r_own = edge_owner(iuv)
+               !
+               if (.not. cell_send_seen(cell_owned, ridx)) then
+                  cell_send_seen(cell_owned, ridx) = .true.
+                  c_send_pos(ridx) = c_send_pos(ridx) + 1
+                  cell_send_loc(c_send_pos(ridx), ridx) = global_to_local(cell_owned)
+               end if
+               if (.not. cell_recv_seen(cell_foreign)) then
+                  cell_recv_seen(cell_foreign) = .true.
+                  c_recv_pos(ridx) = c_recv_pos(ridx) + 1
+                  cell_local = global_to_local(cell_foreign)
+                  cell_recv_loc(c_recv_pos(ridx), ridx) = cell_local
+                  cell_recv_rem(c_recv_pos(ridx), ridx) = cell_foreign
+               end if
+               !
+               if (r_own == mpi_rank) then
+                  if (.not. edge_send_seen(iuv, ridx)) then
+                     edge_send_seen(iuv, ridx) = .true.
+                     e_send_pos(ridx) = e_send_pos(ridx) + 1
+                     edge_send_loc(e_send_pos(ridx), ridx) = global_to_local_uv(iuv)
                   end if
-                  !
-                  if (nm_other > 0 .and. nm_other <= npn_h) then
-                     r = cell_part(nm_other)
-                     if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
-                        ridx = rank_to_idx(r)
-                        if (ridx > 0) then
-                           if (.not. cell_recv_seen(nm_other)) then
-                              cell_recv_seen(nm_other) = .true.
-                              c_recv_pos(ridx) = c_recv_pos(ridx) + 1
-                              cell_recv_loc(c_recv_pos(ridx), ridx) = global_to_local(nm_other)
-                              cell_recv_rem(c_recv_pos(ridx), ridx) = nm_other
-                           end if
-                           if (.not. cell_send_seen(nm, ridx)) then
-                              cell_send_seen(nm, ridx) = .true.
-                              c_send_pos(ridx) = c_send_pos(ridx) + 1
-                              cell_send_loc(c_send_pos(ridx), ridx) = global_to_local(nm)
-                           end if
-                        end if
-                     end if
+               else
+                  if (.not. edge_recv_seen(iuv)) then
+                     edge_recv_seen(iuv) = .true.
+                     e_recv_pos(ridx) = e_recv_pos(ridx) + 1
+                     edge_recv_loc(e_recv_pos(ridx), ridx) = global_to_local_uv(iuv)
+                     edge_recv_rem(e_recv_pos(ridx), ridx) = iuv
                   end if
-                  !
-                  r = edge_owner(iuv)
-                  if (r /= mpi_rank .and. r >= 0 .and. r < mpi_size) then
-                     ridx = rank_to_idx(r)
-                     if (ridx > 0 .and. .not. edge_recv_seen(iuv)) then
-                        edge_recv_seen(iuv) = .true.
-                        e_recv_pos(ridx) = e_recv_pos(ridx) + 1
-                        edge_recv_loc(e_recv_pos(ridx), ridx) = global_to_local_uv(iuv)
-                        edge_recv_rem(e_recv_pos(ridx), ridx) = iuv
-                     end if
-                  else if (r == mpi_rank .and. nm_other > 0 .and. nm_other <= npn_h) then
-                     k = cell_part(nm_other)
-                     if (k /= mpi_rank .and. k >= 0 .and. k < mpi_size) then
-                        ridx = rank_to_idx(k)
-                        if (ridx > 0 .and. .not. edge_send_seen(iuv, ridx)) then
-                           edge_send_seen(iuv, ridx) = .true.
-                           e_send_pos(ridx) = e_send_pos(ridx) + 1
-                           edge_send_loc(e_send_pos(ridx), ridx) = global_to_local_uv(iuv)
-                        end if
-                     end if
-                  end if
-               end do
+               end if
             end do
             !
             deallocate(c_recv_pos)
@@ -2281,6 +2303,177 @@ contains
       deallocate(edge_owner)
       !
    end subroutine build_halo_descriptors
+   !
+   subroutine verify_halo_descriptor_symmetry()
+      !
+      ! Debug-gated correctness check for the per-neighbor halo-uv send /
+      ! recv index lists produced by build_halo_descriptors. For every
+      ! neighbor pair (this rank, peer): exchange the SEND-side list of
+      ! global iuvs against the peer's send-side list (which is what we
+      ! expect on our RECV side, position-for-position), and call
+      ! MPI_Abort on the first slot mismatch. If the new global-iuv walk
+      ! is symmetric across ranks (SOR-35), this routine is a no-op.
+      !
+      ! Activated by the SFINCS_DEBUG_HALO_DESC_CHECK environment
+      ! variable (set to any positive integer; mirrors the
+      ! SFINCS_DEBUG_HALO_DUMP* gating idiom in dump_halo_diagnostic
+      ! below). Defaults off so release runs pay one getenv per
+      ! partition_and_localize and nothing more. Designed to be inert
+      ! in release: returns immediately on single-rank or
+      ! zero-neighbor configurations, no allocations made.
+      !
+      ! halo_uv_send_local_idx and halo_uv_recv_remote_idx live in
+      ! device memory; we pull host shadows up-front so the diagnostic
+      ! body works in plain host code (and the I/O statements below are
+      ! legal in production nvfortran builds).
+      !
+      character(len=64) :: env_val
+      integer :: enabled_int, ios
+      integer :: nbr_slot, peer_rank, i
+      integer :: my_send_n, expected_recv_n
+      integer, allocatable :: my_send_globals(:,:), peer_send_globals(:,:)
+      integer, allocatable :: peer_send_count(:)
+      integer, allocatable :: req_send(:), req_recv(:)
+      integer, allocatable :: statuses(:,:)
+      integer, allocatable :: host_send_local_idx(:,:)
+      integer, allocatable :: host_recv_remote_idx(:,:)
+      integer :: max_send, max_recv, max_buf, ierr
+      logical :: ok
+      integer, parameter :: TAG_COUNT = 9100
+      integer, parameter :: TAG_DATA  = 9101
+      !
+      ! Env-gate. Single getenv per call so the cost when unset is one
+      ! library call returning a zero-length string.
+      !
+      call get_environment_variable('SFINCS_DEBUG_HALO_DESC_CHECK', env_val)
+      if (len_trim(env_val) == 0) return
+      read(env_val, *, iostat=ios) enabled_int
+      if (ios /= 0 .or. enabled_int <= 0) return
+      !
+      if (mpi_size <= 1) return
+      if (halo_uv_n_neighbors <= 0) return
+      !
+      ! Pull device descriptors back to host before doing any
+      ! comparisons or I/O. nvfortran rejects device-array references
+      ! in host write() statements; the dedicated host shadows keep the
+      ! rest of the routine plain host code.
+      !
+      allocate(host_send_local_idx(size(halo_uv_send_local_idx, 1), &
+                                   size(halo_uv_send_local_idx, 2)))
+      allocate(host_recv_remote_idx(size(halo_uv_recv_remote_idx, 1), &
+                                    size(halo_uv_recv_remote_idx, 2)))
+      host_send_local_idx  = halo_uv_send_local_idx
+      host_recv_remote_idx = halo_uv_recv_remote_idx
+      !
+      ! Step 1 -- exchange send counts so each side knows how big the
+      ! peer's send-list is. The peer's send count must equal this
+      ! rank's recv count for the same neighbor pair; mismatched counts
+      ! are a hard descriptor-build bug and we abort immediately.
+      !
+      allocate(peer_send_count(halo_uv_n_neighbors))
+      allocate(req_send(halo_uv_n_neighbors))
+      allocate(req_recv(halo_uv_n_neighbors))
+      allocate(statuses(MPI_STATUS_SIZE, halo_uv_n_neighbors))
+      peer_send_count = 0
+      !
+      do nbr_slot = 1, halo_uv_n_neighbors
+         peer_rank = halo_neighbor_ranks(nbr_slot)
+         call MPI_Irecv(peer_send_count(nbr_slot), 1, MPI_INTEGER, peer_rank, &
+                        TAG_COUNT, MPI_COMM_WORLD, req_recv(nbr_slot), ierr)
+      end do
+      do nbr_slot = 1, halo_uv_n_neighbors
+         peer_rank = halo_neighbor_ranks(nbr_slot)
+         my_send_n = halo_uv_send_count(nbr_slot)
+         call MPI_Isend(halo_uv_send_count(nbr_slot), 1, MPI_INTEGER, peer_rank, &
+                        TAG_COUNT, MPI_COMM_WORLD, req_send(nbr_slot), ierr)
+      end do
+      call MPI_Waitall(halo_uv_n_neighbors, req_recv, statuses, ierr)
+      call MPI_Waitall(halo_uv_n_neighbors, req_send, statuses, ierr)
+      !
+      ok = .true.
+      do nbr_slot = 1, halo_uv_n_neighbors
+         expected_recv_n = halo_uv_recv_count(nbr_slot)
+         if (peer_send_count(nbr_slot) /= expected_recv_n) then
+            write(*, '(A,I0,A,I0,A,I0,A,I0,A,I0)') &
+               'HALO_DIAG ABORT count mismatch: rank=', mpi_rank, &
+               ' neighbor=', halo_neighbor_ranks(nbr_slot), &
+               ' nbr_slot=', nbr_slot, &
+               ' my_recv_count=', expected_recv_n, &
+               ' peer_send_count=', peer_send_count(nbr_slot)
+            ok = .false.
+         end if
+      end do
+      if (.not. ok) then
+         call MPI_Abort(MPI_COMM_WORLD, 9001, ierr)
+      end if
+      !
+      ! Step 2 -- exchange per-slot global-iuv send lists. peer's send
+      ! list lands on our recv side; we then compare element-wise
+      ! against host_recv_remote_idx (which was filled with the
+      ! global iuv we EXPECT to receive in each recv slot).
+      !
+      max_send = max(maxval(halo_uv_send_count), 1)
+      max_recv = max(maxval(halo_uv_recv_count), 1)
+      max_buf  = max(max_send, max_recv)
+      allocate(my_send_globals(max_buf, halo_uv_n_neighbors)); my_send_globals = 0
+      allocate(peer_send_globals(max_buf, halo_uv_n_neighbors)); peer_send_globals = 0
+      !
+      do nbr_slot = 1, halo_uv_n_neighbors
+         my_send_n = halo_uv_send_count(nbr_slot)
+         do i = 1, my_send_n
+            my_send_globals(i, nbr_slot) = local_to_global_uv(host_send_local_idx(i, nbr_slot))
+         end do
+      end do
+      !
+      do nbr_slot = 1, halo_uv_n_neighbors
+         peer_rank = halo_neighbor_ranks(nbr_slot)
+         expected_recv_n = halo_uv_recv_count(nbr_slot)
+         call MPI_Irecv(peer_send_globals(:, nbr_slot), expected_recv_n, MPI_INTEGER, &
+                        peer_rank, TAG_DATA, MPI_COMM_WORLD, req_recv(nbr_slot), ierr)
+      end do
+      do nbr_slot = 1, halo_uv_n_neighbors
+         peer_rank = halo_neighbor_ranks(nbr_slot)
+         my_send_n = halo_uv_send_count(nbr_slot)
+         call MPI_Isend(my_send_globals(:, nbr_slot), my_send_n, MPI_INTEGER, &
+                        peer_rank, TAG_DATA, MPI_COMM_WORLD, req_send(nbr_slot), ierr)
+      end do
+      call MPI_Waitall(halo_uv_n_neighbors, req_recv, statuses, ierr)
+      call MPI_Waitall(halo_uv_n_neighbors, req_send, statuses, ierr)
+      !
+      ok = .true.
+      do nbr_slot = 1, halo_uv_n_neighbors
+         expected_recv_n = halo_uv_recv_count(nbr_slot)
+         do i = 1, expected_recv_n
+            if (peer_send_globals(i, nbr_slot) /= host_recv_remote_idx(i, nbr_slot)) then
+               write(*, '(A,I0,A,I0,A,I0,A,I0,A,I0,A,I0)') &
+                  'HALO_DIAG ABORT slot mismatch: rank=', mpi_rank, &
+                  ' neighbor=', halo_neighbor_ranks(nbr_slot), &
+                  ' slot=', i, &
+                  ' global_iuv_expected=', host_recv_remote_idx(i, nbr_slot), &
+                  ' global_iuv_got=', peer_send_globals(i, nbr_slot), &
+                  ' nbr_slot=', nbr_slot
+               ok = .false.
+            end if
+         end do
+      end do
+      !
+      ! Barrier so every rank either confirms ok or aborts together.
+      !
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+      if (.not. ok) then
+         call MPI_Abort(MPI_COMM_WORLD, 9002, ierr)
+      end if
+      !
+      if (mpi_rank == 0) then
+         write(*, '(A,I0,A)') 'HALO_DIAG OK: halo-uv descriptor symmetric across ', &
+            halo_uv_n_neighbors, ' neighbor pair(s) on rank 0'
+      end if
+      !
+      deallocate(my_send_globals, peer_send_globals, peer_send_count)
+      deallocate(req_send, req_recv, statuses)
+      deallocate(host_send_local_idx, host_recv_remote_idx)
+      !
+   end subroutine verify_halo_descriptor_symmetry
    !
    subroutine device_finalize()
       !
