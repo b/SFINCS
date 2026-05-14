@@ -172,7 +172,7 @@ contains
       ! the rank boundary via halo_exchange_q_uv. Until then the host
       ! aliases for the combined-UV tail carry the previous step's
       ! average, which is fine because nothing reads the tail between
-      ! return and the next compute_combined_uv call (SOR-1013).
+      ! return and the next compute_combined_uv call (SOR-35).
       !
       ! ------ Copy-OUT: device -> host for WRITE set ----------------------
       !
@@ -195,7 +195,7 @@ contains
    end subroutine compute_fluxes
    !
    ! ===================================================================
-   ! Combined-uv averaging (SOR-1013).
+   ! Combined-uv averaging (SOR-35).
    ! Called from sfincs_lib.F90 AFTER halo_exchange_q_uv and AFTER any
    ! q-writing step (compute_fluxes, structures, nonhydrostatic) so the
    ! kernel reads consistent q / uv at child edges across ranks. See
@@ -692,13 +692,13 @@ contains
    !
    ! Combined-uv averaging kernel mirroring sfincs_momentum.f90:737-756.
    !
-   ! Authority strategy (SOR-1013): strategy (c) — every rank runs
+   ! Authority strategy (SOR-35): strategy (c) — every rank runs
    ! k_combined_uv against its own halo-extended view of q and uv.
    !
    ! Rationale. Each combined-UV slot icuv is the arithmetic mean of
    ! two child edges (cuv_index_uv1, cuv_index_uv2) at a coarse-to-fine
    ! refinement boundary. When a child edge straddles a rank boundary,
-   ! the rank that does NOT own it reads its halo copy. The SOR-1013
+   ! the rank that does NOT own it reads its halo copy. The SOR-35
    ! halo-descriptor fix in build_halo_descriptors makes the halo
    ! exchange of q / uv deliver IDENTICAL values for the same global
    ! iuv on every rank (the per-slot send/recv ordering is now

@@ -680,7 +680,7 @@ module sfincs_lib
          call halo_exchange_q_uv()
          !
          ! Combined-UV averaging at quadtree refinement transitions
-         ! (SOR-1013). Runs AFTER halo_exchange_q_uv so every rank reads
+         ! (SOR-35). Runs AFTER halo_exchange_q_uv so every rank reads
          ! consistent q / uv at child edges (owned or halo) and produces
          ! the same averaged value at every combined-UV slot. See the
          ! comment block above k_combined_uv in sfincs_momentum_gpu.cuf

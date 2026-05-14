@@ -1548,7 +1548,7 @@ contains
    !
    subroutine bridge_out_edge_tail_real4(host, dev)
       ! Scatter ONLY the combined-UV tail of dev -> host. Used by the
-      ! post-halo k_combined_uv pass (SOR-1013) when the owned slice on
+      ! post-halo k_combined_uv pass (SOR-35) when the owned slice on
       ! host may already carry edits from compute_fluxes_over_structures
       ! or compute_nonhydrostatic that have not been propagated to
       ! device and would otherwise be clobbered by a full bridge_out.
@@ -1812,7 +1812,7 @@ contains
       ! is_halo_cell here drive the layout of local_to_global's halo
       ! region; the same walk shape is used by build_halo_descriptors so
       ! the descriptor's per-neighbor send/recv slot order is symmetric
-      ! across ranks (SOR-1013).
+      ! across ranks (SOR-35).
       !
       if (mpi_size > 1 .and. allocated(uv_index_z_nm_h) .and. &
           allocated(uv_index_z_nmu_h)) then
@@ -2002,12 +2002,12 @@ contains
       ! and outlive this routine for use by Phase 4 copyin and the deferred
       ! shadow allocators.
       !
-      ! ENUMERATION ORDER (SOR-1013). For a pair of ranks (N, M) that
+      ! ENUMERATION ORDER (SOR-35). For a pair of ranks (N, M) that
       ! share a halo, the runtime exchange in halo_exchange_q_uv copies
       ! halo_send_buf_q(i, slot) from N to M's halo_recv_buf_q(i, slot)
       ! position-by-position, so the i-th entry of N's send list to M
       ! must reference the SAME global iuv as the i-th entry of M's recv
-      ! list from N. The pre-SOR-1013 implementation populated both lists
+      ! list from N. The pre-SOR-35 implementation populated both lists
       ! through the owned-cell-times-eight-slot walk introduced in SOR-836.
       ! That walk visits a different set of cells on each side of a
       ! coarse-fine quadtree boundary (one coarse owned cell on the
