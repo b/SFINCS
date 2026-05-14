@@ -24,7 +24,37 @@ fi
 
 HPCX=/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi
 
-exec docker run --rm $TTY_FLAG \
+# Container lifecycle is tied to this shell. Earlier versions of this
+# script did `exec docker run --rm ...`, which left no shell behind to
+# clean up — `--rm` only fires on container *exit*, so a deadlocked
+# container that ignores SIGTERM (e.g. an MPI/CUDA child stuck in a
+# kernel) was orphaned indefinitely once the invoking session died,
+# pegging GPUs and a CPU core. We now launch docker run as a child,
+# install a cleanup trap, and `wait` so the trap survives to fire.
+CONTAINER_NAME="sfincs-build-gpu-$$-$(date +%s 2>/dev/null || echo 0)"
+LIFECYCLE_LABEL="sfincs.run-gpu-container=$$"
+
+cleanup() {
+    # docker kill (SIGKILL) is intentional: a deadlocked container by
+    # definition ignores SIGTERM, so docker stop / signal-forwarding
+    # would not unstick it. docker rm -f is a belt-and-braces because
+    # the --rm reaper only runs after a clean exit; if the container
+    # raced past it (or was already gone) the second call is a no-op.
+    docker kill "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+
+# --init installs tini as PID 1 inside the container so signals are
+# reaped/forwarded properly; without it mpirun would be PID 1 and
+# mishandle SIGTERM. --rm is retained so the clean-exit path still
+# removes the container (the trap above only kicks in for the
+# signal / hang paths). --label is a session-scoped key an external
+# reaper can use to find and force-kill orphaned containers without
+# touching the deterministic --name.
+docker run --rm --init $TTY_FLAG \
+    --name "$CONTAINER_NAME" \
+    --label "$LIFECYCLE_LABEL" \
     --gpus all \
     --ipc=host \
     --user "$(id -u):$(id -g)" \
@@ -35,4 +65,15 @@ exec docker run --rm $TTY_FLAG \
     -e SFINCS_PREFIX="${SFINCS_PREFIX:-}" \
     -v "$REPO_ROOT":/work \
     -w /work \
-    "$IMAGE" "$@"
+    "$IMAGE" "$@" &
+DOCKER_PID=$!
+
+# `set -e` would abort us on a non-zero wait, which is the normal way
+# of propagating the container's exit code; guard with an if so the
+# wrapper's exit status mirrors `docker run`'s.
+if wait "$DOCKER_PID"; then
+    RC=0
+else
+    RC=$?
+fi
+exit $RC
