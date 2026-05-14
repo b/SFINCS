@@ -4,16 +4,26 @@
 # Builds the CPU and GPU binaries, runs each test case under tests/cases/
 # in three configurations (CPU baseline, GPU mpirun -n 1, GPU mpirun -n 2),
 # diffs the GPU runs' zsmax against the CPU baseline using
-# tests/scripts/diff_zsmax.py, and prints a PASS/FAIL summary across every
-# (case, gpu_run) pair.
+# tests/scripts/diff_zsmax.py, and prints a PASS/FAIL/SKIPPED summary
+# across every (case, gpu_run) pair. The summary table has four columns:
+# case, config, verdict, reason — the reason column carries the skip
+# explanation for SKIPPED rows and is empty otherwise.
 #
-# Exit code: 0 iff every pair is PASS, otherwise 1.
+# Exit code: 0 iff every non-SKIPPED pair is PASS, otherwise 1. SKIPPED
+# entries never contribute to the exit code.
 #
 # Dev-only — not invoked from CI. Run from the repo root:
 #
 #     tests/run_validation.sh                  # full build + fetch + run
 #     tests/run_validation.sh --skip-build     # reuse existing binaries
 #     tests/run_validation.sh --skip-fetch     # skip per-case ./fetch.sh
+#     tests/run_validation.sh --skip <cases>   # exclude listed case dirs
+#                                              # (comma-separated, verbatim
+#                                              # match against tests/cases/*)
+#
+#     # Example: skip both snapwave cases while reusing fetched inputs.
+#     tests/run_validation.sh --skip-fetch \
+#         --skip case_snapwave,case_prod_compound_snapwave
 
 set -euo pipefail
 
@@ -33,20 +43,47 @@ THRESHOLD=1e-4
 
 SKIP_BUILD=0
 SKIP_FETCH=0
-for arg in "$@"; do
-    case "$arg" in
+SKIP_CASES_ARG=""
+while [ $# -gt 0 ]; do
+    case "$1" in
         --skip-build) SKIP_BUILD=1 ;;
         --skip-fetch) SKIP_FETCH=1 ;;
+        --skip)
+            if [ $# -lt 2 ]; then
+                echo "--skip requires a comma-separated list of case names" >&2
+                exit 2
+            fi
+            SKIP_CASES_ARG=$2
+            # Whitespace inside the value is rejected via the same
+            # unknown-argument-style error the rest of the parser uses.
+            case "$SKIP_CASES_ARG" in
+                *[[:space:]]*)
+                    echo "unknown argument: --skip $SKIP_CASES_ARG" >&2
+                    exit 2
+                    ;;
+            esac
+            shift
+            ;;
         -h|--help)
-            sed -n '2,17p' "$0"
+            sed -n '2,26p' "$0"
             exit 0
             ;;
         *)
-            echo "unknown argument: $arg" >&2
+            echo "unknown argument: $1" >&2
             exit 2
             ;;
     esac
+    shift
 done
+
+declare -A SKIP_SET=()
+if [ -n "$SKIP_CASES_ARG" ]; then
+    IFS=',' read -ra _skip_arr <<< "$SKIP_CASES_ARG"
+    for _s in "${_skip_arr[@]}"; do
+        [ -n "$_s" ] || continue
+        SKIP_SET["$_s"]=1
+    done
+fi
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -234,6 +271,12 @@ declare -A verdicts
 for case_name in "${CASES[@]}"; do
     case_dir=$CASES_DIR/$case_name
     echo
+    if [ -n "${SKIP_SET[$case_name]:-}" ]; then
+        echo "SKIPPED $case_name — excluded via --skip"
+        verdicts["$case_name:gpu_n1"]=SKIPPED
+        verdicts["$case_name:gpu_n2"]=SKIPPED
+        continue
+    fi
     echo "=== Case: $case_name ==="
 
     if [ "$SKIP_FETCH" -ne 1 ] \
@@ -275,14 +318,18 @@ done
 
 echo
 echo "=== Validation summary ==="
-printf '%-32s %-8s %s\n' "case" "config" "verdict"
-printf '%-32s %-8s %s\n' "----" "------" "-------"
+printf '%-32s %-8s %-8s %s\n' "case" "config" "verdict" "reason"
+printf '%-32s %-8s %-8s %s\n' "----" "------" "-------" "------"
 overall=0
 for case_name in "${CASES[@]}"; do
     for cfg in gpu_n1 gpu_n2; do
         v=${verdicts["$case_name:$cfg"]:-FAIL}
-        printf '%-32s %-8s %s\n' "$case_name" "$cfg" "$v"
-        if [ "$v" != PASS ]; then
+        reason=""
+        if [ "$v" = SKIPPED ]; then
+            reason="excluded via --skip"
+        fi
+        printf '%-32s %-8s %-8s %s\n' "$case_name" "$cfg" "$v" "$reason"
+        if [ "$v" != PASS ] && [ "$v" != SKIPPED ]; then
             overall=1
         fi
     done
