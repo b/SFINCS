@@ -113,6 +113,15 @@ contains
       !
       ! ------ One thread per structure-face entry ------------------------
       !
+      ! SOR-38 (Defect 3): unlike the meteo/infiltration per-step kernels,
+      ! this launch iterates by structure index, not by cell index. The
+      ! kernel reads zs(nm) / zs(nmu) — but zs is already sized
+      ! npn_local + halo_cell_count and halo-populated by Phase-4 copyin
+      ! plus the per-step halo_exchange_zs in sfincs_partition.cuf, so no
+      ! iteration-bound change is needed here. The rank-local filter
+      ! (ip > npuv_local_in -> return) ensures only rank-local edges write
+      ! q/uv; cross-rank structure edges are handled on the owning rank.
+      !
       blocks = (nrstructures_h + TPB - 1) / TPB
       !
       call k_compute_fluxes_over_structures<<<blocks, TPB>>>( &

@@ -98,37 +98,45 @@ contains
       !
       call bridge_in_cell_real8(zs, zs_h)
       !
-      blocks = (npn_local + TPB - 1) / TPB
+      ! Halo-extended iteration (SOR-38, Defect 3): every per-step cell-
+      ! rank infiltration kernel iterates over npn_local + halo_cell_count
+      ! threads so halo positions of qinfmap/netprcp/cuminf (and the
+      ! variant-specific state arrays) end the step consistent with the
+      ! owning rank. Without this, k_compute_fluxes and the per-cell
+      ! infiltration source term see asymmetric infiltration forcing at
+      ! quadtree refinement transitions straddling the partition split.
+      !
+      blocks = (npn_local + halo_cell_count + TPB - 1) / TPB
       !
       ! ------ Host dispatch on inftype --------------------------------------
       !
       if (inftype_h == 'con' .or. inftype_h == 'c2d') then
          !
-         call k_inf_constant<<<blocks, TPB>>>(dt, npn_local, &
+         call k_inf_constant<<<blocks, TPB>>>(dt, npn_local + halo_cell_count, &
             subgrid_h, store_cumulative_precipitation_h)
          istat = cudaDeviceSynchronize()
          !
       elseif (inftype_h == 'cna') then
          !
-         call k_inf_cna<<<blocks, TPB>>>(dt, npn_local, sfacinf_h, &
+         call k_inf_cna<<<blocks, TPB>>>(dt, npn_local + halo_cell_count, sfacinf_h, &
             store_cumulative_precipitation_h)
          istat = cudaDeviceSynchronize()
          !
       elseif (inftype_h == 'cnb') then
          !
-         call k_inf_cnb<<<blocks, TPB>>>(dt, npn_local, sfacinf_h, &
+         call k_inf_cnb<<<blocks, TPB>>>(dt, npn_local + halo_cell_count, sfacinf_h, &
             store_cumulative_precipitation_h)
          istat = cudaDeviceSynchronize()
          !
       elseif (inftype_h == 'gai') then
          !
-         call k_inf_gai<<<blocks, TPB>>>(dt, npn_local, &
+         call k_inf_gai<<<blocks, TPB>>>(dt, npn_local + halo_cell_count, &
             store_cumulative_precipitation_h)
          istat = cudaDeviceSynchronize()
          !
       elseif (inftype_h == 'hor') then
          !
-         call k_inf_hor<<<blocks, TPB>>>(dt, npn_local, &
+         call k_inf_hor<<<blocks, TPB>>>(dt, npn_local + halo_cell_count, &
             subgrid_h, crsgeo_h, horton_kr_kd_h, &
             store_cumulative_precipitation_h)
          istat = cudaDeviceSynchronize()
