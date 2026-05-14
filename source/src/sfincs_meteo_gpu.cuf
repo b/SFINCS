@@ -130,10 +130,18 @@ contains
          !
          ! ------ Per-cell time interpolation kernel -------------------------
          !
-         blocks = (npn_local + TPB - 1) / TPB
+         ! Iterate over rank-local cells PLUS halo positions so that the
+         ! halo entries of cell-rank shadows (tauwu/tauwv, patm, prcp,
+         ! netprcp, cumprcp, windu/windv, windmax) end the step consistent
+         ! with the owning rank's value. Defect 3 (SOR-38): k_compute_fluxes
+         ! and the infiltration source term read these halo positions; if
+         ! they stay at the initial-gather value the meteo forcing is
+         ! asymmetric across the partition split.
+         !
+         blocks = (npn_local + halo_cell_count + TPB - 1) / TPB
          !
          call k_meteo_time_interp<<<blocks, TPB>>>( &
-            dt, npn_local, &
+            dt, npn_local + halo_cell_count, &
             twfact, onemintwfact, smfac, oneminsmfac, &
             do_spinup, gapres_h, &
             wind_h, patmos_h, precip_h, subgrid_h, &
@@ -246,9 +254,14 @@ contains
             wu_uni = vmag * cos(vdir)
             wv_uni = vmag * sin(vdir)
             !
-            blocks = (npn_local + TPB - 1) / TPB
+            ! Halo-extended iteration (SOR-38, Defect 3): refresh halo
+            ! positions of tauwu/tauwv (and windu/windv when store_wind)
+            ! so non-owning ranks see the same uniform-wind value at halo
+            ! cells as the owning rank.
             !
-            call k_wind_uniform<<<blocks, TPB>>>(npn_local, &
+            blocks = (npn_local + halo_cell_count + TPB - 1) / TPB
+            !
+            call k_wind_uniform<<<blocks, TPB>>>(npn_local + halo_cell_count, &
                real(twu, kind=4), real(twv, kind=4), &
                wu_uni, wv_uni, store_wind_h)
             !
@@ -309,9 +322,13 @@ contains
       ! value (this kernel's RMW; bridge-OUT publishes to host but no host
       ! writer mutates cumprcp_h between steps).
       !
-      blocks = (npn_local + TPB - 1) / TPB
+      ! Halo-extended iteration (SOR-38, Defect 3): refresh halo positions
+      ! of prcp/netprcp/cumprcp so non-owning ranks see the same uniform
+      ! precipitation value at halo cells as the owning rank.
       !
-      call k_precip_uniform<<<blocks, TPB>>>(npn_local, dt, ptmp, &
+      blocks = (npn_local + halo_cell_count + TPB - 1) / TPB
+      !
+      call k_precip_uniform<<<blocks, TPB>>>(npn_local + halo_cell_count, dt, ptmp, &
          store_cumulative_precipitation_h)
       !
       istat = cudaDeviceSynchronize()
@@ -636,11 +653,14 @@ contains
          !
          istat = cudaDeviceSynchronize()
          !
-         ! Spatial: bilinear interpolation of amp_patm01 onto SFINCS cells
+         ! Spatial: bilinear interpolation of amp_patm01 onto SFINCS cells.
+         ! Halo-extended iteration (SOR-38, Defect 3): refresh halo
+         ! positions of patm0/patm1 so the time-interp kernel reads a
+         ! consistent value at halo cells on every rank.
          !
-         blocks = (npn_local + TPB - 1) / TPB
+         blocks = (npn_local + halo_cell_count + TPB - 1) / TPB
          !
-         call k_amp_spatial<<<blocks, TPB>>>(itw, npn_local, &
+         call k_amp_spatial<<<blocks, TPB>>>(itw, npn_local + halo_cell_count, &
             amp_nrows_h, amp_ncols_h, &
             amp_dx_h, amp_dy_h, yul, xll, &
             real(gapres_h, kind=4))
@@ -851,11 +871,14 @@ contains
          !
          istat = cudaDeviceSynchronize()
          !
-         ! Spatial: bilinear interpolation of ampr_pr01 onto SFINCS cells
+         ! Spatial: bilinear interpolation of ampr_pr01 onto SFINCS cells.
+         ! Halo-extended iteration (SOR-38, Defect 3): refresh halo
+         ! positions of prcp0/prcp1 so the time-interp kernel reads a
+         ! consistent value at halo cells on every rank.
          !
-         blocks = (npn_local + TPB - 1) / TPB
+         blocks = (npn_local + halo_cell_count + TPB - 1) / TPB
          !
-         call k_ampr_spatial<<<blocks, TPB>>>(itw, npn_local, &
+         call k_ampr_spatial<<<blocks, TPB>>>(itw, npn_local + halo_cell_count, &
             ampr_nrows_h, ampr_ncols_h, &
             ampr_dx_h, ampr_dy_h, yul, xll)
          !
@@ -1065,11 +1088,15 @@ contains
          istat = cudaDeviceSynchronize()
          !
          ! Spatial: bilinear interpolation of amuv_wu01/amuv_wv01 onto
-         ! SFINCS cells, then cd-based wind-stress conversion.
+         ! SFINCS cells, then cd-based wind-stress conversion. Halo-
+         ! extended iteration (SOR-38, Defect 3): refresh halo positions
+         ! of tauwu0/tauwu1/tauwv0/tauwv1 (and windu0/windu1/windv0/windv1
+         ! when store_wind) so the time-interp kernel reads a consistent
+         ! value at halo cells on every rank.
          !
-         blocks = (npn_local + TPB - 1) / TPB
+         blocks = (npn_local + halo_cell_count + TPB - 1) / TPB
          !
-         call k_amuv_spatial<<<blocks, TPB>>>(itw, npn_local, &
+         call k_amuv_spatial<<<blocks, TPB>>>(itw, npn_local + halo_cell_count, &
             amuv_nrows_h, amuv_ncols_h, &
             amuv_dx_h, amuv_dy_h, yul, xll, &
             waveage_h, radstr_h, store_wind_h, &
@@ -1382,10 +1409,17 @@ contains
          istat = cudaDeviceSynchronize()
          !
          ! Spatial kernel: per-cell spiderweb interp + merge blend.
+         ! Halo-extended iteration (SOR-38, Defect 3): refresh halo
+         ! positions of tauwu0/tauwu1/tauwv0/tauwv1/patm0/patm1/prcp0/prcp1
+         ! (and windu0/windu1/windv0/windv1 when store_wind) so the time-
+         ! interp kernel reads a consistent value at halo cells on every
+         ! rank. case_production is the only validation case exercising
+         ! the spw+ampr+qinf combination that hits this defect (SOR-35
+         ! PR #93 motivation).
          !
-         blocks = (npn_local + TPB - 1) / TPB
+         blocks = (npn_local + halo_cell_count + TPB - 1) / TPB
          !
-         call k_spw_spatial<<<blocks, TPB>>>(itw, npn_local, &
+         call k_spw_spatial<<<blocks, TPB>>>(itw, npn_local + halo_cell_count, &
             spw_xe01, spw_ye01, tspinup_fac, &
             spw_nrows_h, spw_ncols_h, &
             spw_radius_h, spw_merge_frac_h, &
