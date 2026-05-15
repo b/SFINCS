@@ -263,14 +263,16 @@ The following are explicitly **not** covered by this harness:
 ## Performance benchmarking
 
 `tests/run_benchmarks.sh` is the companion harness that measures
-wall-time and peak resident memory across three SFINCS builds, on the
-same test cases the validation harness uses. Run from the repo root:
+wall-time and peak resident memory across five SFINCS run
+configurations, on every case under `tests/cases/`. Run from the repo
+root:
 
 ```sh
 tests/run_benchmarks.sh
 ```
 
-It builds three configurations into separate prefixes:
+It builds three SFINCS binaries into separate prefixes and runs each
+case in five configurations (one CPU, two single-GPU, two dual-GPU):
 
 - **`cpu`** — `source/install_cpu/bin/sfincs`, gfortran CPU baseline.
   By default the harness lets OpenMP use **all available cores**
@@ -282,19 +284,33 @@ It builds three configurations into separate prefixes:
   validation harness (`tests/run_validation.sh`) keeps
   `OMP_NUM_THREADS=1` on purpose; that one cares about FP determinism,
   not throughput.
-- **`gpu_kieee`** — `source/install_cuda_kieee/bin/sfincs`, nvfortran with
-  `-Kieee` (the default; matches CPU floating-point semantics).
-- **`gpu_fastmath`** — `source/install_cuda_fastmath/bin/sfincs`,
-  nvfortran with `--enable-fast-math` (drops `-Kieee`, permitting FMA
-  contraction, denormal flushing, reciprocal approximations, and
-  reassociation).
+- **`gpu_kieee`** — `source/install_cuda_kieee/bin/sfincs` under
+  `mpirun -n 1` with `CUDA_VISIBLE_DEVICES=0`, nvfortran with `-Kieee`
+  (the default; matches CPU floating-point semantics). Single-GPU
+  upper bound.
+- **`gpu_fastmath`** — `source/install_cuda_fastmath/bin/sfincs` under
+  `mpirun -n 1` with `CUDA_VISIBLE_DEVICES=0`, nvfortran with
+  `--enable-fast-math` (drops `-Kieee`, permitting FMA contraction,
+  denormal flushing, reciprocal approximations, and reassociation).
+  Single-GPU upper bound.
+- **`gpu_n2_kieee`** — same `install_cuda_kieee/bin/sfincs` binary as
+  `gpu_kieee`, run under `mpirun -n 2` with **no `CUDA_VISIBLE_DEVICES`
+  cap**. MPI's default GPU-assignment policy round-robins ranks across
+  visible devices (rank 0 → GPU 0, rank 1 → GPU 1 on the 2× A6000 dev
+  box), so the run exercises the dual-GPU `gather_to_rank0_real4` /
+  Phase-4 device-shadow path. Dual-GPU scaling figure for IEEE-strict.
+- **`gpu_n2_fastmath`** — same `install_cuda_fastmath/bin/sfincs`
+  binary as `gpu_fastmath`, run under `mpirun -n 2` with no
+  `CUDA_VISIBLE_DEVICES` cap (same round-robin policy as
+  `gpu_n2_kieee`). Dual-GPU scaling figure for fast-math.
 
-Each build's binary is run on every case under `tests/cases/` (one run
-per `(case, build)` pair) under `tests/runs_bench/<case>/<config>/`,
+Each `(case, config)` pair runs under `tests/runs_bench/<case>/<config>/`,
 wall-clock-timed via `/usr/bin/time -v`. Each GPU configuration is run
 twice and only the second timing is recorded so first-run JIT / driver
 init / page-cache costs do not pollute the steady-state measurement.
-GPU runs are pinned to GPU 0 via `CUDA_VISIBLE_DEVICES=0`.
+The two `gpu_n2_*` configurations require a host with at least two
+GPUs visible to Docker (the validation harness's `mpirun -n 2` step
+has the same requirement).
 
 After all runs, each GPU run's `zsmax` is diffed against the CPU
 baseline using `tests/scripts/diff_zsmax.py` against a loose threshold
@@ -310,16 +326,21 @@ Output is two-fold:
   grep, in the spirit of `run_validation.sh`'s `RESULT case=...` line),
   followed by a fixed-width summary table.
 - **`tests/runs_bench/summary.json`.** Machine-readable summary with one
-  object per `(case, build)` pair containing: `case`, `config`,
-  `wall_clock_seconds`, `peak_memory_mb`, `max_abs_diff_zsmax` (`null`
-  for `cpu`), `max_zsmax_ref` (`null` for `cpu`), `ratio_vs_ref` (`null`
-  for `cpu`), `verdict` (`PASS` / `FAIL` / `ERROR`),
-  `speedup_vs_cpu` (`null` for `cpu`, else `cpu_wall / config_wall`),
-  and `cpu_threads` (the OpenMP thread count used by the CPU baseline
-  on `cpu` rows; `null` on GPU rows). The `speedup_vs_cpu` figures on
-  GPU rows are therefore "GPU vs CPU at `cpu_threads` threads"; an
-  operator chasing a single number across runs should always read it
-  alongside its accompanying `(case, cpu)` row.
+  object per `(case, config)` pair (five rows per case: `cpu`,
+  `gpu_kieee`, `gpu_fastmath`, `gpu_n2_kieee`, `gpu_n2_fastmath`)
+  containing: `case`, `config`, `wall_clock_seconds`, `peak_memory_mb`,
+  `max_abs_diff_zsmax` (`null` for `cpu`), `max_zsmax_ref` (`null` for
+  `cpu`), `ratio_vs_ref` (`null` for `cpu`), `verdict` (`PASS` / `FAIL`
+  / `ERROR`), `speedup_vs_cpu` (`null` for `cpu`, else
+  `cpu_wall / config_wall`), and `cpu_threads` (the OpenMP thread count
+  used by the CPU baseline on `cpu` rows; `null` on GPU rows). The
+  `speedup_vs_cpu` figures on GPU rows are therefore "GPU vs CPU at
+  `cpu_threads` threads"; an operator chasing a single number across
+  runs should always read it alongside its accompanying `(case, cpu)`
+  row. The schema is additive: the two `gpu_n2_*` rows sit alongside
+  the existing rows under the same keys, so downstream consumers that
+  filter on `config == "gpu_kieee"` / `"gpu_fastmath"` keep working
+  unchanged.
 
 Exit code: 0 iff every `(case, build)` run completed without error AND
 every GPU run's `ratio_vs_ref < 1e-3`. Otherwise 1.
