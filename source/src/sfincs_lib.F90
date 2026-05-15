@@ -709,6 +709,21 @@ module sfincs_lib
          !
          call halo_exchange_zsderv()
          !
+         ! SOR-42 cross-rank halo exchange of the subgrid cell volume
+         ! z_volume. The continuity / discharges / source-term updates
+         ! write z_volume at owned cells only; the next step's
+         ! k_compute_fluxes reads z_volume(nm) and z_volume(nmu) for the
+         ! directional wet/dry flux clamp at owned edges spanning the
+         ! partition boundary, and the SOR-38 halo-extended infiltration
+         ! kernels (k_inf_constant, k_inf_hor) read z_volume at halo
+         ! cells too. Without the exchange the halo positions stay at
+         ! their Phase-4 init value and rank N's wet/dry view at halo
+         ! cells diverges from the owning rank's view as soon as the
+         ! cells start filling/emptying. No-op when mpi_size == 1 or
+         ! when z_volume is not allocated (non-subgrid build).
+         !
+         call halo_exchange_z_volume()
+         !
          ! SOR-10 env-gated halo diagnostic. No-op unless SFINCS_DEBUG_HALO_DUMP
          ! is set to a positive integer N; then every Nth call dumps suspect
          ! device arrays (z_volume, zsderv, patm, tauwu, tauwv, fcorio2d,

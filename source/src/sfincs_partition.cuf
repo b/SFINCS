@@ -167,6 +167,23 @@ module sfincs_partition
    !
    integer, parameter :: HALO_TAG_ZSDERV = 7090
    !
+   ! SOR-42: tag for the z_volume halo exchange. z_volume is written by
+   ! the continuity / subgrid kernels at owned cells only and then read
+   ! by k_compute_fluxes (the wet/dry directional flux clamp at owned
+   ! edges spanning the partition split: `if (z_volume(nm) < 0.0)
+   ! q(ip) = min(q(ip), 0.0)` etc.) and by k_inf_constant / k_inf_hor
+   ! (the qinfmap dry-cell zero-out and the Horton water-depth lookup
+   ! at halo cells under the SOR-38 halo-extended iteration). Without
+   ! the exchange the halo positions stay at whatever value Phase-4
+   ! init copied in once at startup, so the cross-rank wet/dry view
+   ! diverges from the single-rank view as soon as cells start
+   ! filling/emptying. The SOR-10 env-gated diagnostic confirms the
+   ! divergence (rank 0 owned z_volume(1453) = 5.46e+4 vs rank 1 halo
+   ! z_volume(1453) = 4.59e+4 at step 11540 in case_production:gpu_n2,
+   ! analogous mismatches every step in the case_production hotspot).
+   !
+   integer, parameter :: HALO_TAG_Z_VOLUME = 7091
+   !
    ! CUDA-aware MPI confirmation. HPC-X / UCX bundled in NVHPC SDK 25.9
    ! provides MPIX_Query_cuda_support; declare an explicit C interface so
    ! the call doesn't depend on whether the host MPI's `mpi_ext` Fortran
@@ -182,6 +199,7 @@ module sfincs_partition
    public  :: partition_and_localize, device_finalize, &
               halo_exchange_zs, halo_exchange_q_uv, &
               halo_exchange_zsderv, &
+              halo_exchange_z_volume, &
               device_to_host_for_output, &
               allocate_structure_device_shadows, &
               refresh_kcuv_device_shadow, &
@@ -3001,6 +3019,115 @@ contains
       deallocate(request_recv, request_send, statuses_recv, statuses_send)
       !
    end subroutine halo_exchange_zsderv
+   !
+   ! ===================================================================
+   ! SOR-42 cross-rank halo exchange of z_volume (subgrid cell volume).
+   !
+   ! Structural defect this closes (identified by the SOR-10 env-gated
+   ! diagnostic at the top of dump_halo_diagnostic, confirmed on the
+   ! SOR-35-rebased build of case_production:gpu_n2):
+   !
+   !   * Writer: k_subgrid_main / k_compute_water_levels in
+   !     sfincs_continuity_gpu.cuf write z_volume(nm) only at OWNED cell
+   !     positions (the per-step continuity update integrates fluxes
+   !     into the subgrid volume; discharges and source terms also write
+   !     z_volume at owned cells only). Halo slots [npn_local+1,
+   !     npn_total] are populated once at Phase-4 copyin from the host
+   !     z_volume_h init (zero unless the case carries a non-zero zsini
+   !     volume), then never refreshed.
+   !
+   !   * Readers: k_compute_fluxes in sfincs_momentum_gpu.cuf reads
+   !     `z_volume(nm)` and `z_volume(nmu)` for the directional wet/dry
+   !     flux clamp on every owned edge whose endpoints (nm, nmu) span
+   !     the partition boundary -- nm or nmu is then a halo cell. The
+   !     SOR-38 halo-extended infiltration kernels (k_inf_constant,
+   !     k_inf_hor) also read z_volume at halo cells for the dry-cell
+   !     zero-out and the Horton water-depth lookup.
+   !
+   !   * Diagnostic finding: with the SOR-35 PR #93 (halo descriptor
+   !     symmetry + post-halo k_combined_uv) merged in, the env-gated
+   !     dump shows z_volume halo on rank N diverging from the owning
+   !     rank M's z_volume by up to 8.67e+3 m^3 at the first dumped step
+   !     in the case_production hotspot 322900..323400 x 5043800..5044700
+   !     (rank 0 owned z_volume(1453) = 5.46e+4 vs rank 1 halo
+   !     z_volume(1453) = 4.59e+4). zs / patm / tauwu / tauwv / zsderv
+   !     all already stay symmetric across owned/halo at the same step.
+   !
+   !   * Why the SOR-708 halo_exchange_zs / SOR-709 halo_exchange_q_uv
+   !     chain does not cover this: those exchanges propagate zs / q /
+   !     uv through halos but never touch z_volume -- z_volume is a
+   !     per-step derived quantity written by the continuity update,
+   !     not the momentum update.
+   !
+   ! Modeled on halo_exchange_zs: same single-array exchange pattern,
+   ! distinct MPI tag (HALO_TAG_Z_VOLUME) so concurrent exchanges cannot
+   ! collide. z_volume is real*8 on host and device; the wire format is
+   ! real*4 (matching halo_exchange_zs) so the halo_send_buf_zs /
+   ! halo_recv_buf_zs buffers can be reused without allocating a wider
+   ! pair. The downcast loses ~5e-3 m^3 of precision per cell at the
+   ! 5e+4 m^3 z_volume seen in case_production, equivalent to ~1e-7 m of
+   ! water-depth precision after the subgrid table lookup -- three
+   ! orders of magnitude below the 1e-4 PASS threshold.
+   !
+   ! No-op for mpi_size == 1 (halo_n_neighbors == 0) and for builds
+   ! without subgrid (`if (allocated(z_volume))` guard); the cost on
+   ! multi-rank subgrid builds is one gather kernel + one MPI_Isend/Irecv
+   ! pair per neighbor per step, identical to halo_exchange_zs.
+   ! ===================================================================
+   subroutine halo_exchange_z_volume()
+      !
+      integer :: nbr_slot, i, n
+      integer :: ierr, istat
+      integer, allocatable :: request_recv(:), request_send(:)
+      integer, allocatable :: statuses_recv(:,:), statuses_send(:,:)
+      !
+      if (halo_n_neighbors == 0) return
+      if (.not. allocated(z_volume)) return
+      !
+      allocate(request_recv(halo_n_neighbors))
+      allocate(request_send(halo_n_neighbors))
+      allocate(statuses_recv(MPI_STATUS_SIZE, halo_n_neighbors))
+      allocate(statuses_send(MPI_STATUS_SIZE, halo_n_neighbors))
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
+                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_Z_VOLUME, &
+                        MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
+      end do
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         n = halo_send_count(nbr_slot)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            halo_send_buf_zs(i, nbr_slot) = real( z_volume( halo_send_local_idx(i, nbr_slot) ), kind=4 )
+         end do
+      end do
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
+                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_Z_VOLUME, &
+                        MPI_COMM_WORLD, request_send(nbr_slot), ierr)
+      end do
+      !
+      call MPI_Waitall(halo_n_neighbors, request_recv, statuses_recv, ierr)
+      !
+      do nbr_slot = 1, halo_n_neighbors
+         n = halo_recv_count(nbr_slot)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            z_volume( halo_recv_local_idx(i, nbr_slot) ) = real( halo_recv_buf_zs(i, nbr_slot), kind=8 )
+         end do
+      end do
+      !
+      istat = cudaDeviceSynchronize()
+      !
+      call MPI_Waitall(halo_n_neighbors, request_send, statuses_send, ierr)
+      !
+      deallocate(request_recv, request_send, statuses_recv, statuses_send)
+      !
+   end subroutine halo_exchange_z_volume
    !
    ! ===================================================================
    ! SOR-10 env-gated halo diagnostic dump.
