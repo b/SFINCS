@@ -37,12 +37,14 @@ module sfincs_momentum
       bridge_in_cell_real4, bridge_in_cell_real8, bridge_in_edge_real4, &
       bridge_out_cell_real4, bridge_out_cell_real8, &
       bridge_out_cell_int1, bridge_out_cell_int4, &
-      bridge_out_edge_real4, bridge_out_edge_int1
+      bridge_out_edge_real4, bridge_out_edge_int1, &
+      bridge_out_edge_tail_real4
    !
    implicit none
    !
    private
    public :: compute_fluxes
+   public :: compute_combined_uv
    !
    integer, parameter :: TPB = 128   ! threads per block
    !
@@ -64,7 +66,6 @@ contains
       !
       use sfincs_data, only: &
          min_dt_h => min_dt, &
-         ncuv_h => ncuv, &
          dtmax_h => dtmax, &
          theta_h => theta, &
          g_h => g, &
@@ -162,13 +163,16 @@ contains
       !
       istat = cudaDeviceSynchronize()
       !
-      ! ------ Combined-uv averaging post-kernel ---------------------------
-      !
-      if (ncuv_h > 0) then
-         blocks = (ncuv_h + TPB - 1) / TPB
-         call k_combined_uv<<<blocks, TPB>>>(ncuv_h)
-         istat = cudaDeviceSynchronize()
-      endif
+      ! ------ Combined-uv averaging is run AFTER halo_exchange_q_uv -------
+      ! Authority strategy (c) for k_combined_uv lives in
+      ! compute_combined_uv below; see the comment block above the kernel
+      ! definition (k_combined_uv) for the rationale. Compute_fluxes only
+      ! writes q / uv in the OWNED range here, so the combined-UV slot
+      ! cannot be averaged until peer-rank owned q values have crossed
+      ! the rank boundary via halo_exchange_q_uv. Until then the host
+      ! aliases for the combined-UV tail carry the previous step's
+      ! average, which is fine because nothing reads the tail between
+      ! return and the next compute_combined_uv call (SOR-35).
       !
       ! ------ Copy-OUT: device -> host for WRITE set ----------------------
       !
@@ -189,6 +193,53 @@ contains
       tloop = tloop + 1.0 * (count1 - count0) / count_rate
       !
    end subroutine compute_fluxes
+   !
+   ! ===================================================================
+   ! Combined-uv averaging (SOR-35).
+   ! Called from sfincs_lib.F90 AFTER halo_exchange_q_uv and AFTER any
+   ! q-writing step (compute_fluxes, structures, nonhydrostatic) so the
+   ! kernel reads consistent q / uv at child edges across ranks. See
+   ! the comment block above k_combined_uv for the authority rationale.
+   ! ===================================================================
+   subroutine compute_combined_uv(tloop)
+      !
+      use sfincs_data, only: &
+         ncuv_h => ncuv, &
+         q_h => q, uv_h => uv
+      !
+      implicit none
+      !
+      real :: tloop
+      !
+      integer :: blocks, istat
+      integer :: count0, count1, count_rate, count_max
+      !
+      if (ncuv_h <= 0) return
+      !
+      call system_clock(count0, count_rate, count_max)
+      !
+      blocks = (ncuv_h + TPB - 1) / TPB
+      call k_combined_uv<<<blocks, TPB>>>(ncuv_h)
+      istat = cudaDeviceSynchronize()
+      !
+      ! Refresh the host alias for the combined-UV TAIL of q / uv only
+      ! so BMI getters, output gather, and the next bridge-IN see the
+      ! averaged value at the wide-edge tail positions. Use the
+      ! tail-only scatter (bridge_out_edge_tail_real4): a full
+      ! bridge_out_edge_real4 would also rewrite the owned slice and
+      ! clobber any structures / nonhydrostatic edits to host q_h /
+      ! uv_h that occurred between compute_fluxes and this call.
+      ! The owned slice was already bridged out at the end of
+      ! compute_fluxes, and is authoritative on host after any later
+      ! structures / nonhydrostatic passes.
+      !
+      call bridge_out_edge_tail_real4(q_h,  q)
+      call bridge_out_edge_tail_real4(uv_h, uv)
+      !
+      call system_clock(count1, count_rate, count_max)
+      tloop = tloop + 1.0 * (count1 - count0) / count_rate
+      !
+   end subroutine compute_combined_uv
    !
    ! ===================================================================
    !                              KERNELS
@@ -640,6 +691,28 @@ contains
    end subroutine k_compute_fluxes
    !
    ! Combined-uv averaging kernel mirroring sfincs_momentum.f90:737-756.
+   !
+   ! Authority strategy (SOR-35): strategy (c) — every rank runs
+   ! k_combined_uv against its own halo-extended view of q and uv.
+   !
+   ! Rationale. Each combined-UV slot icuv is the arithmetic mean of
+   ! two child edges (cuv_index_uv1, cuv_index_uv2) at a coarse-to-fine
+   ! refinement boundary. When a child edge straddles a rank boundary,
+   ! the rank that does NOT own it reads its halo copy. The SOR-35
+   ! halo-descriptor fix in build_halo_descriptors makes the halo
+   ! exchange of q / uv deliver IDENTICAL values for the same global
+   ! iuv on every rank (the per-slot send/recv ordering is now
+   ! canonical-global-iuv-ascending on both sides). Because
+   ! compute_combined_uv is invoked from sfincs_lib.F90 AFTER
+   ! halo_exchange_q_uv, every rank reads consistent q / uv at every
+   ! child edge — owned or halo — and produces the same averaged
+   ! value at every combined-UV slot. No broadcast is required.
+   !
+   ! Strategy (a) (rank 0 broadcasts) and (b) (per-slot ownership rule)
+   ! were rejected because (c) is the cheapest correct option: the only
+   ! per-step communication is the halo_exchange_q_uv that the rest of
+   ! the solver already needs. Strategies (a) and (b) would add a
+   ! second MPI round-trip after every compute_fluxes call.
    !
    attributes(global) subroutine k_combined_uv(ncuv_in)
       !
