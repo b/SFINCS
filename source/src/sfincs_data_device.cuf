@@ -147,6 +147,11 @@ module sfincs_data_device
    real*4,    device, dimension(:), allocatable :: patm1
    real*4,    device, dimension(:), allocatable :: patmb
    integer*4, device, dimension(:), allocatable :: nmindbnd
+   ! nm index of the kcs==1 internal point feeding each Neumann (kcs==6)
+   ! grid boundary point. Entries are renumbered to local cell indices by
+   ! renumber_to_local_cell (same treatment as nmindbnd); read on-device
+   ! by k_update_neumann_zs to apply the Neumann dzs/dx=0 lateral update.
+   integer*4, device, dimension(:), allocatable :: nmi_gbp
    !
    ! Precipitation & external flux
    !

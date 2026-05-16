@@ -72,7 +72,7 @@ module sfincs_partition
       windu0_h => windu0, windv0_h => windv0, &
       windu1_h => windu1, windv1_h => windv1, windmax_h => windmax, &
       patm_h => patm, patm0_h => patm0, patm1_h => patm1, patmb_h => patmb, &
-      nmindbnd_h => nmindbnd, &
+      nmindbnd_h => nmindbnd, nmi_gbp_h => nmi_gbp, &
       prcp_h => prcp, prcp0_h => prcp0, prcp1_h => prcp1, &
       cumprcp_h => cumprcp, netprcp_h => netprcp, qext_h => qext, &
       dxminv_h => dxminv, dxrinv_h => dxrinv, dyrinv_h => dyrinv, &
@@ -1165,6 +1165,13 @@ contains
       if (allocated(nmindbnd_h)) then
          allocate(nmindbnd, mold=nmindbnd_h)
          call renumber_to_local_cell(nmindbnd, nmindbnd_h)
+      end if
+      ! nmi_gbp is allocated host-side only when there are Neumann
+      ! (kcs==6) boundaries (neumann_boundaries_in_mask). Its entries are
+      ! kcs==1 internal-cell indices, renumbered to local like nmindbnd.
+      if (allocated(nmi_gbp_h)) then
+         allocate(nmi_gbp, mold=nmi_gbp_h)
+         call renumber_to_local_cell(nmi_gbp, nmi_gbp_h)
       end if
       if (allocated(zsb_h))      then; allocate(zsb,      mold=zsb_h);      zsb      = zsb_h;      end if
       if (allocated(zsb0_h))     then; allocate(zsb0,     mold=zsb0_h);     zsb0     = zsb0_h;     end if
@@ -2876,6 +2883,7 @@ contains
       if (allocated(patm1))   deallocate(patm1)
       if (allocated(patmb))   deallocate(patmb)
       if (allocated(nmindbnd)) deallocate(nmindbnd)
+      if (allocated(nmi_gbp)) deallocate(nmi_gbp)
       if (allocated(prcp))    deallocate(prcp)
       if (allocated(prcp0))   deallocate(prcp0)
       if (allocated(prcp1))   deallocate(prcp1)
