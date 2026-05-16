@@ -179,6 +179,50 @@ run_cpu() {
     echo "    cpu exit=$rc log=$run_dir/sfincs.log"
 }
 
+# Assert the container's mpirun resolves to the CUDA-aware HPC-X build.
+# The default container PATH selects a non-CUDA-aware OpenMPI at
+# comm_libs/mpi/bin/mpirun; running halo exchanges through it silently
+# stages every device-pointer Isend through pinned host memory, saturating
+# one CPU thread and stalling the GPU. We probe ompi_info inside the
+# container (via the same wrapper the harness uses for mpirun) and bail
+# out with a clear actionable message before launching any simulation.
+#
+# Output shape we accept: HPC-X exposes the runtime CUDA flags via their
+# mpi_* synonyms, so each matching parameter line looks like
+#     MCA mpi base: parameter "mpi_built_with_cuda_support"
+#         (current value: "true", ...  synonym of: opal_built_with_cuda_support)
+# We grep on the opal_* names (present in the synonym annotation) and
+# require the same line to carry `current value: "true"`. awk lets us
+# express "both substrings on the same line" without committing to an
+# order-sensitive regex.
+assert_cuda_aware_mpi() {
+    local out rc
+    set +e
+    out=$("$GPU_WRAPPER" sh -c \
+        "ompi_info --param mpi all --level 9 | grep -E 'opal_built_with_cuda_support|opal_cuda_support'" \
+        2>&1)
+    rc=$?
+    set -e
+    if [ "$rc" -ne 0 ]; then
+        echo "CUDA-aware MPI not detected — check container PATH" >&2
+        echo "ompi_info invocation failed with rc=$rc; output follows:" >&2
+        printf '%s\n' "$out" >&2
+        exit 1
+    fi
+    local built_ok cuda_ok
+    built_ok=$(printf '%s\n' "$out" \
+        | awk '/opal_built_with_cuda_support/ && /current value: "true"/ {n++} END {print n+0}')
+    cuda_ok=$(printf '%s\n' "$out" \
+        | awk '/opal_cuda_support/ && /current value: "true"/ {n++} END {print n+0}')
+    if [ "$built_ok" -lt 1 ] || [ "$cuda_ok" -lt 1 ]; then
+        echo "CUDA-aware MPI not detected — check container PATH" >&2
+        echo "expected opal_built_with_cuda_support=true and opal_cuda_support=true; got:" >&2
+        printf '%s\n' "$out" >&2
+        exit 1
+    fi
+    echo "    CUDA-aware MPI: opal_built_with_cuda_support=true, opal_cuda_support=true"
+}
+
 # Run the GPU binary at $nranks ranks in tests/runs/<case>/gpu_n<nranks>/.
 # The wrapper sets container cwd to /work; we pass --wdir to mpirun so the
 # sfincs processes start in the run directory and read sfincs.inp from there.
@@ -254,6 +298,9 @@ if [ "$SKIP_BUILD" -ne 1 ]; then
 else
     echo "=== Skipping build (--skip-build) ==="
 fi
+
+echo "=== Verifying CUDA-aware MPI ==="
+assert_cuda_aware_mpi
 
 CASES=()
 for d in "$CASES_DIR"/*/; do

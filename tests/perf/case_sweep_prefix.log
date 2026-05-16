@@ -1,0 +1,21 @@
+SOR-52 pre-fix vs post-fix case-sweep at gpu_n2
+Generated: 2026-05-16T10:25:57Z
+
+case                                 pre-fix    post-fix   pre-vs-post max_abs_diff   verdict
+----                                 -------    --------   -------------------------  -------
+case_discharges                      rc=0       PASS       0.0                        PASS
+case_infiltration                    rc=0       PASS       0.0                        PASS
+case_meteo                           rc=0       PASS       0.0                        PASS
+case_prod_compound_snapwave          rc=0       PASS       0.0                        PASS
+case_prod_quadtree_subgrid_tide      -          MISSING    -                          SKIP (no post-fix map)
+case_prod_regular_tide               -          MISSING    -                          SKIP (no post-fix map)
+case_prod_riverine                   -          MISSING    -                          SKIP (no post-fix map)
+case_prod_storm_amuv                 -          MISSING    -                          SKIP (no post-fix map)
+case_production                      -          -          -                          SKIP (no sfincs.inp)
+case_quadtree_tide                   rc=0       PASS       0.0                        PASS
+case_regular                         rc=0       PASS       0.0                        PASS
+case_snapwave                        -          MISSING    -                          SKIP (no post-fix map)
+case_structures                      rc=0       PASS       0.0                        PASS
+case_wavemaker                       rc=0       PASS       0.0                        PASS
+
+PASS=8 FAIL=0 SKIP=6

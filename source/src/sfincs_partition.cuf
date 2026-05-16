@@ -14,6 +14,7 @@ module sfincs_partition
    use cudafor
    use mpi
    use sfincs_data_device
+   use sfincs_log, only: write_log
    !
    ! Host-side counterparts. The catalog mirrors source/src/sfincs_openacc.f90
    ! lines 15-39. NOTE: the architect mandate refers to a host-side scalar
@@ -269,9 +270,19 @@ contains
       call mpi_comm_size(MPI_COMM_WORLD, mpi_size, ierr)
       !
       ! --- Phase 1b: CUDA-aware MPI confirmation ----------------------------
-      ! Halo exchange passes attributes(device) buffers directly to MPI; this
-      ! requires GPUDirect-capable MPI (HPC-X / UCX). Probe once on rank 0,
-      ! broadcast, abort everywhere if missing so we never hang in Isend.
+      ! Halo exchange passes attributes(device) buffers directly to MPI; on
+      ! a non-CUDA-aware MPI those device pointers are silently staged
+      ! through pinned host memory via UVA page faults, saturating one CPU
+      ! thread and stalling the GPU on every exchange (the failure mode is
+      ! perf, not correctness, so it never trips a wire-level assertion).
+      ! Probe MPIX_Query_cuda_support on rank 0, broadcast, log the
+      ! verdict, and warn loudly on multi-rank when the answer is no. For
+      ! single-rank GPU the halo exchanges early-return on
+      ! halo_n_neighbors == 0 so CUDA-aware MPI is not actually consumed;
+      ! we log informationally there too. The primary cure is the wrapper
+      ! / Dockerfile PATH fix that puts HPC-X 2.24's mpirun ahead of the
+      ! non-CUDA-aware OpenMPI at comm_libs/mpi/bin/mpirun; the warning is
+      ! the last-resort signal for the operator who bypassed the wrapper.
       !
       block
          integer :: cuda_aware
@@ -280,8 +291,17 @@ contains
             cuda_aware = MPIX_Query_cuda_support()
          end if
          call mpi_bcast(cuda_aware, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
-         if (cuda_aware /= 1) then
-            error stop 'CUDA-aware MPI required for halo exchange; HPC-X with GPUDirect needed'
+         if (mpi_rank == 0) then
+            if (cuda_aware == 1) then
+               call write_log('CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)', 1)
+            else if (mpi_size > 1) then
+               call write_log('WARNING: MPI is not CUDA-aware; expect severe perf '// &
+                              'degradation (1 CPU thread saturated, GPU stalled on '// &
+                              'halo exchanges). Use source/build_scripts/run_gpu_container.sh '// &
+                              'or set PATH/LD_LIBRARY_PATH to HPC-X 2.24 before mpirun.', 1)
+            else
+               call write_log('CUDA-aware MPI: no (single-rank GPU, halo exchange skipped)', 1)
+            end if
          end if
       end block
       !
