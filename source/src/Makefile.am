@@ -33,6 +33,7 @@ libsfincs_la_SOURCES += \
 	sfincs_data.f90 \
 	sfincs_data_device.cuf \
 	sfincs_partition.cuf \
+	sfincs_nvtx.cuf \
     ../third_party_open/Delft3D/astro.f90 \
 	../third_party_open/utils/geometry.f90 \
 	sfincs_error.f90 \

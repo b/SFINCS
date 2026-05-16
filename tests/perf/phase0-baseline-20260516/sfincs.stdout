@@ -1,0 +1,324 @@
+
+====================
+== NVIDIA HPC SDK ==
+====================
+ 
+NVIDIA HPC SDK version 25.9
+ 
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+--------------------------------------------------------------------------
+WARNING: Open MPI tried to bind a process but failed.  This is a
+warning only; your job will continue, though performance may
+be degraded.
+
+  Local host:        a3082423da36
+  Application name:  /work/tests/perf/phase0-baseline-20260516/rank_select.sh
+  Error message:     failed to bind memory
+  Location:          ../../../../../orte/mca/rtc/hwloc/rtc_hwloc.c:447
+
+--------------------------------------------------------------------------
+rank-0 sfincs PID: 82
+[LOG_CAT_ML] You must specify a valid HCA device by setting:
+-x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
+If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
+In case of unfounded HCA device please contact your system administrator.
+[a3082423da36:00109] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+[LOG_CAT_ML] You must specify a valid HCA device by setting:
+-x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
+If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
+In case of unfounded HCA device please contact your system administrator.
+[a3082423da36:00082] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+------ Preparing model simulation --------
+
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    102880
+Number of active u/v points    :    205976
+Number of cells in level   1   :      5664
+Number of cells in level   2   :     27520
+Number of cells in level   3   :     69696
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    102880
+Number of active u/v points    :    205976
+Number of cells in level   1   :      5664
+Number of cells in level   2   :     27520
+Number of cells in level   3   :     69696
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : yes
+Wave paddles         : no
+------------------------------------------
+
+Coupling with SnapWave ...
+
+----------- Welcome to SnapWave ---------
+
+   @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
+  @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
+  @@@      @@@ @@  @@  @@  @@  @@   @@@
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+             .......:.......
+         ...:::::::::::::::::...
+      ..:::::::............::::::..
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
+.::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
+::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
+..:@@@@@@@@@@@@@@@@@@@@^..............::.
+..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
+ .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
+    ..:::::::::::::::::::::::::::::..
+      ..:::::::::::::::::::::::::..
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : yes
+Wave paddles         : no
+------------------------------------------
+
+Coupling with SnapWave ...
+
+----------- Welcome to SnapWave ---------
+
+   @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
+  @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
+  @@@      @@@ @@  @@  @@  @@  @@   @@@
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+             .......:.......
+         ...:::::::::::::::::...
+      ..:::::::............::::::..
+         ...:::::::::::::::::...
+             .......:.......
+
+-----------------------------------------
+
+Build-Revision: $Rev: svn 197-branch:SnapWave_IG
+Build-Date: $Date: 2025-04-14
+
+------ Preparing model simulation --------
+
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
+.::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
+::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
+..:@@@@@@@@@@@@@@@@@@@@^..............::.
+..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
+ .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
+    ..:::::::::::::::::::::::::::::..
+      ..:::::::::::::::::::::::::..
+         ...:::::::::::::::::...
+             .......:.......
+
+-----------------------------------------
+
+Build-Revision: $Rev: svn 197-branch:SnapWave_IG
+Build-Date: $Date: 2025-04-14
+
+------ Preparing model simulation --------
+
+------------------------------------------
+SnapWave Computational mesh
+------------------------------------------
+Number of active SnapWave nodes:    102880
+Number of active SnapWave cells:    103105
+------------------------------------------
+SnapWave Computational mesh
+------------------------------------------
+Number of active SnapWave nodes:    102880
+Number of active SnapWave cells:    103105
+
+------------------------------------------
+SnapWave Processes
+------------------------------------------
+SnapWave IG waves                  : yes
+SnapWave implicit IG source term   : no
+SnapWave IG bc using Herbers       : yes
+SnapWave wind growth               : no
+SnapWave vegetation                : no
+------------------------------------------
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+
+------------------------------------------
+SnapWave Processes
+------------------------------------------
+SnapWave IG waves                  : yes
+SnapWave implicit IG source term   : no
+SnapWave IG bc using Herbers       : yes
+SnapWave wind growth               : no
+SnapWave vegetation                : no
+------------------------------------------
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+[a3082423da36:00077] 1 more process has sent help message help-orte-odls-default.txt / memory not bound
+[a3082423da36:00077] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
+   0% complete,       - s remaining ...
+   0% complete,       - s remaining ...
+   5% complete,   123.8 s remaining ...
+   5% complete,   139.8 s remaining ...
+  10% complete,   109.7 s remaining ...
+  10% complete,   117.3 s remaining ...
+Collecting data...
+  15% complete,   106.9 s remaining ...
+  15% complete,   111.7 s remaining ...
+  20% complete,    98.0 s remaining ...
+  20% complete,   101.3 s remaining ...
+  25% complete,    93.2 s remaining ...
+  25% complete,    95.8 s remaining ...
+  30% complete,    85.2 s remaining ...
+  30% complete,    87.2 s remaining ...
+  35% complete,    77.7 s remaining ...
+  35% complete,    79.3 s remaining ...
+  40% complete,    72.0 s remaining ...
+  40% complete,    73.3 s remaining ...
+  45% complete,    64.9 s remaining ...
+  45% complete,    66.0 s remaining ...
+  50% complete,    59.4 s remaining ...
+  50% complete,    60.3 s remaining ...
+  55% complete,    53.1 s remaining ...
+  55% complete,    53.8 s remaining ...
+  60% complete,    47.2 s remaining ...
+  60% complete,    47.7 s remaining ...
+  65% complete,    41.8 s remaining ...
+  65% complete,    42.2 s remaining ...
+  70% complete,    36.2 s remaining ...
+  70% complete,    36.6 s remaining ...
+  75% complete,    31.0 s remaining ...
+  75% complete,    31.3 s remaining ...
+Generating '/tmp/nsys-report-8a5f.qdstrm'
+[1/1] [0%                          ] phase0_rank0.nsys-rep[1/1] [0%                          ] phase0_rank0.nsys-rep[1/1] [=========45%                ] phase0_rank0.nsys-rep[1/1] [======================91%   ] phase0_rank0.nsys-rep[1/1] [======================92%   ] phase0_rank0.nsys-rep[1/1] [=======================93%  ] phase0_rank0.nsys-rep[1/1] [0%                          ] phase0_rank0.nsys-rep[1/1] [====25%                     ] phase0_rank0.nsys-rep[1/1] [=16%                        ] phase0_rank0.nsys-rep[1/1] [12%                         ] phase0_rank0.nsys-rep[1/1] [9%                          ] phase0_rank0.nsys-rep[1/1] [8%                          ] phase0_rank0.nsys-rep[1/1] [6%                          ] phase0_rank0.nsys-rep[1/1] [5%                          ] phase0_rank0.nsys-rep[1/1] [0%                          ] phase0_rank0.nsys-rep[1/1] [5%                          ] phase0_rank0.nsys-rep[1/1] [6%                          ] phase0_rank0.nsys-rep[1/1] [7%                          ] phase0_rank0.nsys-rep[1/1] [8%                          ] phase0_rank0.nsys-rep[1/1] [9%                          ] phase0_rank0.nsys-rep[1/1] [10%                         ] phase0_rank0.nsys-rep[1/1] [11%                         ] phase0_rank0.nsys-rep[1/1] [12%                         ] phase0_rank0.nsys-rep[1/1] [13%                         ] phase0_rank0.nsys-rep[1/1] [14%                         ] phase0_rank0.nsys-rep[1/1] [=15%                        ] phase0_rank0.nsys-rep[1/1] [=16%                        ] phase0_rank0.nsys-rep[1/1] [=17%                        ] phase0_rank0.nsys-rep[1/1] [==18%                       ] phase0_rank0.nsys-rep[1/1] [==19%                       ] phase0_rank0.nsys-rep[1/1] [==20%                       ] phase0_rank0.nsys-rep[1/1] [==21%                       ] phase0_rank0.nsys-rep[1/1] [===22%                      ] phase0_rank0.nsys-rep[1/1] [===23%                      ] phase0_rank0.nsys-rep[1/1] [===24%                      ] phase0_rank0.nsys-rep[1/1] [====25%                     ] phase0_rank0.nsys-rep[1/1] [====26%                     ] phase0_rank0.nsys-rep[1/1] [====27%                     ] phase0_rank0.nsys-rep[1/1] [====28%                     ] phase0_rank0.nsys-rep[1/1] [=====29%                    ] phase0_rank0.nsys-rep[1/1] [=====30%                    ] phase0_rank0.nsys-rep[1/1] [=====31%                    ] phase0_rank0.nsys-rep[1/1] [=====32%                    ] phase0_rank0.nsys-rep[1/1] [======33%                   ] phase0_rank0.nsys-rep[1/1] [======34%                   ] phase0_rank0.nsys-rep[1/1] [======35%                   ] phase0_rank0.nsys-rep[1/1] [=======36%                  ] phase0_rank0.nsys-rep[1/1] [=======37%                  ] phase0_rank0.nsys-rep[1/1] [=======38%                  ] phase0_rank0.nsys-rep[1/1] [=======39%                  ] phase0_rank0.nsys-rep[1/1] [========40%                 ] phase0_rank0.nsys-rep[1/1] [========41%                 ] phase0_rank0.nsys-rep[1/1] [========42%                 ] phase0_rank0.nsys-rep[1/1] [=========43%                ] phase0_rank0.nsys-rep[1/1] [=========44%                ] phase0_rank0.nsys-rep[1/1] [=========45%                ] phase0_rank0.nsys-rep[1/1] [=========46%                ] phase0_rank0.nsys-rep[1/1] [==========47%               ] phase0_rank0.nsys-rep[1/1] [==========48%               ] phase0_rank0.nsys-rep[1/1] [==========49%               ] phase0_rank0.nsys-rep[1/1] [===========50%              ] phase0_rank0.nsys-rep[1/1] [===========51%              ] phase0_rank0.nsys-rep[1/1] [===========52%              ] phase0_rank0.nsys-rep[1/1] [===========53%              ] phase0_rank0.nsys-rep[1/1] [============54%             ] phase0_rank0.nsys-rep[1/1] [============55%             ] phase0_rank0.nsys-rep[1/1] [============56%             ] phase0_rank0.nsys-rep[1/1] [============57%             ] phase0_rank0.nsys-rep[1/1] [=============58%            ] phase0_rank0.nsys-rep[1/1] [=============59%            ] phase0_rank0.nsys-rep[1/1] [=============60%            ] phase0_rank0.nsys-rep[1/1] [==============61%           ] phase0_rank0.nsys-rep[1/1] [==============62%           ] phase0_rank0.nsys-rep[1/1] [==============63%           ] phase0_rank0.nsys-rep[1/1] [==============64%           ] phase0_rank0.nsys-rep[1/1] [===============65%          ] phase0_rank0.nsys-rep[1/1] [===============66%          ] phase0_rank0.nsys-rep[1/1] [===============67%          ] phase0_rank0.nsys-rep[1/1] [=================74%        ] phase0_rank0.nsys-rep[1/1] [========================100%] phase0_rank0.nsys-rep[1/1] [========================100%] phase0_rank0.nsys-rep
+Generated:
+	/work/tests/perf/phase0-baseline-20260516/phase0_rank0.nsys-rep
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun detected that one or more processes exited with non-zero status, thus causing
+the job to be terminated. The first process to do so was:
+
+  Process name: [[8157,1],0]
+  Exit code:    143
+--------------------------------------------------------------------------

@@ -50,6 +50,7 @@ module sfincs_boundaries
                                    io_clean_line            => clean_line, &
                                    io_interpolate_boundary_points => interpolate_boundary_points, &
                                    io_interpolate_boundary_zsb    => interpolate_boundary_zsb
+   use sfincs_nvtx, only: nvtx_range_push, nvtx_range_pop
    !
    implicit none
    !
@@ -154,6 +155,15 @@ contains
    integer :: ib, nmb, ibdr, ierr
    real*8  :: zst
    !
+   ! AC #1 names this routine update_boundary_conditions; the per-step
+   ! copy-IN/kernel/copy-OUT H<->D structure the issue's Notes cite by
+   ! line number actually lives in update_boundary_fluxes (this routine
+   ! is the host-side MPI_Bcast that feeds it). Both routines are
+   ! annotated so the named routine carries a range and the per-step
+   ! H<->D traffic is attributable separately from the bcast.
+   !
+   call nvtx_range_push("bnd_conditions")
+   !
    call ensure_bnd_workbufs()
    !
    ! Compute kcs==2 boundary water levels into the workbuf on rank 0.
@@ -219,6 +229,8 @@ contains
    enddo
    !$omp end do
    !$omp end parallel
+   !
+   call nvtx_range_pop()
    !
    end subroutine
 
@@ -331,13 +343,16 @@ contains
    !     (sfincs_boundaries_gpu.cuf:194) for kcs==6 cells -- catalog
    !     Section C.3, conservative default.
    !
+   call nvtx_range_push("bnd_fluxes_copyin")
    call bridge_in_cell_real8(zs, zs_h)
    ! zsb / zsb0 are boundary-sized (ngbnd), not edge-rank: keep bulk H2D.
    zsb  = zsb_h
    zsb0 = zsb0_h
+   call nvtx_range_pop()
    !
    ! ------ Main per-boundary-point kernel -------------------------------
    !
+   call nvtx_range_push("bnd_fluxes_kernel")
    blocks = (nkcuv2_h + TPB - 1) / TPB
    !
    call k_update_boundary_fluxes<<<blocks, TPB>>>( &
@@ -347,6 +362,7 @@ contains
       store_maximum_waterlevel_h, real(t, kind=8))
    !
    istat = cudaDeviceSynchronize()
+   call nvtx_range_pop()
    !
    ! ------ Copy-OUT: device -> host for WRITE set -----------------------
    ! Per architect's bridge contract: zsb/zsb0 are republished as well
@@ -354,6 +370,7 @@ contains
    ! kept to keep the host view canonical and so future device-side
    ! mutations stay correct without further changes).
    !
+   call nvtx_range_push("bnd_fluxes_copyout")
    call bridge_out_cell_real8(zs_h,   zs)
    call bridge_out_edge_real4(q_h,    q)
    call bridge_out_edge_real4(uv_h,   uv)
@@ -382,6 +399,7 @@ contains
       call bridge_out_cell_real4(zsmax_h, zsmax)
       !
    endif
+   call nvtx_range_pop()
    !
    end subroutine
 

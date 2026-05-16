@@ -1,0 +1,47 @@
+module sfincs_nvtx
+   !
+   ! Thin NVTX range helper for the CUDA Fortran build (SOR-64, Phase 0).
+   !
+   ! Wraps the NVHPC `nvtx` Fortran shim so the per-step GPU routines and
+   ! the halo-exchange helpers can push/pop named ranges that NSight
+   ! Systems attributes per source block. nvtxStartRange / nvtxEndRange
+   ! are LIFO (push/pop) under the hood; every nvtx_range_push must be
+   ! balanced by a matching nvtx_range_pop on the same call path.
+   !
+   ! This module is CUDA-only: it `use`s the NVHPC `nvtx` module, which
+   ! exists only under nvfortran, and is therefore listed solely in the
+   ! `if USE_CUDA` branch of src/Makefile.am. The implementation symbols
+   ! live in libnvhpcwrapnvtx (linked via configure.ac's enable_cuda
+   ! block). All call sites in sfincs_lib.F90 are guarded by
+   ! `#ifdef USE_CUDA`, so the CPU build never references this module and
+   ! the annotations are a strict no-op there.
+   !
+   use nvtx, only: nvtxStartRange, nvtxEndRange
+   !
+   implicit none
+   !
+   private
+   public :: nvtx_range_push, nvtx_range_pop
+   !
+contains
+   !
+   subroutine nvtx_range_push(label)
+      !
+      ! Open a named NVTX range. `label` shows up verbatim as the range
+      ! name in the NSight Systems timeline / nsys stats NVTX table.
+      !
+      character(len=*), intent(in) :: label
+      !
+      call nvtxStartRange(label)
+      !
+   end subroutine nvtx_range_push
+   !
+   subroutine nvtx_range_pop()
+      !
+      ! Close the most recently opened NVTX range (LIFO).
+      !
+      call nvtxEndRange()
+      !
+   end subroutine nvtx_range_pop
+   !
+end module sfincs_nvtx
