@@ -1,5 +1,5 @@
 #!/bin/sh
-# CPU vs GPU-IEEE-strict vs GPU-fast-math benchmark harness for SFINCS.
+# CPU vs GPU benchmark harness for SFINCS (single- and dual-GPU).
 #
 # Builds three configurations into separate prefixes:
 #   * cpu          — gfortran CPU baseline, all OpenMP cores by default
@@ -9,16 +9,20 @@
 #   * gpu_kieee    — nvfortran CUDA, default -Kieee (matches CPU FP)
 #   * gpu_fastmath — nvfortran CUDA, --enable-fast-math (drops -Kieee)
 #
-# Runs every test case under tests/cases/ once per build (one run per
-# (case, build) pair) under tests/runs_bench/<case>/<config>/, captures
-# wall time + peak resident memory via /usr/bin/time -v, and diffs each
-# GPU run's zsmax against the CPU baseline. Prints a summary table on
-# stdout and writes a machine-readable tests/runs_bench/summary.json.
+# Runs every test case under tests/cases/ in five configurations
+# (cpu / gpu_kieee / gpu_fastmath / gpu_n2_kieee / gpu_n2_fastmath) under
+# tests/runs_bench/<case>/<config>/, captures wall time + peak resident
+# memory via /usr/bin/time -v, and diffs each GPU run's zsmax against
+# the CPU baseline. Prints a summary table on stdout and writes a
+# machine-readable tests/runs_bench/summary.json.
 #
 # Each GPU configuration is run twice; only the second timing is recorded
 # so first-run JIT / driver init / page-cache costs do not pollute the
-# steady-state measurement. GPU runs are pinned to GPU 0 via
-# CUDA_VISIBLE_DEVICES=0.
+# steady-state measurement. The single-rank gpu_kieee / gpu_fastmath
+# configs are pinned to GPU 0 via CUDA_VISIBLE_DEVICES=0. The dual-rank
+# gpu_n2_kieee / gpu_n2_fastmath configs invoke `mpirun -n 2` with no
+# CUDA_VISIBLE_DEVICES cap and rely on MPI's default round-robin GPU
+# assignment (rank 0 -> GPU 0, rank 1 -> GPU 1) on the 2x A6000 dev box.
 #
 # Exit code: 0 iff every (case, build) run completed without error AND
 # every GPU run's max(|gpu - cpu|) / max(cpu) < 1e-3 (loose threshold;
@@ -49,6 +53,16 @@ GPU_BIN_FASTMATH=$REPO_ROOT/source/install_cuda_fastmath/bin/sfincs
 GPU_BIN_KIEEE_CONTAINER=/work/source/install_cuda_kieee/bin/sfincs
 GPU_BIN_FASTMATH_CONTAINER=/work/source/install_cuda_fastmath/bin/sfincs
 THRESHOLD=1e-3
+
+# Hard wall-clock cap per GPU invocation (warmup or timed). A multi-rank
+# mpirun that loses one rank to a SEGV but has a surviving rank stuck in
+# a collective will hang indefinitely; this cap turns that case into a
+# clean verdict=ERROR row instead of wedging the whole bench. SIGTERM
+# triggers run_gpu_container.sh's trap, which `docker kill`s the
+# container; the --kill-after gives a 30s SIGKILL fallback. Override via
+# BENCH_RUN_TIMEOUT (seconds) if a production case legitimately needs
+# more.
+RUN_TIMEOUT=${BENCH_RUN_TIMEOUT:-900}
 
 TAB=$(printf '\t')
 
@@ -267,37 +281,58 @@ run_cpu() {
 # first run pays JIT / page-cache costs that are not representative of
 # steady-state. The directory is re-populated between runs so the timed
 # invocation always reads fresh inputs.
+#
+# nranks=1 pins the rank to GPU 0 via CUDA_VISIBLE_DEVICES=0 so the
+# single-GPU configs measure a single device. nranks>1 omits the cap so
+# MPI's default round-robin assigns rank N -> GPU N (on the 2x A6000 dev
+# box: rank 0 -> GPU 0, rank 1 -> GPU 1). sfincs.log captures the
+# combined stdout/stderr from all ranks (same convention as
+# tests/run_validation.sh). The Fortran-side sfincs.log emitted by the
+# model into the shared wdir is last-writer-wins under multi-rank, so
+# the captured shell-stdout file is the authoritative per-(case,config)
+# log artifact.
 run_gpu() {
     case_name=$1
     case_dir=$2
     config=$3
     bin_container=$4
+    nranks=$5
     run_dir=$RUNS_DIR/$case_name/$config
     container_run_dir=$(host_to_container "$run_dir")
 
+    if [ "$nranks" -eq 1 ]; then
+        gpu_pin="-x CUDA_VISIBLE_DEVICES=0"
+    else
+        gpu_pin=
+    fi
+
     populate_run_dir "$case_dir" "$run_dir"
-    echo "--- Warmup GPU $config: $case_name ---"
+    echo "--- Warmup GPU $config (n=$nranks): $case_name ---"
     set +e
     (
         cd "$run_dir"
-        "$GPU_WRAPPER" \
-            mpirun --allow-run-as-root --wdir "$container_run_dir" \
-                -x CUDA_VISIBLE_DEVICES=0 \
-                -n 1 "$bin_container" \
+        # shellcheck disable=SC2086
+        timeout --kill-after=30s "$RUN_TIMEOUT" \
+            "$GPU_WRAPPER" \
+                mpirun --allow-run-as-root --wdir "$container_run_dir" \
+                    $gpu_pin \
+                    -n "$nranks" "$bin_container" \
             >sfincs_warmup.log 2>&1
     )
     set -e
 
     populate_run_dir "$case_dir" "$run_dir"
-    echo "--- Timed GPU $config: $case_name ---"
+    echo "--- Timed GPU $config (n=$nranks): $case_name ---"
     rc=0
     (
         cd "$run_dir"
+        # shellcheck disable=SC2086
         /usr/bin/time -v -o time.txt \
-            "$GPU_WRAPPER" \
-                mpirun --allow-run-as-root --wdir "$container_run_dir" \
-                    -x CUDA_VISIBLE_DEVICES=0 \
-                    -n 1 "$bin_container" \
+            timeout --kill-after=30s "$RUN_TIMEOUT" \
+                "$GPU_WRAPPER" \
+                    mpirun --allow-run-as-root --wdir "$container_run_dir" \
+                        $gpu_pin \
+                        -n "$nranks" "$bin_container" \
             >sfincs.log 2>&1
     ) || rc=$?
     echo "    $config exit=$rc log=$run_dir/sfincs.log"
@@ -385,7 +420,7 @@ while IFS= read -r case_name; do
 
     if [ ! -f "$case_dir/sfincs.inp" ]; then
         echo "    no sfincs.inp in $case_dir — marking all configs ERROR"
-        for cfg in cpu gpu_kieee gpu_fastmath; do
+        for cfg in cpu gpu_kieee gpu_fastmath gpu_n2_kieee gpu_n2_fastmath; do
             if [ "$cfg" = cpu ]; then row_threads=$CPU_THREADS; else row_threads=null; fi
             printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                 "$case_name" "$cfg" "null" "null" "null" "null" "null" "ERROR" "null" "$row_threads" \
@@ -409,12 +444,14 @@ while IFS= read -r case_name; do
         "$case_name" "cpu" "$cpu_wall" "$cpu_peak" "null" "null" "null" "$cpu_verdict" "null" "$CPU_THREADS" \
         >>"$ROWS"
 
-    for cfg in gpu_kieee gpu_fastmath; do
+    for cfg in gpu_kieee gpu_fastmath gpu_n2_kieee gpu_n2_fastmath; do
         case "$cfg" in
-            gpu_kieee) bin=$GPU_BIN_KIEEE_CONTAINER ;;
-            gpu_fastmath) bin=$GPU_BIN_FASTMATH_CONTAINER ;;
+            gpu_kieee)       bin=$GPU_BIN_KIEEE_CONTAINER;    nranks=1 ;;
+            gpu_fastmath)    bin=$GPU_BIN_FASTMATH_CONTAINER; nranks=1 ;;
+            gpu_n2_kieee)    bin=$GPU_BIN_KIEEE_CONTAINER;    nranks=2 ;;
+            gpu_n2_fastmath) bin=$GPU_BIN_FASTMATH_CONTAINER; nranks=2 ;;
         esac
-        run_gpu "$case_name" "$case_dir" "$cfg" "$bin"
+        run_gpu "$case_name" "$case_dir" "$cfg" "$bin" "$nranks"
         gpu_run_dir=$RUNS_DIR/$case_name/$cfg
         gpu_wall=null
         gpu_peak=null
