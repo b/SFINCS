@@ -417,7 +417,7 @@ contains
          store_maximum_flux_h => store_maximum_flux, &
          store_twet_h => store_twet, &
          twet_threshold_h => twet_threshold, &
-         zs_h => zs, q_h => q, uv_h => uv, &
+         q_h => q, uv_h => uv, &
          vmax_h => vmax, qmax_h => qmax, twet_h => twet
       !
       implicit none
@@ -432,9 +432,12 @@ contains
       ! Init-time arrays (kcs, zb, z_index_uv_*, subgrid_z_zmin) are
       ! already current device-side; their H2D copies have been retired.
       !
-      ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
-      ! cells receive a per-step host write at
-      ! sfincs_boundaries_gpu.cuf:194 inside update_boundary_conditions).
+      ! zs is device-canonical across the entire per-step loop (SOR-65):
+      ! no per-step zs bridge-IN. The kcs==6 (Neumann) host write in
+      ! update_boundary_conditions that was the sole justification for the
+      ! former `zs = zs_h` (catalog Section C.3) is now the on-device
+      ! k_update_neumann_zs kernel; zs_h is no longer refreshed per-step
+      ! so bridging it in would clobber the canonical device zs.
       !
       ! q and uv are retained because sfincs_nonhydrostatic.f90:664-665
       ! writes the host aliases every nonhydrostatic step
@@ -450,7 +453,6 @@ contains
       ! aliases to default values each output interval, and no other
       ! per-step GPU bridge-IN propagates that reset to the device.
       !
-      call bridge_in_cell_real8(zs, zs_h)
       call bridge_in_edge_real4(q,  q_h)
       call bridge_in_edge_real4(uv, uv_h)
       !

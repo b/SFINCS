@@ -13,10 +13,11 @@ module sfincs_infiltration
    ! SOR-784): every kernel-read array that is init-time-only (mesh /
    ! geometry / infiltration parameter fields populated once at startup)
    ! or written on-device the previous step with no host writer in between
-   ! has been dropped because its device shadow is already up-to-date. The
-   ! single retained bridge-IN is `zs = zs_h`, kept because
-   ! update_boundary_conditions writes zs_h(nmb) on host for kcs==6
-   ! (Neumann) cells (catalog Section C.3).
+   ! has been dropped because its device shadow is already up-to-date.
+   ! There is no per-step bridge-IN: zs is device-canonical across the
+   ! whole per-step loop (SOR-65) -- the kcs==6 (Neumann) host write that
+   ! was the sole justification for the former `zs = zs_h` (catalog
+   ! Section C.3) is now the on-device k_update_neumann_zs kernel.
    !
    ! Bridge-OUT copies device -> host for the union of all per-branch WRITE
    ! sets at the end of update_infiltration_map; this leg is unchanged and
@@ -68,8 +69,7 @@ contains
          horton_kd_h => horton_kd, &
          horton_fc_h => horton_fc, &
          horton_f0_h => horton_f0, &
-         netprcp_h => netprcp, &
-         zs_h => zs
+         netprcp_h => netprcp
       !
       implicit none
       !
@@ -85,18 +85,16 @@ contains
       !
       call system_clock(count0, count_rate, count_max)
       !
-      ! ------ Copy-IN: host -> device (single retained bridge-IN) -----------
+      ! ------ Copy-IN: host -> device --------------------------------------
       !
-      ! zs is bridged-IN because update_boundary_conditions writes zs_h(nmb)
-      ! on host for kcs==6 (Neumann) cells before update_infiltration_map
-      ! runs (catalog Section C.3, conservative default). All other catalog
-      ! arrays previously copied in here are either init-time-only (their
-      ! device shadow is populated once and never touched on host again) or
-      ! written on-device the previous step by an earlier per-step GPU
-      ! routine (e.g. update_meteo_forcing for prcp/cumprcp/netprcp), so
-      ! their device shadows are already up-to-date.
-      !
-      call bridge_in_cell_real8(zs, zs_h)
+      ! No per-step bridge-IN. zs is device-canonical across the entire
+      ! per-step loop (SOR-65): the only former justification for the
+      ! `zs = zs_h` bridge-IN here was the kcs==6 (Neumann) host write in
+      ! update_boundary_conditions (catalog Section C.3), which Phase 1
+      ! ported to the on-device k_update_neumann_zs kernel. zs_h is no
+      ! longer refreshed per-step, so copying it in would clobber the
+      ! canonical device zs. All other catalog arrays are init-time-only
+      ! or written on-device the previous step.
       !
       ! Halo-extended iteration (SOR-38, Defect 3): every per-step cell-
       ! rank infiltration kernel iterates over npn_local + halo_cell_count

@@ -26,10 +26,11 @@ module sfincs_structures
    ! or written on-device the previous step with no per-step host writer
    ! in between (`q`, `uv` -- catalog Section B.1) has had its
    ! `<dev> = <host>` line dropped because the device shadow is already
-   ! current. The single retained bridge-IN is `zs = zs_h`, under the
-   ! catalog Section C.3 caveat: `update_boundary_conditions` in
-   ! sfincs_boundaries_gpu.cuf:210 writes `zs(nmb)` host-side for kcs==6
-   ! (Neumann lateral) boundary cells. The bridge-OUT (D2H) of `q` and
+   ! current. There is no per-step bridge-IN: zs is device-canonical
+   ! across the entire per-step loop (SOR-65) -- the kcs==6 (Neumann
+   ! lateral) host write in `update_boundary_conditions` that was the
+   ! sole justification for the former `zs = zs_h` (catalog Section C.3)
+   ! is now the on-device k_update_neumann_zs kernel. The bridge-OUT (D2H) of `q` and
    ! `uv` is unchanged and still required for downstream CPU consumers.
    !
    use cudafor
@@ -69,7 +70,7 @@ contains
       !
       use sfincs_data, only: &
          nrstructures_h => nrstructures, &
-         zs_h => zs, q_h => q, uv_h => uv
+         q_h => q, uv_h => uv
       !
       implicit none
       !
@@ -105,11 +106,13 @@ contains
       ! no per-step host writer between those bridge-OUTs and the next
       ! call to compute_fluxes_over_structures.
       !
-      ! Retained: zs = zs_h, under the catalog Section C.3 caveat --
-      ! update_boundary_conditions (sfincs_boundaries_gpu.cuf:210) writes
-      ! zs(nmb) host-side for kcs==6 (Neumann lateral) cells.
-      !
-      call bridge_in_cell_real8(zs, zs_h)
+      ! No per-step zs bridge-IN: zs is device-canonical across the
+      ! entire per-step loop (SOR-65). The kcs==6 (Neumann lateral) host
+      ! write in update_boundary_conditions that was the sole
+      ! justification for the former `zs = zs_h` (catalog Section C.3) is
+      ! now the on-device k_update_neumann_zs kernel; zs_h is no longer
+      ! refreshed per-step so bridging it in would clobber the canonical
+      ! device zs.
       !
       ! ------ One thread per structure-face entry ------------------------
       !
