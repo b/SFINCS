@@ -12,7 +12,7 @@ WARNING: Open MPI tried to bind a process but failed.  This is a
 warning only; your job will continue, though performance may
 be degraded.
 
-  Local host:        9dc8c78fed5e
+  Local host:        1cc4d1d9ac5b
   Application name:  /work/source/install_cuda/bin/sfincs
   Error message:     failed to bind memory
   Location:          ../../../../../orte/mca/rtc/hwloc/rtc_hwloc.c:447
@@ -34,16 +34,17 @@ they may disappear in future releases.
   Deprecated variable: mpi_cuda_support
   New variable:        opal_cuda_support
 --------------------------------------------------------------------------
+rank-0 sfincs PID: 78
 [LOG_CAT_ML] You must specify a valid HCA device by setting:
 -x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
 If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
 In case of unfounded HCA device please contact your system administrator.
-[9dc8c78fed5e:00074] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+[1cc4d1d9ac5b:00078] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
 [LOG_CAT_ML] You must specify a valid HCA device by setting:
 -x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
 If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
 In case of unfounded HCA device please contact your system administrator.
-[9dc8c78fed5e:00075] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+[1cc4d1d9ac5b:00079] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
 
 ------------ Welcome to SFINCS ------------
 
@@ -62,6 +63,16 @@ In case of unfounded HCA device please contact your system administrator.
     .::::::..@@............@@.:::::::.
    .::::::..@@..............@@.:::::::.
   .::::::::..@@............@@..::::::::.
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
  .:::::::::...@@.@..@@..@.@@..::::::::::.
  .:::::::::...:@@@..@@..@@@:..:::::::::..
  ............@@.@@..@@..@@.@@............
@@ -72,6 +83,12 @@ In case of unfounded HCA device please contact your system administrator.
     .:::~@@.:...:.@@...@@.:.:.@@~::::.
      .::~@@@@@@@@@@.....@@@@@@@@@~::.
        ..:~~~~~~~:.......:~~~~~~~:..
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
           ......................
               ..............
 
@@ -80,24 +97,6 @@ In case of unfounded HCA device please contact your system administrator.
 Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
 Build-Date: $Date: 2025-04-13
 
------- Preparing model simulation --------
-
-
------------- Welcome to SFINCS ------------
-
-  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
- @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
- @@@     @@      @@ @@@ @@ @@   @@ @@@
-  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
-     @@@ @@      @@ @@ @@@ @@   @@     @@@
- @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
-  @@@@@  @@      @@ @@   @   @@@@   @@@@@
-
-              ..............
-          ......:@@@@@@@@:......
-       ..::::..@@........@@.:::::..
-     ..:::::..@@..::..::..@@.::::::..
-    .::::::..@@............@@.:::::::.
    .::::::..@@..............@@.:::::::.
   .::::::::..@@............@@..::::::::.
  .:::::::::...@@.@..@@..@.@@..::::::::::.
@@ -111,6 +110,8 @@ Build-Date: $Date: 2025-04-13
      .::~@@@@@@@@@@.....@@@@@@@@@~::.
        ..:~~~~~~~:.......:~~~~~~~:..
           ......................
+------ Preparing model simulation --------
+
               ..............
 
 ------------------------------------------
@@ -161,16 +162,6 @@ Coupling with SnapWave ...
    @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
   @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
   @@@      @@@ @@  @@  @@  @@  @@   @@@
-   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
-      @@@  @@ @@@  @@  @@  @@
-  @@@ @@@  @@  @@  @@  @@  @@       @@@
-   @@@@@   @@   @  @@  @@  @@       @@@
-
-             .......:.......
-         ...:::::::::::::::::...
-      ..:::::::............::::::..
-    ..::::::.....:@@@@@@@@....:::::..
-   .::::::...~@@@@@@@@@@@@@@~..::::::.
 
 ------------------------------------------
 Processes
@@ -182,6 +173,19 @@ Viscosity            : no
 Coriolis             : no
 Wind                 : no
 Atmospheric pressure : no
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+             .......:.......
+         ...:::::::::::::::::...
+      ..:::::::............::::::..
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
 Precipitation        : no
 Infiltration         : no
 SnapWave             : yes
@@ -190,10 +194,6 @@ Wave paddles         : no
 
 Coupling with SnapWave ...
 
------------ Welcome to SnapWave ---------
-  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
- .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
-.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
 .::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
 ::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
 ..:@@@@@@@@@@@@@@@@@@@@^..............::.
@@ -203,6 +203,7 @@ Coupling with SnapWave ...
    ...................................
     ..:::::::::::::::::::::::::::::..
       ..:::::::::::::::::::::::::..
+----------- Welcome to SnapWave ---------
 
    @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
   @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
@@ -215,16 +216,14 @@ Coupling with SnapWave ...
              .......:.......
          ...:::::::::::::::::...
       ..:::::::............::::::..
-    ..::::::.....:@@@@@@@@....:::::..
-   .::::::...~@@@@@@@@@@@@@@~..::::::.
          ...:::::::::::::::::...
              .......:.......
 
 -----------------------------------------
 
 Build-Revision: $Rev: svn 197-branch:SnapWave_IG
-Build-Date: $Date: 2025-04-14
-
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
   .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
  .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
 .::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
@@ -233,10 +232,12 @@ Build-Date: $Date: 2025-04-14
 ..:@@@@@@@@@@@@@@@@@@@@^..............::.
 ..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
  .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
-  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
-   ...................................
+Build-Date: $Date: 2025-04-14
+
 ------ Preparing model simulation --------
 
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
     ..:::::::::::::::::::::::::::::..
       ..:::::::::::::::::::::::::..
          ...:::::::::::::::::...
@@ -289,38 +290,38 @@ SnapWave vegetation                : no
 
    0% complete,       - s remaining ...
    0% complete,       - s remaining ...
-[9dc8c78fed5e:00070] 1 more process has sent help message help-orte-odls-default.txt / memory not bound
-[9dc8c78fed5e:00070] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
-   5% complete,    52.0 s remaining ...
-   5% complete,    35.8 s remaining ...
-  10% complete,    33.9 s remaining ...
-  10% complete,    41.7 s remaining ...
-  15% complete,    31.0 s remaining ...
+[1cc4d1d9ac5b:00074] 1 more process has sent help message help-orte-odls-default.txt / memory not bound
+[1cc4d1d9ac5b:00074] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
+   5% complete,    51.6 s remaining ...
+   5% complete,    35.5 s remaining ...
+  10% complete,    33.7 s remaining ...
+  10% complete,    41.4 s remaining ...
+  15% complete,    30.9 s remaining ...
   15% complete,    26.1 s remaining ...
-  20% complete,    29.7 s remaining ...
-  20% complete,    26.2 s remaining ...
-  25% complete,    28.0 s remaining ...
+  20% complete,    29.5 s remaining ...
+  20% complete,    26.1 s remaining ...
+  25% complete,    27.9 s remaining ...
   25% complete,    25.4 s remaining ...
   30% complete,    23.8 s remaining ...
   30% complete,    21.8 s remaining ...
-  35% complete,    22.6 s remaining ...
+  35% complete,    22.5 s remaining ...
   35% complete,    21.0 s remaining ...
   40% complete,    19.5 s remaining ...
   40% complete,    18.2 s remaining ...
   45% complete,    18.2 s remaining ...
   45% complete,    17.2 s remaining ...
   50% complete,    16.0 s remaining ...
-  50% complete,    16.8 s remaining ...
+  50% complete,    16.9 s remaining ...
   55% complete,    14.5 s remaining ...
   55% complete,    13.8 s remaining ...
   60% complete,    13.1 s remaining ...
   60% complete,    12.5 s remaining ...
-  65% complete,    10.5 s remaining ...
   65% complete,    11.0 s remaining ...
+  65% complete,    10.6 s remaining ...
   70% complete,     9.6 s remaining ...
   70% complete,     9.2 s remaining ...
-  75% complete,     8.1 s remaining ...
   75% complete,     7.8 s remaining ...
+  75% complete,     8.1 s remaining ...
   80% complete,     6.3 s remaining ...
   80% complete,     6.1 s remaining ...
   85% complete,     4.8 s remaining ...
@@ -336,14 +337,14 @@ Info : Write maximum values at final timestep since t=dtmaxout was not reached y
 
 ---------- Simulation finished -----------
 
- Total time             :     33.705
- Total simulation time  :     31.583
- Time in input          :      2.122
- Time in boundaries     :      3.776 ( 12.0%)
- Time in momentum       :      5.490 ( 17.4%)
- Time in continuity     :      4.809 ( 15.2%)
- Time in SnapWave       :     13.639 ( 43.2%)
- Time in output         :      0.098 (  0.3%)
+ Total time             :     33.678
+ Total simulation time  :     31.592
+ Time in input          :      2.086
+ Time in boundaries     :      3.720 ( 11.8%)
+ Time in momentum       :      5.535 ( 17.5%)
+ Time in continuity     :      4.746 ( 15.0%)
+ Time in SnapWave       :     13.570 ( 43.0%)
+ Time in output         :      0.095 (  0.3%)
 
  Average time step (s)  :      3.002
 
@@ -351,13 +352,13 @@ Info : Write maximum values at final timestep since t=dtmaxout was not reached y
 
 ---------- Simulation finished -----------
 
- Total time             :     33.721
- Total simulation time  :     30.711
- Time in input          :      3.010
- Time in boundaries     :      4.122 ( 13.4%)
- Time in momentum       :      6.193 ( 20.2%)
- Time in continuity     :      5.525 ( 18.0%)
- Time in SnapWave       :     13.639 ( 44.4%)
+ Total time             :     33.694
+ Total simulation time  :     30.727
+ Time in input          :      2.968
+ Time in boundaries     :      4.128 ( 13.4%)
+ Time in momentum       :      6.290 ( 20.5%)
+ Time in continuity     :      5.517 ( 18.0%)
+ Time in SnapWave       :     13.569 ( 44.2%)
  Time in output         :      0.000 (  0.0%)
 
  Average time step (s)  :      3.002

@@ -152,104 +152,104 @@ Initializing output ...
 ---------- Starting simulation -----------
 ---- Using 2 of 2 available threads ----
 
-Computing SnapWave at t =        0.0 s took   1.04 seconds
+Computing SnapWave at t =        0.0 s took   1.03 seconds
    0% complete,       - s remaining ...
    5% complete,    35.9 s remaining ...
-Computing SnapWave at t =     1803.0 s took   1.05 seconds
+Computing SnapWave at t =     1803.0 s took   1.04 seconds
   10% complete,    34.0 s remaining ...
-  15% complete,    26.2 s remaining ...
-Computing SnapWave at t =     3601.0 s took   1.09 seconds
-  20% complete,    26.3 s remaining ...
-Computing SnapWave at t =     5401.1 s took   1.08 seconds
+  15% complete,    26.3 s remaining ...
+Computing SnapWave at t =     3601.0 s took   1.08 seconds
+  20% complete,    26.4 s remaining ...
+Computing SnapWave at t =     5401.1 s took   1.05 seconds
   25% complete,    25.6 s remaining ...
   30% complete,    21.9 s remaining ...
-Computing SnapWave at t =     7202.5 s took   1.10 seconds
+Computing SnapWave at t =     7202.5 s took   1.07 seconds
   35% complete,    21.1 s remaining ...
   40% complete,    18.4 s remaining ...
-Computing SnapWave at t =     9002.9 s took   1.09 seconds
+Computing SnapWave at t =     9002.9 s took   1.06 seconds
   45% complete,    17.3 s remaining ...
-Computing SnapWave at t =    10801.7 s took   1.07 seconds
+Computing SnapWave at t =    10801.7 s took   1.05 seconds
   50% complete,    16.1 s remaining ...
   55% complete,    13.9 s remaining ...
-Computing SnapWave at t =    12602.3 s took   1.09 seconds
+Computing SnapWave at t =    12602.3 s took   1.04 seconds
   60% complete,    12.6 s remaining ...
   65% complete,    10.6 s remaining ...
-Computing SnapWave at t =    14401.9 s took   1.05 seconds
+Computing SnapWave at t =    14401.9 s took   1.01 seconds
   70% complete,     9.3 s remaining ...
-Computing SnapWave at t =    16201.0 s took   1.06 seconds
-  75% complete,     7.9 s remaining ...
+Computing SnapWave at t =    16201.0 s took   1.04 seconds
+  75% complete,     7.8 s remaining ...
   80% complete,     6.1 s remaining ...
-Computing SnapWave at t =    18000.4 s took   1.09 seconds
-  85% complete,     4.7 s remaining ...
+Computing SnapWave at t =    18000.4 s took   1.04 seconds
+  85% complete,     4.6 s remaining ...
   90% complete,     3.0 s remaining ...
-Computing SnapWave at t =    19801.0 s took   1.05 seconds
+Computing SnapWave at t =    19801.0 s took   1.02 seconds
   95% complete,     1.5 s remaining ...
-Computing SnapWave at t =    21602.4 s took   1.09 seconds
+Computing SnapWave at t =    21602.4 s took   1.02 seconds
  100% complete,     0.0 s remaining ...
 
 ---------- Simulation finished -----------
 
- Total time             :     34.059
- Total simulation time  :     31.057
- Time in input          :      3.002
- Time in boundaries     :      4.116 ( 13.3%)
- Time in momentum       :      6.250 ( 20.1%)
- Time in continuity     :      5.518 ( 17.8%)
- Time in SnapWave       :     13.951 ( 44.9%)
+ Total time             :     33.897
+ Total simulation time  :     30.916
+ Time in input          :      2.981
+ Time in boundaries     :      4.234 ( 13.7%)
+ Time in momentum       :      6.369 ( 20.6%)
+ Time in continuity     :      5.538 ( 17.9%)
+ Time in SnapWave       :     13.556 ( 43.8%)
  Time in output         :      0.000 (  0.0%)
 
  Average time step (s)  :      3.002
 
 ----------- Closing off SFINCS -----------
 =    0.09349   %ok =   24.74
-Computing SnapWave at t =    10801.7 s took   1.07 seconds
+Computing SnapWave at t =    10801.7 s took   1.05 seconds
   50% complete,    17.0 s remaining ...
   55% complete,    14.6 s remaining ...
 INFO SnapWave - Making directional grid around boundary mean wave direction
    iteration      1 error =    1.00000   %ok =   18.96
    iteration      2 error =    0.09268   %ok =   24.83
-Computing SnapWave at t =    12602.3 s took   1.09 seconds
+Computing SnapWave at t =    12602.3 s took   1.04 seconds
   60% complete,    13.2 s remaining ...
   65% complete,    11.1 s remaining ...
 INFO SnapWave - Making directional grid around boundary mean wave direction
    iteration      1 error =    1.00000   %ok =   18.68
    iteration      2 error =    0.09146   %ok =   25.02
-Computing SnapWave at t =    14401.9 s took   1.05 seconds
-  70% complete,     9.7 s remaining ...
+Computing SnapWave at t =    14401.9 s took   1.01 seconds
+  70% complete,     9.6 s remaining ...
 INFO SnapWave - Making directional grid around boundary mean wave direction
    iteration      1 error =    1.00000   %ok =   19.72
    iteration      2 error =    0.08956   %ok =   26.58
-Computing SnapWave at t =    16201.0 s took   1.07 seconds
-  75% complete,     8.2 s remaining ...
+Computing SnapWave at t =    16201.0 s took   1.04 seconds
+  75% complete,     8.1 s remaining ...
   80% complete,     6.3 s remaining ...
 INFO SnapWave - Making directional grid around boundary mean wave direction
    iteration      1 error =    1.00000   %ok =   21.36
    iteration      2 error =    0.08645   %ok =   28.57
-Computing SnapWave at t =    18000.4 s took   1.10 seconds
+Computing SnapWave at t =    18000.4 s took   1.05 seconds
   85% complete,     4.8 s remaining ...
   90% complete,     3.1 s remaining ...
 INFO SnapWave - Making directional grid around boundary mean wave direction
    iteration      1 error =    1.00000   %ok =   22.57
    iteration      2 error =    0.08182   %ok =   30.02
-Computing SnapWave at t =    19801.0 s took   1.06 seconds
+Computing SnapWave at t =    19801.0 s took   1.03 seconds
   95% complete,     1.6 s remaining ...
 INFO SnapWave - Making directional grid around boundary mean wave direction
    iteration      1 error =    1.00000   %ok =   22.66
    iteration      2 error =    0.07540   %ok =   30.38
-Computing SnapWave at t =    21602.4 s took   1.09 seconds
+Computing SnapWave at t =    21602.4 s took   1.02 seconds
  100% complete,     0.0 s remaining ...
 
 Info : Write maximum values at final timestep since t=dtmaxout was not reached yet...
 
 ---------- Simulation finished -----------
 
- Total time             :     34.042
- Total simulation time  :     31.925
- Time in input          :      2.117
- Time in boundaries     :      3.722 ( 11.7%)
- Time in momentum       :      5.500 ( 17.2%)
- Time in continuity     :      4.757 ( 14.9%)
- Time in SnapWave       :     13.952 ( 43.7%)
+ Total time             :     33.881
+ Total simulation time  :     31.794
+ Time in input          :      2.086
+ Time in boundaries     :      3.682 ( 11.6%)
+ Time in momentum       :      5.499 ( 17.3%)
+ Time in continuity     :      4.717 ( 14.8%)
+ Time in SnapWave       :     13.557 ( 42.6%)
  Time in output         :      0.095 (  0.3%)
 
  Average time step (s)  :      3.002

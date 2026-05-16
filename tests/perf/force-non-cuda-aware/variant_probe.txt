@@ -1,0 +1,12 @@
+
+====================
+== NVIDIA HPC SDK ==
+====================
+ 
+NVIDIA HPC SDK version 25.9
+ 
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi/bin/mpirun
+            MCA mpi base: parameter "mpi_cuda_support" (current value: "true", data source: default, level: 3 user/all, type: bool, deprecated, synonym of: opal_cuda_support)
+            MCA mpi base: parameter "mpi_built_with_cuda_support" (current value: "true", data source: default, level: 4 tuner/basic, type: bool, synonym of: opal_built_with_cuda_support)

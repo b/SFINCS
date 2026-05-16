@@ -1,0 +1,384 @@
+
+====================
+== NVIDIA HPC SDK ==
+====================
+ 
+NVIDIA HPC SDK version 25.9
+ 
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+--------------------------------------------------------------------------
+WARNING: Open MPI tried to bind a process but failed.  This is a
+warning only; your job will continue, though performance may
+be degraded.
+
+  Local host:        bcc7609ae233
+  Application name:  /work/source/install_cuda/bin/sfincs
+  Error message:     failed to bind memory
+  Location:          ../../../../../orte/mca/rtc/hwloc/rtc_hwloc.c:447
+
+--------------------------------------------------------------------------
+[LOG_CAT_ML] You must specify a valid HCA device by setting:
+-x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
+If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
+In case of unfounded HCA device please contact your system administrator.
+[bcc7609ae233:00077] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+[LOG_CAT_ML] You must specify a valid HCA device by setting:
+-x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
+If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
+In case of unfounded HCA device please contact your system administrator.
+[bcc7609ae233:00078] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+------ Preparing model simulation --------
+
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+rank-0 sfincs PID: 77
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    102880
+Number of active u/v points    :    205976
+Number of cells in level   1   :      5664
+Number of cells in level   2   :     27520
+Number of cells in level   3   :     69696
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    102880
+Number of active u/v points    :    205976
+Number of cells in level   1   :      5664
+Number of cells in level   2   :     27520
+Number of cells in level   3   :     69696
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : yes
+Wave paddles         : no
+------------------------------------------
+
+Coupling with SnapWave ...
+
+----------- Welcome to SnapWave ---------
+
+   @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
+  @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
+  @@@      @@@ @@  @@  @@  @@  @@   @@@
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+             .......:.......
+         ...:::::::::::::::::...
+      ..:::::::............::::::..
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
+.::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
+::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
+..:@@@@@@@@@@@@@@@@@@@@^..............::.
+..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
+ .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
+    ..:::::::::::::::::::::::::::::..
+      ..:::::::::::::::::::::::::..
+         ...:::::::::::::::::...
+             .......:.......
+
+-----------------------------------------
+
+Build-Revision: $Rev: svn 197-branch:SnapWave_IG
+Build-Date: $Date: 2025-04-14
+
+------ Preparing model simulation --------
+
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : yes
+Wave paddles         : no
+------------------------------------------
+
+Coupling with SnapWave ...
+
+----------- Welcome to SnapWave ---------
+
+   @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
+  @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
+  @@@      @@@ @@  @@  @@  @@  @@   @@@
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+             .......:.......
+         ...:::::::::::::::::...
+      ..:::::::............::::::..
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
+.::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
+::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
+..:@@@@@@@@@@@@@@@@@@@@^..............::.
+..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
+ .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
+    ..:::::::::::::::::::::::::::::..
+      ..:::::::::::::::::::::::::..
+         ...:::::::::::::::::...
+             .......:.......
+
+-----------------------------------------
+
+Build-Revision: $Rev: svn 197-branch:SnapWave_IG
+Build-Date: $Date: 2025-04-14
+
+------ Preparing model simulation --------
+
+------------------------------------------
+SnapWave Computational mesh
+------------------------------------------
+Number of active SnapWave nodes:    102880
+Number of active SnapWave cells:    103105
+------------------------------------------
+SnapWave Computational mesh
+------------------------------------------
+Number of active SnapWave nodes:    102880
+Number of active SnapWave cells:    103105
+
+------------------------------------------
+SnapWave Processes
+------------------------------------------
+SnapWave IG waves                  : yes
+SnapWave implicit IG source term   : no
+SnapWave IG bc using Herbers       : yes
+SnapWave wind growth               : no
+SnapWave vegetation                : no
+------------------------------------------
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+
+------------------------------------------
+SnapWave Processes
+------------------------------------------
+SnapWave IG waves                  : yes
+SnapWave implicit IG source term   : no
+SnapWave IG bc using Herbers       : yes
+SnapWave wind growth               : no
+SnapWave vegetation                : no
+------------------------------------------
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+[bcc7609ae233:77   :0:77] Caught signal 11 (Segmentation fault: invalid permissions for mapped object at address 0x72c32cdffa00)
+[bcc7609ae233:78   :0:78] Caught signal 11 (Segmentation fault: invalid permissions for mapped object at address 0x750f54bffa00)
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+==== backtrace (tid:     77) ====
+ 0 0x0000000000045330 __sigaction()  ???:0
+ 1 0x00000000001889c1 __nss_database_lookup()  ???:0
+ 2 0x00000000000a588d ucs_memcpy_relaxed()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucs/arch/x86_64/cpu.h:126
+ 3 0x000000000001cd32 uct_mm_ep_am_common_send()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/uct/sm/mm/base/mm_ep.c:349
+ 4 0x000000000001cd32 uct_mm_ep_am_bcopy()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/uct/sm/mm/base/mm_ep.c:439
+ 5 0x00000000000a5955 uct_ep_am_bcopy()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/uct/api/uct.h:3074
+ 6 0x00000000000a5955 ucp_proto_am_bcopy_single_send()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucp/proto/proto_single.inl:47
+ 7 0x00000000000a5955 ucp_proto_am_bcopy_single_progress()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucp/proto/proto_single.inl:84
+ 8 0x00000000000a5955 ucp_eager_bcopy_single_progress()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucp/tag/eager_single.c:116
+ 9 0x00000000000ac50a ucp_request_try_send()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucp/core/ucp_request.inl:307
+10 0x00000000000ac50a ucp_request_send()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucp/core/ucp_request.inl:330
+11 0x00000000000ac50a ucp_proto_request_send_op_common()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucp/proto/proto_common.inl:251
+12 0x00000000000ac50a ucp_proto_request_send_op()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucp/proto/proto_common.inl:302
+13 0x00000000000ac50a ucp_tag_send_nbx()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucp/tag/tag_send.c:295
+14 0x0000000000005881 mca_pml_ucx_common_send_nbx()  /proj/scratch/qa/library_builds/Linux_x86_64/rel_nv_lib_hpcx_cuda13_x86_64/work/rebuild_ompi/ompi/build/ompi/mca/pml/ucx/../../../../../ompi/mca/pml/ucx/pml_ucx.c:819
+15 0x000000000007663f PMPI_Isend()  /proj/scratch/qa/library_builds/Linux_x86_64/rel_nv_lib_hpcx_cuda13_x86_64/work/rebuild_ompi/ompi/build/ompi/mpi/c/profile/pisend.c:95
+16 0x000000000004b661 ompi_isend_f()  /proj/scratch/qa/library_builds/Linux_x86_64/rel_nv_lib_hpcx_cuda13_x86_64/work/rebuild_ompi/ompi/build/ompi/mpi/fortran/mpif-h/profile/pisend_f.c:79
+17 0x00000000004432a5 sfincs_partition_halo_exchange_q_uv_()  /work/source/src/sfincs_partition.cuf:2882
+18 0x000000000040e8f3 sfincs_lib_sfincs_update_()  /work/source/src/sfincs_lib.F90:680
+19 0x000000000040b8ad MAIN_()  /work/source/src/sfincs.f90:29
+20 0x000000000040b831 main()  ???:0
+21 0x000000000002a1ca __libc_init_first()  ???:0
+22 0x000000000002a28b __libc_start_main()  ???:0
+23 0x000000000040a9e5 _start()  ???:0
+=================================
+[bcc7609ae233:00077] *** Process received signal ***
+[bcc7609ae233:00077] Signal: Segmentation fault (11)
+[bcc7609ae233:00077] Signal code:  (-6)
+[bcc7609ae233:00077] Failing at address: 0x3e80000004d
+[bcc7609ae233:00077] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x72c378e33330]
+[bcc7609ae233:00077] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x1889c1)[0x72c378f769c1]
+[bcc7609ae233:00077] [ 2] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ucx/mt/lib/libucp.so.0(+0xa588d)[0x72c37cb1188d]
+[bcc7609ae233:00077] [ 3] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ucx/mt/lib/libuct.so.0(uct_mm_ep_am_bcopy+0x132)[0x72c37ceb3d32]
+[bcc7609ae233:00077] [ 4] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ucx/mt/lib/libucp.so.0(+0xa5955)[0x72c37cb11955]
+[bcc7609ae233:00077] [ 5] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ucx/mt/lib/libucp.so.0(ucp_tag_send_nbx+0x3ba)[0x72c37cb1850a]
+[bcc7609ae233:00077] [ 6] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi/lib/openmpi/mca_pml_ucx.so(mca_pml_ucx_isend+0xa1)[0x72c35e805881]
+[bcc7609ae233:00077] [ 7] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi/lib/libmpi.so.40(MPI_Isend+0x2f)[0x72c3b2e7663f]
+[bcc7609ae233:00077] [ 8] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi/lib/libmpi_mpifh.so.40(mpi_isend__+0x61)[0x72c3b324b661]
+[bcc7609ae233:00077] [ 9] /work/source/install_cuda/bin/sfincs[0x4432a5]
+[bcc7609ae233:00077] [10] /work/source/install_cuda/bin/sfincs[0x40e8f3]
+[bcc7609ae233:00077] [11] /work/source/install_cuda/bin/sfincs[0x40b8ad]
+[bcc7609ae233:00077] [12] /work/source/install_cuda/bin/sfincs[0x40b831]
+[bcc7609ae233:00077] [13] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x72c378e181ca]
+[bcc7609ae233:00077] [14] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x72c378e1828b]
+[bcc7609ae233:00077] [15] /work/source/install_cuda/bin/sfincs[0x40a9e5]
+[bcc7609ae233:00077] *** End of error message ***
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+BFD: /lib/x86_64-linux-gnu/libc.so.6: unknown type [0x13] section `.relr.dyn'
+==== backtrace (tid:     78) ====
+ 0 0x0000000000045330 __sigaction()  ???:0
+ 1 0x0000000000188a95 __nss_database_lookup()  ???:0
+ 2 0x000000000001c991 ucs_memcpy_relaxed()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/ucs/arch/x86_64/cpu.h:126
+ 3 0x000000000001c991 uct_mm_ep_am_short()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/uct/sm/mm/base/mm_ep.c:411
+ 4 0x00000000000ac1f5 uct_ep_am_short()  /build-result/src/hpcx-v2.24-gcc-doca_ofed-redhat8-cuda13-x86_64/ucx-e4636149592d5a435c2c911fe7727444a13bfa2e/src/uct/api/uct.h:3025
+ 5 0x0000000000005881 mca_pml_ucx_common_send_nbx()  /proj/scratch/qa/library_builds/Linux_x86_64/rel_nv_lib_hpcx_cuda13_x86_64/work/rebuild_ompi/ompi/build/ompi/mca/pml/ucx/../../../../../ompi/mca/pml/ucx/pml_ucx.c:819
+ 6 0x000000000007663f PMPI_Isend()  /proj/scratch/qa/library_builds/Linux_x86_64/rel_nv_lib_hpcx_cuda13_x86_64/work/rebuild_ompi/ompi/build/ompi/mpi/c/profile/pisend.c:95
+ 7 0x000000000004b661 ompi_isend_f()  /proj/scratch/qa/library_builds/Linux_x86_64/rel_nv_lib_hpcx_cuda13_x86_64/work/rebuild_ompi/ompi/build/ompi/mpi/fortran/mpif-h/profile/pisend_f.c:79
+ 8 0x00000000004432a5 sfincs_partition_halo_exchange_q_uv_()  /work/source/src/sfincs_partition.cuf:2882
+ 9 0x000000000040e8f3 sfincs_lib_sfincs_update_()  /work/source/src/sfincs_lib.F90:680
+10 0x000000000040b8ad MAIN_()  /work/source/src/sfincs.f90:29
+11 0x000000000040b831 main()  ???:0
+12 0x000000000002a1ca __libc_init_first()  ???:0
+13 0x000000000002a28b __libc_start_main()  ???:0
+14 0x000000000040a9e5 _start()  ???:0
+=================================
+[bcc7609ae233:00078] *** Process received signal ***
+[bcc7609ae233:00078] Signal: Segmentation fault (11)
+[bcc7609ae233:00078] Signal code:  (-6)
+[bcc7609ae233:00078] Failing at address: 0x3e80000004e
+[bcc7609ae233:00078] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x45330)[0x750fa2c33330]
+[bcc7609ae233:00078] [ 1] /lib/x86_64-linux-gnu/libc.so.6(+0x188a95)[0x750fa2d76a95]
+[bcc7609ae233:00078] [ 2] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ucx/mt/lib/libuct.so.0(uct_mm_ep_am_short+0xb1)[0x750fafce4991]
+[bcc7609ae233:00078] [ 3] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ucx/mt/lib/libucp.so.0(ucp_tag_send_nbx+0xa5)[0x750fa69a71f5]
+[bcc7609ae233:00078] [ 4] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi/lib/openmpi/mca_pml_ucx.so(mca_pml_ucx_isend+0xa1)[0x750f88405881]
+[bcc7609ae233:00078] [ 5] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi/lib/libmpi.so.40(MPI_Isend+0x2f)[0x750fdcc7663f]
+[bcc7609ae233:00078] [ 6] /opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi/lib/libmpi_mpifh.so.40(mpi_isend__+0x61)[0x750fdd04b661]
+[bcc7609ae233:00078] [ 7] /work/source/install_cuda/bin/sfincs[0x4432a5]
+[bcc7609ae233:00078] [ 8] /work/source/install_cuda/bin/sfincs[0x40e8f3]
+[bcc7609ae233:00078] [ 9] /work/source/install_cuda/bin/sfincs[0x40b8ad]
+[bcc7609ae233:00078] [10] /work/source/install_cuda/bin/sfincs[0x40b831]
+[bcc7609ae233:00078] [11] /lib/x86_64-linux-gnu/libc.so.6(+0x2a1ca)[0x750fa2c181ca]
+[bcc7609ae233:00078] [12] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x8b)[0x750fa2c1828b]
+[bcc7609ae233:00078] [13] /work/source/install_cuda/bin/sfincs[0x40a9e5]
+[bcc7609ae233:00078] *** End of error message ***
+--------------------------------------------------------------------------
+Primary job  terminated normally, but 1 process returned
+a non-zero exit code. Per user-direction, the job has been aborted.
+--------------------------------------------------------------------------
+--------------------------------------------------------------------------
+mpirun noticed that process rank 0 with PID 0 on node bcc7609ae233 exited on signal 11 (Segmentation fault).
+--------------------------------------------------------------------------
+[bcc7609ae233:00073] 1 more process has sent help message help-orte-odls-default.txt / memory not bound
+[bcc7609ae233:00073] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
