@@ -43,6 +43,9 @@ module sfincs_snapwave
       gather_perrank_local_to_global, &
       gather_uv_recvcounts, gather_uv_displacements, &
       gather_perrank_local_to_global_uv
+   use sfincs_partition, only: &
+      bridge_in_cell_real4, bridge_in_edge_real4, &
+      bridge_out_cell_real4, bridge_out_cell_real8
    !
    implicit none
    !
@@ -107,13 +110,25 @@ contains
    ! rank's device shadow; the gather below assembles rank 0's full-size
    ! global view from those slices.
    !
-   zs    = zs_dev
+   ! Whole-array assignment between the host array (size np_h on every
+   ! rank) and the device shadow (size npn_local + halo_cell_count, which
+   ! differs from np_h on every rank when mpi_size > 1) reallocates the
+   ! host LHS to match the RHS shape under nvfortran -Mallocatable=03.
+   ! Once reallocated, the subsequent gather pack zs(local_to_global(i))
+   ! reads through global indices that exceed the new host-array bound
+   ! and produces an out-of-bounds read (SIGSEGV at 0x20 / malloc
+   ! corruption observed in the SOR-47 reproducer). The per-slot
+   ! bridge_out_cell_* helpers copy device(1:npn_local) into a temp and
+   ! scatter through local_to_global into the host array at its existing
+   ! shape, leaving size(zs) == np_h intact.
+   !
+   call bridge_out_cell_real8(zs, zs_dev)
    if (wavemaker) then
-      zsm = zsm_dev
+      call bridge_out_cell_real4(zsm, zsm_dev)
    endif
    if (wind .and. snapwavewind) then
-      windu = windu_dev
-      windv = windv_dev
+      call bridge_out_cell_real4(windu, windu_dev)
+      call bridge_out_cell_real4(windv, windv_dev)
    endif
    !
    ! ===== Multi-rank gather: rank-local slices -> rank 0 global host =====
@@ -424,10 +439,19 @@ contains
    !        stale host data on top of whatever is already on their
    !        device shadow.
    !
-   fwuv_dev   = fwuv
+   ! Whole-array assignment from the host array (size npuv_h / np_h) to
+   ! the device shadow (size npuv_local + halo_edge_count / npn_local +
+   ! halo_cell_count) reallocates the device LHS to the host's global
+   ! size under nvfortran -Mallocatable=03, breaking the local-indexed
+   ! kernel reads on subsequent steps. The bridge_in_* helpers push only
+   ! the owned rank-local slice (1..npuv_local / 1..npn_local) into the
+   ! device shadow at the matching local positions; halo cells are
+   ! refreshed by halo_exchange_q_uv / per-step bridge-OUTs as usual.
+   !
+   call bridge_in_edge_real4(fwuv_dev, fwuv)
    if (mpi_rank == 0) then
-      hm0_dev    = hm0
-      hm0_ig_dev = hm0_ig
+      call bridge_in_cell_real4(hm0_dev,    hm0)
+      call bridge_in_cell_real4(hm0_ig_dev, hm0_ig)
    end if
    !
    call system_clock(count1, count_rate, count_max)
