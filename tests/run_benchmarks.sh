@@ -149,6 +149,38 @@ parse_peak_mem_mb() {
     [ -n "$val" ] && printf '%s\n' "$val" || echo null
 }
 
+# Assert the container's mpirun resolves to the CUDA-aware HPC-X build.
+# Mirrors tests/run_validation.sh's check; see that file for the
+# rationale and the HPC-X-specific output-shape note. Default container
+# PATH selects a non-CUDA-aware mpirun that silently stages every
+# device-pointer Isend through pinned host memory, saturating one CPU
+# thread and stalling the GPU.
+assert_cuda_aware_mpi() {
+    set +e
+    out=$("$GPU_WRAPPER" sh -c \
+        "ompi_info --param mpi all --level 9 | grep -E 'opal_built_with_cuda_support|opal_cuda_support'" \
+        2>&1)
+    rc=$?
+    set -e
+    if [ "$rc" -ne 0 ]; then
+        echo "CUDA-aware MPI not detected — check container PATH" >&2
+        echo "ompi_info invocation failed with rc=$rc; output follows:" >&2
+        printf '%s\n' "$out" >&2
+        exit 1
+    fi
+    built_ok=$(printf '%s\n' "$out" \
+        | awk '/opal_built_with_cuda_support/ && /current value: "true"/ {n++} END {print n+0}')
+    cuda_ok=$(printf '%s\n' "$out" \
+        | awk '/opal_cuda_support/ && /current value: "true"/ {n++} END {print n+0}')
+    if [ "$built_ok" -lt 1 ] || [ "$cuda_ok" -lt 1 ]; then
+        echo "CUDA-aware MPI not detected — check container PATH" >&2
+        echo "expected opal_built_with_cuda_support=true and opal_cuda_support=true; got:" >&2
+        printf '%s\n' "$out" >&2
+        exit 1
+    fi
+    echo "    CUDA-aware MPI: opal_built_with_cuda_support=true, opal_cuda_support=true"
+}
+
 # Inspect a completed run; return 0 if it produced a usable sfincs_map.nc
 # with no `error = 1` STOP, otherwise return 1.
 check_run() {
@@ -313,6 +345,9 @@ for binpath in "$CPU_BIN" "$GPU_BIN_KIEEE" "$GPU_BIN_FASTMATH"; do
         exit 1
     fi
 done
+
+echo "=== Verifying CUDA-aware MPI ==="
+assert_cuda_aware_mpi
 
 # --- Discover cases ---------------------------------------------------------
 

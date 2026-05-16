@@ -1,0 +1,10 @@
+
+====================
+== NVIDIA HPC SDK ==
+====================
+ 
+NVIDIA HPC SDK version 25.9
+ 
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/mpi/bin/mpirun

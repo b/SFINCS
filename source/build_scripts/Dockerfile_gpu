@@ -15,4 +15,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         gdb \
     && rm -rf /var/lib/apt/lists/*
 
+# Put HPC-X 2.24 (CUDA-aware OpenMPI + UCX + sharp + hcoll) ahead of the
+# default non-CUDA-aware OpenMPI at comm_libs/mpi. The wrapper script
+# source/build_scripts/run_gpu_container.sh sets the same env on `docker
+# run`, but baking it here covers the bare `docker run -it sfincs-build-gpu`
+# path that bypasses the wrapper. OPAL_PREFIX must point at the HPC-X ompi
+# tree or mpirun's component lookup falls back to the non-CUDA-aware
+# install. See source/README.md for the full rationale.
+ENV HPCX_ROOT=/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24
+ENV OPAL_PREFIX=$HPCX_ROOT/ompi
+ENV PATH=$HPCX_ROOT/ompi/bin:$HPCX_ROOT/ucx/bin:$PATH
+ENV LD_LIBRARY_PATH=$HPCX_ROOT/ompi/lib:$HPCX_ROOT/ucx/lib:$HPCX_ROOT/sharp/lib:$HPCX_ROOT/hcoll/lib:$LD_LIBRARY_PATH
+
 WORKDIR /work

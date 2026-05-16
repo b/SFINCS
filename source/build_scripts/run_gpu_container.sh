@@ -22,7 +22,16 @@ if [ -t 0 ]; then
     TTY_FLAG=-it
 fi
 
-HPCX=/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24/ompi
+# HPC-X 2.24 (CUDA-aware OpenMPI + UCX + sharp + hcoll) ships under NVHPC
+# 25.9 but is NOT on the container's default PATH; the default mpirun at
+# comm_libs/mpi/bin/mpirun is a non-CUDA-aware OpenMPI build that silently
+# stages every device-pointer MPI buffer through pinned host memory via
+# UVA page faults, saturating one CPU thread and stalling the GPU on every
+# halo exchange. Prepending HPC-X's ompi/ucx/sharp/hcoll paths puts the
+# CUDA-aware mpirun first so MPI_Isend(device_ptr, ...) takes the
+# GPUDirect / cuda_copy fast path.
+HPCX_ROOT=/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/comm_libs/13.0/hpcx/hpcx-2.24
+HPCX=$HPCX_ROOT/ompi
 
 # Container lifecycle is tied to this shell. Earlier versions of this
 # script did `exec docker run --rm ...`, which left no shell behind to
@@ -60,8 +69,8 @@ docker run --rm --init $TTY_FLAG \
     --user "$(id -u):$(id -g)" \
     -e HOME=/tmp \
     -e OPAL_PREFIX="$HPCX" \
-    -e PATH="$HPCX/bin:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/compilers/bin:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
-    -e LD_LIBRARY_PATH="$HPCX/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/math_libs/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/cuda/lib64" \
+    -e PATH="$HPCX/bin:$HPCX_ROOT/ucx/bin:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/compilers/bin:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    -e LD_LIBRARY_PATH="$HPCX/lib:$HPCX_ROOT/ucx/lib:$HPCX_ROOT/sharp/lib:$HPCX_ROOT/hcoll/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/compilers/lib:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/math_libs/lib64:/opt/nvidia/hpc_sdk/Linux_x86_64/25.9/cuda/lib64" \
     -e SFINCS_PREFIX="${SFINCS_PREFIX:-}" \
     -v "$REPO_ROOT":/work \
     -w /work \
