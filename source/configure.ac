@@ -64,6 +64,11 @@ AS_IF([test "x$enable_cuda" = "xyes"], [
       [cuda_ieee_flag="-Kieee"; cuda_mode_msg="IEEE-strict (-Kieee)"])
    AC_MSG_NOTICE([CUDA build mode: $cuda_mode_msg])
    FCFLAGS="$FCFLAGS -cuda -gpu=cc86,cc80,cc90 $cuda_ieee_flag -DUSE_CUDA"
+   # NVTX range annotations (SOR-64, Phase 0) go through the NVHPC `nvtx`
+   # Fortran shim; its implementation symbols live in libnvhpcwrapnvtx,
+   # which nvfortran does not auto-link. The library sits on nvfortran's
+   # own default link path (compilers/lib), so a bare -l suffices.
+   LIBS="$LIBS -lnvhpcwrapnvtx"
 ])
 
 dnl Cross-flag guard: --enable-fast-math is only meaningful with --enable-cuda.

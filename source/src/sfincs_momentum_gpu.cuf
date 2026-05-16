@@ -39,6 +39,7 @@ module sfincs_momentum
       bridge_out_cell_int1, bridge_out_cell_int4, &
       bridge_out_edge_real4, bridge_out_edge_int1, &
       bridge_out_edge_tail_real4
+   use sfincs_nvtx, only: nvtx_range_push, nvtx_range_pop
    !
    implicit none
    !
@@ -131,9 +132,12 @@ contains
       ! friction arrays, subgrid tables, etc.). See PR description for the
       ! full per-array tally.
       !
+      call nvtx_range_push("mom_fluxes_copyin")
       call bridge_in_cell_real8(zs, zs_h)
       call bridge_in_edge_real4(uv, uv_h)
+      call nvtx_range_pop()
       !
+      call nvtx_range_push("mom_fluxes_kernel")
       ! ------ Seed q0/uv0 from q/uv (covers the local-indexed range) -------
       ! Both q0/uv0 and q/uv are sized npuv_local + halo_edge_count after
       ! the shrink, so a whole-array assign covers the full local range.
@@ -162,6 +166,7 @@ contains
          subgrid_nlevels_h)
       !
       istat = cudaDeviceSynchronize()
+      call nvtx_range_pop()
       !
       ! ------ Combined-uv averaging is run AFTER halo_exchange_q_uv -------
       ! Authority strategy (c) for k_combined_uv lives in
@@ -176,6 +181,7 @@ contains
       !
       ! ------ Copy-OUT: device -> host for WRITE set ----------------------
       !
+      call nvtx_range_push("mom_fluxes_copyout")
       call bridge_out_edge_real4(q_h,    q)
       call bridge_out_edge_real4(q0_h,   q0)
       call bridge_out_edge_real4(uv_h,   uv)
@@ -188,6 +194,7 @@ contains
       if (timestep_analysis_h) then
          call bridge_out_edge_real4(timestep_analysis_required_timestep_h, timestep_analysis_required_timestep)
       endif
+      call nvtx_range_pop()
       !
       call system_clock(count1, count_rate, count_max)
       tloop = tloop + 1.0 * (count1 - count0) / count_rate
@@ -218,9 +225,11 @@ contains
       !
       call system_clock(count0, count_rate, count_max)
       !
+      call nvtx_range_push("mom_combined_uv_kernel")
       blocks = (ncuv_h + TPB - 1) / TPB
       call k_combined_uv<<<blocks, TPB>>>(ncuv_h)
       istat = cudaDeviceSynchronize()
+      call nvtx_range_pop()
       !
       ! Refresh the host alias for the combined-UV TAIL of q / uv only
       ! so BMI getters, output gather, and the next bridge-IN see the
@@ -233,8 +242,10 @@ contains
       ! compute_fluxes, and is authoritative on host after any later
       ! structures / nonhydrostatic passes.
       !
+      call nvtx_range_push("mom_combined_uv_copyout")
       call bridge_out_edge_tail_real4(q_h,  q)
       call bridge_out_edge_tail_real4(uv_h, uv)
+      call nvtx_range_pop()
       !
       call system_clock(count1, count_rate, count_max)
       tloop = tloop + 1.0 * (count1 - count0) / count_rate

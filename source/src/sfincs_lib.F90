@@ -28,6 +28,7 @@ module sfincs_lib
    use mpi
    use sfincs_partition
    use sfincs_data_device, only: mpi_rank, mpi_size
+   use sfincs_nvtx, only: nvtx_range_push, nvtx_range_pop
 #endif
    use sfincs_log
    use sfincs_timestep_analysis
@@ -677,7 +678,9 @@ module sfincs_lib
          ! with neighbor ranks before compute_water_levels reads them, so
          ! the continuity update sees the full set of incoming fluxes.
          !
+         call nvtx_range_push("halo_q_uv")
          call halo_exchange_q_uv()
+         call nvtx_range_pop()
          !
          ! Combined-UV averaging at quadtree refinement transitions
          ! (SOR-35). Runs AFTER halo_exchange_q_uv so every rank reads
@@ -698,7 +701,9 @@ module sfincs_lib
          ! Synchronize halo-cell water levels with neighbor ranks so the
          ! next compute_fluxes sees fresh zs at rank-boundary edges.
          !
+         call nvtx_range_push("halo_zs")
          call halo_exchange_zs()
+         call nvtx_range_pop()
          !
          ! SOR-10 cross-rank halo exchange of the subgrid second derivative
          ! zsderv. k_subgrid_main writes zsderv at owned cells only; the
@@ -707,7 +712,9 @@ module sfincs_lib
          ! partition boundary, where nm or nmu is a halo cell. No-op when
          ! mpi_size == 1 or when zsderv is not allocated (non-wiggle build).
          !
+         call nvtx_range_push("halo_zsderv")
          call halo_exchange_zsderv()
+         call nvtx_range_pop()
          !
          ! SOR-42 cross-rank halo exchange of the subgrid cell volume
          ! z_volume. The continuity / discharges / source-term updates
@@ -722,7 +729,9 @@ module sfincs_lib
          ! cells start filling/emptying. No-op when mpi_size == 1 or
          ! when z_volume is not allocated (non-subgrid build).
          !
+         call nvtx_range_push("halo_z_volume")
          call halo_exchange_z_volume()
+         call nvtx_range_pop()
          !
          ! SOR-10 env-gated halo diagnostic. No-op unless SFINCS_DEBUG_HALO_DUMP
          ! is set to a positive integer N; then every Nth call dumps suspect
