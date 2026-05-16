@@ -145,8 +145,90 @@ Required: Python 3 with `numpy`. No SFINCS build needed.
 
 ## Bench summary row
 
+### Benchmark refresh (clean box, 2026-05-16, SOR-901)
+
 The benchmark harness's `tests/runs_bench/summary.json` rows for this
-case from the implementer's dev-box run, quoted verbatim:
+case from the re-bench run on a quiet box (no concurrent CPU
+competitors, all 128 CPU threads via SOR-894's
+`OMP_NUM_THREADS=$(nproc)`), quoted verbatim:
+
+```json
+{
+  "case": "case_prod_riverine",
+  "config": "cpu",
+  "wall_clock_seconds": 24.82,
+  "peak_memory_mb": 96.65,
+  "max_abs_diff_zsmax": null,
+  "max_zsmax_ref": null,
+  "ratio_vs_ref": null,
+  "verdict": "PASS",
+  "speedup_vs_cpu": null,
+  "cpu_threads": 128
+},
+{
+  "case": "case_prod_riverine",
+  "config": "gpu_kieee",
+  "wall_clock_seconds": 120.39,
+  "peak_memory_mb": 29.0,
+  "max_abs_diff_zsmax": 0.0003515481948852539,
+  "max_zsmax_ref": 4.207345962524414,
+  "ratio_vs_ref": 8.355580882022937e-05,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.206,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_riverine",
+  "config": "gpu_fastmath",
+  "wall_clock_seconds": 126.43,
+  "peak_memory_mb": 29.0,
+  "max_abs_diff_zsmax": 0.00040203332901000977,
+  "max_zsmax_ref": 4.207345962524414,
+  "ratio_vs_ref": 9.555509163995374e-05,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.196,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_riverine",
+  "config": "gpu_n2_kieee",
+  "wall_clock_seconds": 81.55,
+  "peak_memory_mb": 30.0,
+  "max_abs_diff_zsmax": 0.0003515481948852539,
+  "max_zsmax_ref": 4.207345962524414,
+  "ratio_vs_ref": 8.355580882022937e-05,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.304,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_riverine",
+  "config": "gpu_n2_fastmath",
+  "wall_clock_seconds": 81.8,
+  "peak_memory_mb": 29.0,
+  "max_abs_diff_zsmax": 0.00040203332901000977,
+  "max_zsmax_ref": 4.207345962524414,
+  "ratio_vs_ref": 9.555509163995374e-05,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.303,
+  "cpu_threads": null
+}
+```
+
+All five rows clear the 1e-3 ratio gate. The single-GPU configs are
+~5x slower than the 128-thread CPU baseline (`speedup_vs_cpu ≈ 0.20`);
+the dual-GPU configs ~3x slower (`speedup_vs_cpu ≈ 0.30`). The
+correctness diffs are unchanged from the contaminated run — what
+changed is only the wall-clock denominator (the CPU baseline now
+amortises across all cores).
+
+### OLD bench numbers (2026-05-09 contaminated; see SOR-901 for context)
+
+Originally captured against a single-threaded CPU baseline
+(`OMP_NUM_THREADS=1`, pre-SOR-894) on a box where two orphaned
+`cargo test` binaries were pegging ~64 cores each for ~62 hours
+continuously (see SOR-901's BODY for the forensic detail). Both
+factors inflated the apparent GPU speedup:
 
 ```json
 {
@@ -184,9 +266,6 @@ case from the implementer's dev-box run, quoted verbatim:
 }
 ```
 
-Both GPU configurations show **speedup ≈ 3.7×** over the
-`OMP_NUM_THREADS=1` CPU baseline, dominated by per-step kernel work
-on this dev box (the ratio is dev-box-specific; see `tests/README.md`
-"Comparability caveat"). Both pass the bench's 1e-3 ratio gate, and
-the IEEE-strict GPU also passes the validation harness's stricter
-1e-4 gate at `gpu_n1`.
+The "speedup ≈ 3.7×" banner the SOR-887 PR description quoted reflects
+those contaminated numbers; the 2026-05-16 refresh above supersedes
+them as the authoritative figures for this case on this dev box.

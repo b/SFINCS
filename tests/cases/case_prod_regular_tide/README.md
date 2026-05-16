@@ -96,10 +96,93 @@ after staging these inputs.
 
 ## Benchmark row (this dev box, this branch)
 
-The implementer's `tests/run_benchmarks.sh --skip-build --skip-fetch`
-run on the dev box (2x NVIDIA RTX A6000, branch sorcerer/sor-885)
-produced the following rows in `tests/runs_bench/summary.json` for
-this case (quoted verbatim):
+### Benchmark refresh (clean box, 2026-05-16, SOR-901)
+
+`tests/run_benchmarks.sh` run on a quiet box (no concurrent CPU
+competitors, all 128 CPU threads via SOR-894's
+`OMP_NUM_THREADS=$(nproc)`) — verbatim `tests/runs_bench/summary.json`
+rows for this case:
+
+```json
+{
+  "case": "case_prod_regular_tide",
+  "config": "cpu",
+  "wall_clock_seconds": 41.67,
+  "peak_memory_mb": 113.77,
+  "max_abs_diff_zsmax": null,
+  "max_zsmax_ref": null,
+  "ratio_vs_ref": null,
+  "verdict": "PASS",
+  "speedup_vs_cpu": null,
+  "cpu_threads": 128
+},
+{
+  "case": "case_prod_regular_tide",
+  "config": "gpu_kieee",
+  "wall_clock_seconds": 200.65,
+  "peak_memory_mb": 28.0,
+  "max_abs_diff_zsmax": 1.9073486328125e-06,
+  "max_zsmax_ref": 2.0601131916046143,
+  "ratio_vs_ref": 9.258465217277083e-07,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.208,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_regular_tide",
+  "config": "gpu_fastmath",
+  "wall_clock_seconds": 180.61,
+  "peak_memory_mb": 29.0,
+  "max_abs_diff_zsmax": 1.9073486328125e-06,
+  "max_zsmax_ref": 2.0601131916046143,
+  "ratio_vs_ref": 9.258465217277083e-07,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.231,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_regular_tide",
+  "config": "gpu_n2_kieee",
+  "wall_clock_seconds": 140.58,
+  "peak_memory_mb": 28.0,
+  "max_abs_diff_zsmax": 1.9073486328125e-06,
+  "max_zsmax_ref": 2.0601131916046143,
+  "ratio_vs_ref": 9.258465217277083e-07,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.296,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_regular_tide",
+  "config": "gpu_n2_fastmath",
+  "wall_clock_seconds": 139.49,
+  "peak_memory_mb": 28.0,
+  "max_abs_diff_zsmax": 1.9073486328125e-06,
+  "max_zsmax_ref": 2.0601131916046143,
+  "ratio_vs_ref": 9.258465217277083e-07,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.299,
+  "cpu_threads": null
+}
+```
+
+All five rows clear the 1e-3 ratio gate (ratio ~ 9.3e-7, six orders of
+magnitude inside threshold). Against the 128-thread CPU baseline the
+GPU configs now measure `speedup_vs_cpu` ≈ 0.21× (single-GPU) and
+≈ 0.30× (dual-GPU): on a fully-loaded 64-physical-core CPU, the
+GPU paths trail the CPU on this case. The prior "12.3× / 12.4×" banner
+quoted in the SOR-885 PR description is a CPU-contamination artifact
+(see OLD section below); the honest GPU/CPU ratio against a fair CPU
+baseline is well below parity here. The correctness diff is unchanged
+between OLD and NEW — only the CPU denominator moved.
+
+### OLD bench numbers (2026-05-09 contaminated; see SOR-901 for context)
+
+Originally captured against a single-threaded CPU baseline
+(`OMP_NUM_THREADS=1`, pre-SOR-894) on a box where two orphaned
+`cargo test` binaries were pegging ~64 cores each for ~62 hours
+continuously (see SOR-901's BODY for the forensic detail). Both
+factors inflated the apparent GPU speedup:
 
 ```json
 {
@@ -137,11 +220,10 @@ this case (quoted verbatim):
 }
 ```
 
-Both `gpu_kieee` and `gpu_fastmath` rows report `speedup_vs_cpu > 1.0`
-(12.323x and 12.441x respectively, well above the issue's 5x rule of
-thumb on the largest case). The benchmark-harness 1e-3 ratio gate is
-also passed (ratio ~ 9.3e-7 against the CPU baseline, six orders of
-magnitude inside threshold) on both GPU configurations.
+The "12.323x and 12.441x" banner the SOR-885 commit message and PR
+description quoted reflects those contaminated numbers; the
+2026-05-16 refresh above supersedes them as the authoritative figures
+for this case on this dev box.
 
 ## Validation row (this dev box, this branch)
 

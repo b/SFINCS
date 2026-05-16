@@ -89,10 +89,97 @@ multi-rank divergence SOR-846 is designed to fix.
 
 ## Benchmark results (dev box)
 
-The implementer's local `tests/run_benchmarks.sh --skip-build --skip-fetch`
-run on this dev box (2× NVIDIA RTX A6000, single-threaded CPU baseline,
-with another sorcerer cycle competing for CPU during the baseline) — verbatim
-`tests/runs_bench/summary.json` rows for this case:
+### Benchmark refresh (clean box, 2026-05-16, SOR-901)
+
+`tests/run_benchmarks.sh` run on a quiet box (no concurrent CPU
+competitors, all 128 CPU threads via SOR-894's
+`OMP_NUM_THREADS=$(nproc)`) — verbatim `tests/runs_bench/summary.json`
+rows for this case:
+
+```json
+[
+  {
+    "case": "case_prod_quadtree_subgrid_tide",
+    "config": "cpu",
+    "wall_clock_seconds": 14.38,
+    "peak_memory_mb": 130.82,
+    "max_abs_diff_zsmax": null,
+    "max_zsmax_ref": null,
+    "ratio_vs_ref": null,
+    "verdict": "PASS",
+    "speedup_vs_cpu": null,
+    "cpu_threads": 128
+  },
+  {
+    "case": "case_prod_quadtree_subgrid_tide",
+    "config": "gpu_kieee",
+    "wall_clock_seconds": 80.92,
+    "peak_memory_mb": 28.0,
+    "max_abs_diff_zsmax": 7.152557373046875e-07,
+    "max_zsmax_ref": 0.9857848882675171,
+    "ratio_vs_ref": 7.255697929816359e-07,
+    "verdict": "PASS",
+    "speedup_vs_cpu": 0.178,
+    "cpu_threads": null
+  },
+  {
+    "case": "case_prod_quadtree_subgrid_tide",
+    "config": "gpu_fastmath",
+    "wall_clock_seconds": 79.23,
+    "peak_memory_mb": 28.0,
+    "max_abs_diff_zsmax": 7.152557373046875e-07,
+    "max_zsmax_ref": 0.9857848882675171,
+    "ratio_vs_ref": 7.255697929816359e-07,
+    "verdict": "PASS",
+    "speedup_vs_cpu": 0.181,
+    "cpu_threads": null
+  },
+  {
+    "case": "case_prod_quadtree_subgrid_tide",
+    "config": "gpu_n2_kieee",
+    "wall_clock_seconds": 57.78,
+    "peak_memory_mb": 27.0,
+    "max_abs_diff_zsmax": 6.4373016357421875e-06,
+    "max_zsmax_ref": 0.9857848882675171,
+    "ratio_vs_ref": 6.530128136834724e-06,
+    "verdict": "PASS",
+    "speedup_vs_cpu": 0.249,
+    "cpu_threads": null
+  },
+  {
+    "case": "case_prod_quadtree_subgrid_tide",
+    "config": "gpu_n2_fastmath",
+    "wall_clock_seconds": 60.12,
+    "peak_memory_mb": 30.0,
+    "max_abs_diff_zsmax": 6.4373016357421875e-06,
+    "max_zsmax_ref": 0.9857848882675171,
+    "ratio_vs_ref": 6.530128136834724e-06,
+    "verdict": "PASS",
+    "speedup_vs_cpu": 0.239,
+    "cpu_threads": null
+  }
+]
+```
+
+All five rows clear the 1e-3 bench threshold (single-GPU
+`ratio_vs_ref ≈ 7.3e-7`; dual-GPU `ratio_vs_ref ≈ 6.5e-6`, both far
+below threshold). Against the 128-thread CPU baseline the GPU paths
+now measure `speedup_vs_cpu` ≈ 0.18× (single-GPU) and ≈ 0.24×
+(dual-GPU): on a fully-loaded 64-physical-core CPU, the GPU paths
+trail the CPU on this case. The earlier "≈ 9.9×" banner from the
+SOR-886 commit message and PR description is a CPU-contamination
+artifact (see OLD section below); the honest ratio against a fair CPU
+baseline is well below parity here, which the harness still PASSes
+because the gate is correctness (`ratio_vs_ref < 1e-3`), not
+throughput.
+
+### OLD bench numbers (2026-05-09 contaminated; see SOR-901 for context)
+
+Originally captured against a single-threaded CPU baseline
+(`OMP_NUM_THREADS=1`, pre-SOR-894) on a box where two orphaned
+`cargo test` binaries were pegging ~64 cores each for ~62 hours
+continuously (see SOR-901's BODY for the forensic detail). Both
+factors inflated the apparent GPU speedup:
 
 ```json
 [
@@ -132,19 +219,10 @@ with another sorcerer cycle competing for CPU during the baseline) — verbatim
 ]
 ```
 
-Both GPU configs measure `speedup_vs_cpu` ≈ 9.9× (well above the
-> 1.0× requirement) AND `ratio_vs_ref` ≈ 7.3e-7 (well below the
-benchmark harness's loose 1e-3 threshold and the validation harness's
-strict 1e-4 threshold). The other four cases in the harness
-(`case_regular`, `case_quadtree_tide`, `case_snapwave`,
-`case_production`) report `speedup_vs_cpu < 1` or `ERROR`
-(`case_production` is `ERROR` because `--skip-fetch` was passed and
-its archive was not pre-fetched on this dev tree); see the PR
-description for the full table.
-
-The harness's `OVERALL: FAIL` line on this run is solely from
-`case_production`'s `ERROR` verdict (no inputs); the new case and the
-other in-tree cases all PASS.
+The "≈ 9.9×" banner the SOR-886 commit message and PR description
+quoted reflects those contaminated numbers; the 2026-05-16 refresh
+above supersedes them as the authoritative figures for this case on
+this dev box.
 
 ## Re-cutting the inputs
 
