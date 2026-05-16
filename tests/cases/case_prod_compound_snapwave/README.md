@@ -106,13 +106,95 @@ out-of-scope policy.
 
 ## Benchmark results (dev box)
 
-The implementer's local `BENCH_CPU_THREADS=1 tests/run_benchmarks.sh --skip-build --skip-fetch`
-run on this dev box (2× NVIDIA RTX A6000; single-threaded CPU baseline
-for cross-host repeatability — matches the methodology used by the
-sibling `case_prod_quadtree_subgrid_tide`; concurrent sorcerer sessions
-were holding two stale `case_snapwave:gpu_n2` SFINCS processes on GPU
-0 throughout the run) — verbatim `tests/runs_bench/summary.json` rows
-for this case:
+### Benchmark refresh (clean box, 2026-05-16, SOR-901)
+
+`tests/run_benchmarks.sh` run on a quiet box (no concurrent CPU
+competitors, all 128 CPU threads via SOR-894's
+`OMP_NUM_THREADS=$(nproc)`) — verbatim `tests/runs_bench/summary.json`
+rows for this case:
+
+```json
+[
+  {
+    "case": "case_prod_compound_snapwave",
+    "config": "cpu",
+    "wall_clock_seconds": 109.14,
+    "peak_memory_mb": 377.68,
+    "max_abs_diff_zsmax": null,
+    "max_zsmax_ref": null,
+    "ratio_vs_ref": null,
+    "verdict": "PASS",
+    "speedup_vs_cpu": null,
+    "cpu_threads": 128
+  },
+  {
+    "case": "case_prod_compound_snapwave",
+    "config": "gpu_kieee",
+    "wall_clock_seconds": 137.44,
+    "peak_memory_mb": 28.0,
+    "max_abs_diff_zsmax": 1.8417835235595703e-05,
+    "max_zsmax_ref": 0.9975324273109436,
+    "ratio_vs_ref": 1.8463395004856948e-05,
+    "verdict": "PASS",
+    "speedup_vs_cpu": 0.794,
+    "cpu_threads": null
+  },
+  {
+    "case": "case_prod_compound_snapwave",
+    "config": "gpu_fastmath",
+    "wall_clock_seconds": 131.12,
+    "peak_memory_mb": 28.0,
+    "max_abs_diff_zsmax": 1.8358230590820312e-05,
+    "max_zsmax_ref": 0.9975324273109436,
+    "ratio_vs_ref": 1.840364291746259e-05,
+    "verdict": "PASS",
+    "speedup_vs_cpu": 0.832,
+    "cpu_threads": null
+  },
+  {
+    "case": "case_prod_compound_snapwave",
+    "config": "gpu_n2_kieee",
+    "wall_clock_seconds": 111.97,
+    "peak_memory_mb": 29.0,
+    "max_abs_diff_zsmax": 1.9073486328125e-05,
+    "max_zsmax_ref": 0.9975324273109436,
+    "ratio_vs_ref": 1.91206679661949e-05,
+    "verdict": "PASS",
+    "speedup_vs_cpu": 0.975,
+    "cpu_threads": null
+  },
+  {
+    "case": "case_prod_compound_snapwave",
+    "config": "gpu_n2_fastmath",
+    "wall_clock_seconds": 107.56,
+    "peak_memory_mb": 29.0,
+    "max_abs_diff_zsmax": 1.913309097290039e-05,
+    "max_zsmax_ref": 0.9975324273109436,
+    "ratio_vs_ref": 1.918042005358926e-05,
+    "verdict": "PASS",
+    "speedup_vs_cpu": 1.015,
+    "cpu_threads": null
+  }
+]
+```
+
+All five rows clear the 1e-3 bench threshold (`ratio_vs_ref ≈ 1.9e-5`,
+two orders of magnitude inside threshold) — and on this case, both
+dual-GPU configs sit at parity with the 128-thread CPU baseline
+(`speedup_vs_cpu` ≈ 0.97 / 1.02), with the single-GPU configs at
+0.79× / 0.83×. The SnapWave-driven 15% host-side share (Amdahl's law
+note in the original section) still applies, but its impact on the
+ratio is now muted because the CPU baseline is no longer artificially
+inflated by single-threaded execution.
+
+### OLD bench numbers (2026-05-09 contaminated; see SOR-901 for context)
+
+Originally captured with `BENCH_CPU_THREADS=1` (single-threaded CPU
+baseline, pre-SOR-894 methodology) on a box where two orphaned
+`cargo test` binaries were pegging ~64 cores each for ~62 hours
+continuously, plus two stale `case_snapwave:gpu_n2` SFINCS processes
+holding GPU 0 (see SOR-901's BODY for the forensic detail). The
+combined effect inflated the apparent GPU speedup:
 
 ```json
 [
@@ -155,27 +237,11 @@ for this case:
 ]
 ```
 
-The bench harness ran with `BENCH_CPU_THREADS=1` (single-threaded CPU
-baseline) for cross-host repeatability — matches the methodology the
-sibling `case_prod_quadtree_subgrid_tide` README documents. Both GPU
-configs measure `speedup_vs_cpu` > 1.0× (satisfying the production-scale
-tier AC) AND `ratio_vs_ref` ≈ 1.45e-4 — well below the bench harness's
-loose `1e-3` threshold. The bench number is larger than the validation
-harness's `gpu_n1` ratio (2.13e-5) because the bench's `gpu_kieee` /
-`gpu_fastmath` binaries live in `install_cuda_kieee` /
-`install_cuda_fastmath` (separate nvfortran builds with bench-specific
-flag combinations), distinct from the validation harness's
-`install_cuda` binary; both binaries clear their respective gates.
-
-Speedups are lower than the pure-quadtree sibling case
-(2.0× vs ~2.9×) because the SnapWave solver itself runs on the host
-even in the GPU build — Amdahl's law: ≈ 15% of the validation
-harness's single-threaded CPU baseline wall is `Time in SnapWave`, which
-the GPU build does not accelerate.
-
-The harness's overall summary at the bottom of this same run reported
-`OVERALL: PASS` across every `(case, config)` pair on this dev tree
-(14 cases × 3 configs = 42 rows).
+The "~2.0× / ~2.1×" banner the SOR-947 commit message and PR
+description quoted reflects those contaminated numbers (cf. the
+"~2.9×" comparison against the pure-quadtree sibling that also
+appears in that section); the 2026-05-16 refresh above supersedes them
+as the authoritative figures for this case on this dev box.
 
 ## Re-cutting the inputs
 

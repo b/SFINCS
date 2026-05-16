@@ -140,12 +140,99 @@ matrix that will validate SOR-846 once it merges.
 
 ## Benchmark gate
 
-`tests/run_benchmarks.sh` runs at the looser 1e-3 ratio threshold under
-`mpirun -n 1` (so the SOR-846 n=2 defect is out of scope) and gates on
-`speedup_vs_cpu > 1.0×` for both `gpu_kieee` and `gpu_fastmath`. On the
-implementer's dev box (load avg ~250 from concurrent sessions; numbers
-will be larger on a quieter box), the verbatim
-`tests/runs_bench/summary.json` rows for this case are:
+`tests/run_benchmarks.sh` runs at the looser 1e-3 ratio threshold and
+diffs each GPU run's `zsmax` against the CPU baseline. The CPU baseline
+now uses all 128 hardware threads via `OMP_NUM_THREADS=$(nproc)` (set
+by SOR-894), so the GPU/CPU speedup ratio reflects "1 GPU vs the CPU's
+full throughput" — the operator-expected comparison on this 2x A6000 +
+64-physical-core dev box.
+
+### Benchmark refresh (clean box, 2026-05-16, SOR-901)
+
+`tests/runs_bench/summary.json` rows for this case from the
+re-bench run on a quiet box (no concurrent CPU competitors), all 128
+CPU threads, quoted verbatim:
+
+```json
+{
+  "case": "case_prod_storm_amuv",
+  "config": "cpu",
+  "wall_clock_seconds": 58.65,
+  "peak_memory_mb": 117.23,
+  "max_abs_diff_zsmax": null,
+  "max_zsmax_ref": null,
+  "ratio_vs_ref": null,
+  "verdict": "PASS",
+  "speedup_vs_cpu": null,
+  "cpu_threads": 128
+},
+{
+  "case": "case_prod_storm_amuv",
+  "config": "gpu_kieee",
+  "wall_clock_seconds": 182.14,
+  "peak_memory_mb": 28.0,
+  "max_abs_diff_zsmax": 0.0003038644790649414,
+  "max_zsmax_ref": 2.806426525115967,
+  "ratio_vs_ref": 0.00010827451791291245,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.322,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_storm_amuv",
+  "config": "gpu_fastmath",
+  "wall_clock_seconds": 176.48,
+  "peak_memory_mb": 28.0,
+  "max_abs_diff_zsmax": 0.0005509853363037109,
+  "max_zsmax_ref": 2.806426525115967,
+  "ratio_vs_ref": 0.0001963298633948534,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.332,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_storm_amuv",
+  "config": "gpu_n2_kieee",
+  "wall_clock_seconds": 122.83,
+  "peak_memory_mb": 28.0,
+  "max_abs_diff_zsmax": 0.0003038644790649414,
+  "max_zsmax_ref": 2.806426525115967,
+  "ratio_vs_ref": 0.00010827451791291245,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.477,
+  "cpu_threads": null
+},
+{
+  "case": "case_prod_storm_amuv",
+  "config": "gpu_n2_fastmath",
+  "wall_clock_seconds": 121.25,
+  "peak_memory_mb": 29.0,
+  "max_abs_diff_zsmax": 0.0003038644790649414,
+  "max_zsmax_ref": 2.806426525115967,
+  "ratio_vs_ref": 0.00010827451791291245,
+  "verdict": "PASS",
+  "speedup_vs_cpu": 0.484,
+  "cpu_threads": null
+}
+```
+
+All five rows report `verdict: PASS` against the 1e-3 benchmark
+threshold. Against the 128-thread CPU baseline the GPU configs measure
+`speedup_vs_cpu` ≈ 0.32× (single-GPU) and ≈ 0.48× (dual-GPU): on a
+fully-loaded 64-physical-core CPU, the single-GPU and dual-GPU paths
+trail the CPU on this case. The takeaway is that the prior "~9.7×"
+banner from the SOR-888 PR is a CPU-contamination artifact (see OLD
+section below); the honest ratio against a fair CPU baseline is well
+below parity here, which the harness still PASSes because the gate is
+correctness (`ratio_vs_ref < 1e-3`), not throughput.
+
+### OLD bench numbers (2026-05-09 contaminated; see SOR-901 for context)
+
+Originally captured against a single-threaded CPU baseline
+(`OMP_NUM_THREADS=1`, pre-SOR-894) on a box where two orphaned
+`cargo test` binaries from an earlier wizard cycle were pegging ~64
+cores each for ~62 hours continuously (see SOR-901's BODY for the
+forensic detail). Both factors inflated the apparent GPU speedup:
 
 ```json
 {
@@ -183,11 +270,10 @@ will be larger on a quieter box), the verbatim
 }
 ```
 
-Both GPU configurations report `verdict: PASS` against the 1e-3
-benchmark threshold and `speedup_vs_cpu > 1.0×` (~9.7× kieee, ~9.9×
-fastmath), so the case satisfies the benchmark gate. The harness's
-`OVERALL: PASS` (`benchmarks rc=0`) was confirmed on the same dev-box
-run.
+The "~9.7× kieee, ~9.9× fastmath" banner the SOR-888 commit message
+and PR description quoted reflects those contaminated numbers; the
+2026-05-16 refresh above supersedes them as the authoritative figures
+for this case on this dev box.
 
 ## CPU baseline characteristics
 
