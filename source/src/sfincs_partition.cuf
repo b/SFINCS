@@ -374,6 +374,8 @@ contains
             max_recv_zs = max(maxval(halo_recv_count), 1)
             allocate(halo_send_buf_zs(max_send_zs, halo_n_neighbors))
             allocate(halo_recv_buf_zs(max_recv_zs, halo_n_neighbors))
+            allocate(halo_send_buf_zs_r8(max_send_zs, halo_n_neighbors))
+            allocate(halo_recv_buf_zs_r8(max_recv_zs, halo_n_neighbors))
          end block
       end if
       if (halo_uv_n_neighbors > 0) then
@@ -2708,6 +2710,8 @@ contains
       if (allocated(local_to_global_uv_d))    deallocate(local_to_global_uv_d)
       if (allocated(halo_send_buf_zs))        deallocate(halo_send_buf_zs)
       if (allocated(halo_recv_buf_zs))        deallocate(halo_recv_buf_zs)
+      if (allocated(halo_send_buf_zs_r8))     deallocate(halo_send_buf_zs_r8)
+      if (allocated(halo_recv_buf_zs_r8))     deallocate(halo_recv_buf_zs_r8)
       if (allocated(halo_send_buf_q))         deallocate(halo_send_buf_q)
       if (allocated(halo_recv_buf_q))         deallocate(halo_recv_buf_q)
       if (allocated(halo_send_buf_uv))        deallocate(halo_send_buf_uv)
@@ -2748,28 +2752,27 @@ contains
       allocate(statuses_send(MPI_STATUS_SIZE, halo_n_neighbors))
       !
       ! Step 1: post all receives first so they are ready when sends arrive.
-      ! CUDA-aware MPI accepts halo_recv_buf_zs's device pointer directly.
+      ! CUDA-aware MPI accepts halo_recv_buf_zs_r8's device pointer directly.
       !
       do nbr_slot = 1, halo_n_neighbors
-         call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
-                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZS, &
+         call MPI_Irecv(halo_recv_buf_zs_r8(:, nbr_slot), halo_recv_count(nbr_slot), &
+                        MPI_DOUBLE_PRECISION, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZS, &
                         MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
       end do
       !
-      ! Step 2: gather owned halo source cells into halo_send_buf_zs. The
-      ! local-indexed halo_send_local_idx is translated through
-      ! local_to_global_d to address the full-size global-indexed zs.
-      ! zs is real*8; the wire format is real*4 to match MPI_REAL.
+      ! Step 2: gather owned halo source cells into halo_send_buf_zs_r8.
+      ! zs is real*8 and the wire format is real*8 (MPI_DOUBLE_PRECISION),
+      ! so the payload travels at full precision with no per-step quantization.
       !
       do nbr_slot = 1, halo_n_neighbors
          n = halo_send_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            halo_send_buf_zs(i, nbr_slot) = real( zs( halo_send_local_idx(i, nbr_slot) ), kind=4 )
+            halo_send_buf_zs_r8(i, nbr_slot) = zs( halo_send_local_idx(i, nbr_slot) )
          end do
       end do
       !
-      ! Synchronize so the gathered halo_send_buf_zs is fully resident in
+      ! Synchronize so the gathered halo_send_buf_zs_r8 is fully resident in
       ! device memory before MPI reads from it; the !$cuf kernel launches
       ! on the default stream and HPC-X's CUDA-aware path does not order
       ! itself against that stream automatically.
@@ -2779,8 +2782,8 @@ contains
       ! Step 3: post sends.
       !
       do nbr_slot = 1, halo_n_neighbors
-         call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
-                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZS, &
+         call MPI_Isend(halo_send_buf_zs_r8(:, nbr_slot), halo_send_count(nbr_slot), &
+                        MPI_DOUBLE_PRECISION, halo_neighbor_ranks(nbr_slot), HALO_TAG_ZS, &
                         MPI_COMM_WORLD, request_send(nbr_slot), ierr)
       end do
       !
@@ -2788,14 +2791,14 @@ contains
       !
       call MPI_Waitall(halo_n_neighbors, request_recv, statuses_recv, ierr)
       !
-      ! Step 5: scatter halo_recv_buf_zs into the device shadow of zs at
-      ! the global positions of our halo cells.
+      ! Step 5: scatter halo_recv_buf_zs_r8 into the device shadow of zs at
+      ! the local positions of our halo cells.
       !
       do nbr_slot = 1, halo_n_neighbors
          n = halo_recv_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            zs( halo_recv_local_idx(i, nbr_slot) ) = real( halo_recv_buf_zs(i, nbr_slot), kind=8 )
+            zs( halo_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_zs_r8(i, nbr_slot)
          end do
       end do
       !
@@ -2804,7 +2807,7 @@ contains
       !
       istat = cudaDeviceSynchronize()
       !
-      ! Step 6: wait for the sends so halo_send_buf_zs is reusable next step.
+      ! Step 6: wait for the sends so halo_send_buf_zs_r8 is reusable next step.
       !
       call MPI_Waitall(halo_n_neighbors, request_send, statuses_send, ierr)
       !
@@ -3062,12 +3065,10 @@ contains
    ! Modeled on halo_exchange_zs: same single-array exchange pattern,
    ! distinct MPI tag (HALO_TAG_Z_VOLUME) so concurrent exchanges cannot
    ! collide. z_volume is real*8 on host and device; the wire format is
-   ! real*4 (matching halo_exchange_zs) so the halo_send_buf_zs /
-   ! halo_recv_buf_zs buffers can be reused without allocating a wider
-   ! pair. The downcast loses ~5e-3 m^3 of precision per cell at the
-   ! 5e+4 m^3 z_volume seen in case_production, equivalent to ~1e-7 m of
-   ! water-depth precision after the subgrid table lookup -- three
-   ! orders of magnitude below the 1e-4 PASS threshold.
+   ! real*8 (MPI_DOUBLE_PRECISION) via the dedicated halo_send_buf_zs_r8 /
+   ! halo_recv_buf_zs_r8 buffer pair, so halo cells receive the owning
+   ! rank's full real*8 z_volume every step with no per-step quantization
+   ! biasing the subgrid wet/dry transitions.
    !
    ! No-op for mpi_size == 1 (halo_n_neighbors == 0) and for builds
    ! without subgrid (`if (allocated(z_volume))` guard); the cost on
@@ -3090,8 +3091,8 @@ contains
       allocate(statuses_send(MPI_STATUS_SIZE, halo_n_neighbors))
       !
       do nbr_slot = 1, halo_n_neighbors
-         call MPI_Irecv(halo_recv_buf_zs(:, nbr_slot), halo_recv_count(nbr_slot), &
-                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_Z_VOLUME, &
+         call MPI_Irecv(halo_recv_buf_zs_r8(:, nbr_slot), halo_recv_count(nbr_slot), &
+                        MPI_DOUBLE_PRECISION, halo_neighbor_ranks(nbr_slot), HALO_TAG_Z_VOLUME, &
                         MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
       end do
       !
@@ -3099,15 +3100,15 @@ contains
          n = halo_send_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            halo_send_buf_zs(i, nbr_slot) = real( z_volume( halo_send_local_idx(i, nbr_slot) ), kind=4 )
+            halo_send_buf_zs_r8(i, nbr_slot) = z_volume( halo_send_local_idx(i, nbr_slot) )
          end do
       end do
       !
       istat = cudaDeviceSynchronize()
       !
       do nbr_slot = 1, halo_n_neighbors
-         call MPI_Isend(halo_send_buf_zs(:, nbr_slot), halo_send_count(nbr_slot), &
-                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_Z_VOLUME, &
+         call MPI_Isend(halo_send_buf_zs_r8(:, nbr_slot), halo_send_count(nbr_slot), &
+                        MPI_DOUBLE_PRECISION, halo_neighbor_ranks(nbr_slot), HALO_TAG_Z_VOLUME, &
                         MPI_COMM_WORLD, request_send(nbr_slot), ierr)
       end do
       !
@@ -3117,7 +3118,7 @@ contains
          n = halo_recv_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            z_volume( halo_recv_local_idx(i, nbr_slot) ) = real( halo_recv_buf_zs(i, nbr_slot), kind=8 )
+            z_volume( halo_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_zs_r8(i, nbr_slot)
          end do
       end do
       !

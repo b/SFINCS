@@ -368,13 +368,31 @@ module sfincs_data_device
    ! mandatory in this build (verified in partition_and_localize Phase 1b),
    ! so these are device-resident; the gather kernel writes them, MPI
    ! Isend/Irecv consume them as device pointers, and the scatter kernel
-   ! reads from them. Single-precision because the on-rank state arrays
-   ! that need exchange are themselves single-precision (q, uv) and the
-   ! double-precision zs payload is acceptable to demote at the 1e-3
-   ! relative tolerance the AC sets.
+   ! reads from them.
+   !
+   ! Two precisions are carried on the cell-halo buffers, one per payload
+   ! class:
+   !
+   !   * The real*4 pair (halo_send_buf_zs / halo_recv_buf_zs) is used by
+   !     halo_exchange_zsderv, whose payload (zsderv) is itself real*4 on
+   !     both host and device and therefore carries no precision step on
+   !     the wire.
+   !
+   !   * The real*8 pair (halo_send_buf_zs_r8 / halo_recv_buf_zs_r8) is used
+   !     by halo_exchange_zs (zs is real*8) and halo_exchange_z_volume
+   !     (z_volume is real*8), where a real*4 wire format would quantize
+   !     the value every step on every halo cell and bias subgrid wet/dry
+   !     transitions. Paired with MPI_DOUBLE_PRECISION on the wire so the
+   !     halo cells receive the owning rank's full real*8 value.
+   !
+   ! The q / uv edge exchanges have their own dedicated real*4 buffer pairs
+   ! (halo_send_buf_q/uv, halo_recv_buf_q/uv) below; q and uv are real*4 on
+   ! both sides so they have no precision step either.
    !
    real, device, allocatable :: halo_send_buf_zs(:,:)
    real, device, allocatable :: halo_recv_buf_zs(:,:)
+   real*8, device, allocatable :: halo_send_buf_zs_r8(:,:)
+   real*8, device, allocatable :: halo_recv_buf_zs_r8(:,:)
    real, device, allocatable :: halo_send_buf_q(:,:)
    real, device, allocatable :: halo_recv_buf_q(:,:)
    real, device, allocatable :: halo_send_buf_uv(:,:)
