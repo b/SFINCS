@@ -211,7 +211,8 @@ module sfincs_partition
               bridge_out_cell_real4, bridge_out_cell_real8, bridge_out_cell_int1, bridge_out_cell_int4, &
               bridge_out_edge_real4, bridge_out_edge_int1, &
               bridge_out_edge_tail_real4, &
-              dump_halo_diagnostic
+              dump_halo_diagnostic, &
+              dump_partition_diff
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
               build_halo_descriptors, &
@@ -226,7 +227,7 @@ module sfincs_partition
               gather_cell_int4_renumber_edge, &
               gather_edge_int4_renumber_cell, gather_edge_int4_renumber_edge, &
               renumber_to_local_cell, renumber_to_local_edge, &
-              write_diag_row
+              write_diag_row, write_pdiff_row
    !
    ! SOR-712: per-array gather of the rank-local slice of a device shadow
    ! into rank 0's full-size global host array. The two MPI types we need
@@ -3369,6 +3370,219 @@ contains
       write(unit, '(i0,",",es24.16,",",i0,",",a,",",i0,",",es16.8,",",es16.8,",",es16.8,",",a,",",es24.16)') &
          step, t, rank, kind, g, x, y, dx, name, value
    end subroutine write_diag_row
+   !
+   ! ===================================================================
+   ! SOR-51 env-gated partition-divergence diagnostic dump.
+   !
+   ! When SFINCS_DUMP_PARTITION_DIFF is set to a positive integer N,
+   ! every Nth call writes per-rank CSV rows for the per-step state
+   ! arrays that cross the rank partition (zs, z_volume, zsderv at cells;
+   ! q, uv at edges) sampled at OWNED + HALO positions whose global cell
+   ! index falls inside one of two configurable windows. The defaults are
+   ! the case_prod_compound_snapwave rank-boundary halo clusters the
+   ! SOR-47 zsmax diff localized (netCDF flat indices 3528..3573 and
+   ! 23912..24144; the Fortran 1-based global cell id of netCDF flat
+   ! index k is k+1, so the defaults are widened to 3520..3590 and
+   ! 23900..24160 to capture the full cluster regardless of the exact
+   ! off-by-one in how the writer linearizes the quadtree):
+   !
+   !   g in [SFINCS_DUMP_PARTITION_DIFF_CMIN  .. _CMAX ]  (default 3520..3590)
+   !   g in [SFINCS_DUMP_PARTITION_DIFF_CMIN2 .. _CMAX2]  (default 23900..24160)
+   !
+   ! An edge is in-window if EITHER incident z-cell (uv_index_z_nm /
+   ! uv_index_z_nmu) is in either window; each edge row carries the two
+   ! incident global cell ids so the comparison script can associate the
+   ! edge with the cluster.
+   !
+   ! Output: sfincs_partition_diff_rank<N>.csv in the cwd. Columns:
+   !   step,t,rank,space,kind,gidx,inc_nm,inc_nmu,array,value
+   ! space is 'cell' or 'edge'; kind is 'owned' or 'halo'. For cell rows
+   ! inc_nm = inc_nmu = -1 and gidx is the global cell id; for edge rows
+   ! gidx is the global edge id and inc_nm / inc_nmu are the incident
+   ! global cell ids. Pivot per (step, space, gidx, array) and compare a
+   ! gpu_n1 run's owned value against a gpu_n2 run's owning-rank owned
+   ! value: the first (array, step, gidx) whose |gpu_n1 - gpu_n2| exceeds
+   ! a small noise floor is the smoking gun that locates the kernel
+   ! producing rank-divergent output before it propagates downstream.
+   !
+   ! Cost: zero when SFINCS_DUMP_PARTITION_DIFF is unset (single getenv +
+   ! integer parse + early return). When enabled, the dump reads device
+   ! shadows back to host workbufs sized to the full local range; runtime
+   ! cost is bounded by the per-rank cell/edge count and the dump period.
+   !
+   ! The harness stays in-tree behind the gate so future multi-rank
+   ! precision regressions can be triaged without re-instrumenting.
+   ! ===================================================================
+   subroutine dump_partition_diff(step, t)
+      !
+      implicit none
+      !
+      integer, intent(in) :: step
+      real*8,  intent(in) :: t
+      !
+      character(len=64)  :: env_period
+      character(len=64)  :: env_cmin, env_cmax, env_cmin2, env_cmax2
+      character(len=256) :: filename
+      integer :: period, ios, i, ip, g, g_nm, g_nmu, nm_l, nmu_l
+      integer :: unit, ncell, nedge, ltg_n, ltg_uv_n
+      integer :: cmin, cmax, cmin2, cmax2
+      logical :: opened, in_win
+      logical, save :: header_written = .false.
+      character(len=8) :: kind
+      !
+      real*8,  allocatable :: zs_buf(:), zvol_buf(:)
+      real*4,  allocatable :: zsderv_buf(:), q_buf(:), uv_buf(:)
+      integer, allocatable :: nm_buf(:), nmu_buf(:)
+      !
+      ! Runtime cost when the var is unset is just this getenv + parse.
+      !
+      call get_environment_variable('SFINCS_DUMP_PARTITION_DIFF', env_period)
+      if (len_trim(env_period) == 0) return
+      read(env_period, *, iostat=ios) period
+      if (ios /= 0 .or. period <= 0) return
+      if (mod(step, period) /= 0) return
+      !
+      cmin  = 3520
+      cmax  = 3590
+      cmin2 = 23900
+      cmax2 = 24160
+      call get_environment_variable('SFINCS_DUMP_PARTITION_DIFF_CMIN', env_cmin)
+      if (len_trim(env_cmin) > 0) read(env_cmin, *, iostat=ios) cmin
+      call get_environment_variable('SFINCS_DUMP_PARTITION_DIFF_CMAX', env_cmax)
+      if (len_trim(env_cmax) > 0) read(env_cmax, *, iostat=ios) cmax
+      call get_environment_variable('SFINCS_DUMP_PARTITION_DIFF_CMIN2', env_cmin2)
+      if (len_trim(env_cmin2) > 0) read(env_cmin2, *, iostat=ios) cmin2
+      call get_environment_variable('SFINCS_DUMP_PARTITION_DIFF_CMAX2', env_cmax2)
+      if (len_trim(env_cmax2) > 0) read(env_cmax2, *, iostat=ios) cmax2
+      !
+      ncell = npn_local  + halo_cell_count
+      nedge = npuv_local + halo_edge_count
+      if (ncell <= 0) return
+      if (.not. allocated(local_to_global)) return
+      ltg_n = size(local_to_global)
+      !
+      ! Snapshot cell-rank device state into host workbufs (implicit D2H).
+      !
+      if (allocated(zs)) then
+         allocate(zs_buf(ncell));     zs_buf     = zs(1:ncell)
+      end if
+      if (allocated(z_volume)) then
+         allocate(zvol_buf(ncell));   zvol_buf   = z_volume(1:ncell)
+      end if
+      if (allocated(zsderv)) then
+         allocate(zsderv_buf(ncell)); zsderv_buf = zsderv(1:ncell)
+      end if
+      !
+      ! Snapshot edge-rank device state + edge->cell connectivity. q / uv
+      ! are nw-sized (>= nedge); the z-cell connectivity is nedge-sized.
+      !
+      ltg_uv_n = 0
+      if (nedge > 0 .and. allocated(local_to_global_uv)) then
+         ltg_uv_n = size(local_to_global_uv)
+         if (allocated(q)  .and. size(q)  >= nedge) then
+            allocate(q_buf(nedge));   q_buf  = q(1:nedge)
+         end if
+         if (allocated(uv) .and. size(uv) >= nedge) then
+            allocate(uv_buf(nedge));  uv_buf = uv(1:nedge)
+         end if
+         if (allocated(uv_index_z_nm)  .and. size(uv_index_z_nm)  >= nedge) then
+            allocate(nm_buf(nedge));  nm_buf  = uv_index_z_nm(1:nedge)
+         end if
+         if (allocated(uv_index_z_nmu) .and. size(uv_index_z_nmu) >= nedge) then
+            allocate(nmu_buf(nedge)); nmu_buf = uv_index_z_nmu(1:nedge)
+         end if
+      end if
+      !
+      write(filename, '(a,i0,a)') 'sfincs_partition_diff_rank', mpi_rank, '.csv'
+      unit = 70 + mpi_rank
+      inquire(unit=unit, opened=opened)
+      if (.not. opened) then
+         if (header_written) then
+            open(unit=unit, file=trim(filename), status='old', position='append', action='write')
+         else
+            open(unit=unit, file=trim(filename), status='replace', action='write')
+            write(unit, '(a)') 'step,t,rank,space,kind,gidx,inc_nm,inc_nmu,array,value'
+            header_written = .true.
+         end if
+      end if
+      !
+      ! Cell-indexed arrays.
+      !
+      do i = 1, ncell
+         if (i > ltg_n) exit
+         g = local_to_global(i)
+         if (g <= 0) cycle
+         if (.not. ( (g >= cmin  .and. g <= cmax ) .or. &
+                     (g >= cmin2 .and. g <= cmax2) )) cycle
+         if (i <= npn_local) then
+            kind = 'owned'
+         else
+            kind = 'halo'
+         end if
+         if (allocated(zs_buf)) &
+            call write_pdiff_row(unit, step, t, mpi_rank, 'cell', trim(kind), g, -1, -1, 'zs',       real(zs_buf(i),     kind=8))
+         if (allocated(zvol_buf)) &
+            call write_pdiff_row(unit, step, t, mpi_rank, 'cell', trim(kind), g, -1, -1, 'z_volume', real(zvol_buf(i),   kind=8))
+         if (allocated(zsderv_buf)) &
+            call write_pdiff_row(unit, step, t, mpi_rank, 'cell', trim(kind), g, -1, -1, 'zsderv',   real(zsderv_buf(i), kind=8))
+      end do
+      !
+      ! Edge-indexed arrays (q, uv): include an edge if either incident
+      ! z-cell is in-window.
+      !
+      if (allocated(nm_buf) .and. allocated(nmu_buf)) then
+         do ip = 1, nedge
+            if (ip > ltg_uv_n) exit
+            nm_l  = nm_buf(ip)
+            nmu_l = nmu_buf(ip)
+            g_nm  = 0
+            g_nmu = 0
+            if (nm_l  >= 1 .and. nm_l  <= ltg_n) g_nm  = local_to_global(nm_l)
+            if (nmu_l >= 1 .and. nmu_l <= ltg_n) g_nmu = local_to_global(nmu_l)
+            in_win = ( (g_nm  >= cmin  .and. g_nm  <= cmax ) .or. &
+                       (g_nm  >= cmin2 .and. g_nm  <= cmax2) ) .or. &
+                     ( (g_nmu >= cmin  .and. g_nmu <= cmax ) .or. &
+                       (g_nmu >= cmin2 .and. g_nmu <= cmax2) )
+            if (.not. in_win) cycle
+            g = local_to_global_uv(ip)
+            if (ip <= npuv_local) then
+               kind = 'owned'
+            else
+               kind = 'halo'
+            end if
+            if (allocated(q_buf)) &
+               call write_pdiff_row(unit, step, t, mpi_rank, 'edge', trim(kind), g, g_nm, g_nmu, 'q',  real(q_buf(ip),  kind=8))
+            if (allocated(uv_buf)) &
+               call write_pdiff_row(unit, step, t, mpi_rank, 'edge', trim(kind), g, g_nm, g_nmu, 'uv', real(uv_buf(ip), kind=8))
+         end do
+      end if
+      !
+      flush(unit)
+      !
+      if (allocated(zs_buf))     deallocate(zs_buf)
+      if (allocated(zvol_buf))   deallocate(zvol_buf)
+      if (allocated(zsderv_buf)) deallocate(zsderv_buf)
+      if (allocated(q_buf))      deallocate(q_buf)
+      if (allocated(uv_buf))     deallocate(uv_buf)
+      if (allocated(nm_buf))     deallocate(nm_buf)
+      if (allocated(nmu_buf))    deallocate(nmu_buf)
+      !
+   end subroutine dump_partition_diff
+   !
+   subroutine write_pdiff_row(unit, step, t, rank, space, kind, g, inc_nm, inc_nmu, name, value)
+      integer,          intent(in) :: unit
+      integer,          intent(in) :: step
+      real*8,           intent(in) :: t
+      integer,          intent(in) :: rank
+      character(len=*), intent(in) :: space
+      character(len=*), intent(in) :: kind
+      integer,          intent(in) :: g, inc_nm, inc_nmu
+      character(len=*), intent(in) :: name
+      real*8,           intent(in) :: value
+      !
+      write(unit, '(i0,",",es24.16,",",i0,",",a,",",a,",",i0,",",i0,",",i0,",",a,",",es24.16)') &
+         step, t, rank, space, kind, g, inc_nm, inc_nmu, name, value
+   end subroutine write_pdiff_row
    !
    subroutine device_to_host_for_output()
       !

@@ -737,6 +737,19 @@ module sfincs_lib
          ! snapshot reflects what the next step's k_compute_fluxes will see.
          !
          call dump_halo_diagnostic(nt, t)
+         !
+         ! SOR-51 env-gated partition-divergence diagnostic. No-op unless
+         ! SFINCS_DUMP_PARTITION_DIFF is set to a positive integer N; then
+         ! every Nth step it dumps the per-step cross-partition state
+         ! arrays (zs, z_volume, zsderv at cells; q, uv at edges) at
+         ! owned + halo positions inside the configurable rank-boundary
+         ! cell-index windows to a per-rank CSV. Comparing a gpu_n1 run's
+         ! owned value against a gpu_n2 run's owning-rank owned value at
+         ! the same (step, gidx, array) localizes which variable first
+         ! develops a multi-rank divergence and at which step — the
+         ! smoking gun that maps to the kernel producing it.
+         !
+         call dump_partition_diff(nt, t)
 #endif
          !
       endif
