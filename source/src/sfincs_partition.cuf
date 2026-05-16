@@ -372,6 +372,14 @@ contains
       !
       call verify_halo_descriptor_symmetry()
       !
+      ! --- Phase 5c: Optional stencil-shadow zero-alias diagnostic (SOR-62).
+      ! Runs only when SFINCS_DEBUG_STENCIL_SHADOW_CHECK is a positive
+      ! integer; confirms the second halo-discovery pass removed the
+      ! OOB-to-zero aliasing of k_compute_fluxes' eight stencil-neighbor
+      ! edges. Immediate-return no-op otherwise (one getenv).
+      !
+      call verify_stencil_shadow_nonzero()
+      !
       ! --- Phase 6: Halo-exchange runtime allocations -----------------------
       ! Mirror local_to_global to the device so the gather/scatter kernels in
       ! halo_exchange_zs can index zs by global position; size the per-zs
@@ -1767,6 +1775,33 @@ contains
       call qsort_recursive(idx, keys, j + 1, hi)
    end subroutine qsort_recursive
    !
+   integer function stencil_neighbor_h(iuv, k) result(iuv_n)
+      !
+      ! Returns the k-th (1..8) k_compute_fluxes stencil-neighbor global
+      ! edge index of edge iuv, read from the host connectivity arrays, or
+      ! 0 when the corresponding array is not allocated (no advection /
+      ! coriolis / viscosity / thetasmoothing / friction2d build, so
+      ! k_compute_fluxes never reads them). The slot order is fixed and is
+      ! the SINGLE definition shared by the second halo-discovery pass in
+      ! build_local_index_maps and the stencil descriptor walks in
+      ! build_halo_descriptors, so the canonical global-iuv enumeration is
+      ! evaluated bit-identically on every rank (the SOR-35 symmetric-
+      ! enumeration invariant the halo descriptor relies on).
+      !
+      integer, intent(in) :: iuv, k
+      iuv_n = 0
+      select case (k)
+      case (1); if (allocated(uv_index_u_nmd_h))  iuv_n = uv_index_u_nmd_h(iuv)
+      case (2); if (allocated(uv_index_u_nmu_h))  iuv_n = uv_index_u_nmu_h(iuv)
+      case (3); if (allocated(uv_index_u_ndm_h))  iuv_n = uv_index_u_ndm_h(iuv)
+      case (4); if (allocated(uv_index_u_num_h))  iuv_n = uv_index_u_num_h(iuv)
+      case (5); if (allocated(uv_index_v_nm_h))   iuv_n = uv_index_v_nm_h(iuv)
+      case (6); if (allocated(uv_index_v_nmu_h))  iuv_n = uv_index_v_nmu_h(iuv)
+      case (7); if (allocated(uv_index_v_ndm_h))  iuv_n = uv_index_v_ndm_h(iuv)
+      case (8); if (allocated(uv_index_v_ndmu_h)) iuv_n = uv_index_v_ndmu_h(iuv)
+      end select
+   end function stencil_neighbor_h
+   !
    subroutine build_local_index_maps(cell_part, npn_total, npuv_total)
       !
       ! Walks owned cells, discovers one-cell-deep cell and edge halos, and
@@ -1792,6 +1827,7 @@ contains
       integer :: nm, iuv, nm_a, nm_b
       integer :: r_a, r_b
       integer :: i, k, r, ridx, n_neighbors
+      integer :: iuv_n, ks
       !
       ! Initialise scalars/output arrays to safe defaults for the
       ! mpi_size == 1 / unallocated-input fast path.
@@ -1897,6 +1933,66 @@ contains
             if (r >= 0 .and. r < mpi_size .and. r /= mpi_rank) neighbor_present(r) = .true.
          end if
       end do
+      !
+      ! ---- Second halo-discovery pass: k_compute_fluxes 8-stencil (SOR-62) ----
+      !
+      ! k_compute_fluxes (sfincs_momentum_gpu.cuf) reads, for every owned
+      ! edge iuv, eight stencil-neighbor edges
+      !   uv_index_u_nmd/nmu/ndm/num(iuv), uv_index_v_nm/nmu/ndm/ndmu(iuv)
+      ! from q0/uv0. The straddling-edge pass above only marks edges with a
+      ! cell on this rank, so a stencil-neighbor edge that is entirely
+      ! owned by another rank (both its cells foreign, neither in this
+      ! rank's cell halo) is neither owned nor halo here:
+      ! gather_edge_int4_renumber_edge then aliases its global index to 0
+      ! (global_to_local_uv == 0) and k_compute_fluxes reads q0(0)/uv0(0)
+      ! (deterministic zero on this nvfortran build), silently truncating
+      ! advection across the partition cut (the SOR-46 case_wavemaker
+      ! gpu_n2 ~22% zsmax deficit). Mark every rank-foreign stencil-
+      ! neighbor edge of an owned edge as a halo edge so it enters the
+      ! local edge map (npuv_total / halo_edge_count grow with it) and is
+      ! refreshed by halo_exchange_q_uv each step.
+      !
+      ! The walk is the canonical global-iuv ascending sequence and is
+      ! evaluated identically on every rank (edge_owner and the eight
+      ! stencil arrays are global and bit-identical across ranks). Both the
+      ! consumer rank (which receives iuv_n) and the owner rank (which
+      ! sends iuv_n) register each other as neighbors here so that
+      ! build_halo_descriptors' rank_to_idx is valid on both sides of every
+      ! pair (the descriptor's stencil send/recv slots must be symmetric --
+      ! SOR-35). Only the consumer marks is_halo_edge: an owned or a
+      ! rank-foreign-but-unread edge stays out of the halo (minimal halo).
+      ! Gated on mpi_size > 1 so the single-rank maps stay identities and
+      ! the N=1 device state is byte-identical to the branch base.
+      !
+      if (mpi_size > 1) then
+         do iuv = 1, npuv_h
+            r_a = edge_owner(iuv)                  ! consumer-edge owner
+            if (r_a < 0 .or. r_a >= mpi_size) cycle
+            do ks = 1, 8
+               iuv_n = stencil_neighbor_h(iuv, ks)
+               if (iuv_n <= 0 .or. iuv_n > npuv_h) cycle
+               r_b = edge_owner(iuv_n)             ! stencil-neighbor owner
+               if (r_b < 0 .or. r_b >= mpi_size) cycle
+               if (r_a == r_b) cycle
+               if (r_a == mpi_rank) then
+                  !
+                  ! We own iuv; iuv_n is a foreign stencil-neighbor edge
+                  ! k_compute_fluxes reads -> bring it into our halo and
+                  ! receive it from its owner r_b.
+                  !
+                  is_halo_edge(iuv_n)   = .true.
+                  neighbor_present(r_b) = .true.
+               else if (r_b == mpi_rank) then
+                  !
+                  ! We own iuv_n; the rank owning iuv (r_a) needs it as a
+                  ! stencil neighbor -> register r_a so we send to it
+                  ! (build_halo_descriptors' rank_to_idx(r_a) > 0).
+                  !
+                  neighbor_present(r_a) = .true.
+               end if
+            end do
+         end do
+      end if
       !
       n_neighbors = count(neighbor_present)
       allocate(nbr_ranks(max(n_neighbors, 1)))
@@ -2077,6 +2173,7 @@ contains
       integer, allocatable :: edge_recv_loc(:,:), edge_recv_rem(:,:), edge_send_loc(:,:)
       integer :: iuv, nm_a, nm_b, r_a, r_b, r_own, r_other
       integer :: ridx
+      integer :: ks, iuv_n, r_cons, r_prod
       integer :: max_cell_recv, max_cell_send, max_edge_recv, max_edge_send
       integer, allocatable :: rank_to_idx(:)
       !
@@ -2210,6 +2307,60 @@ contains
             end if
          end do
          !
+         ! ---- Pass 1b: count stencil-neighbor edge halo (SOR-62) ----
+         !
+         ! For each edge iuv, k_compute_fluxes (running on the rank owning
+         ! iuv) reads the eight stencil-neighbor edges. The rank owning a
+         ! stencil-neighbor edge iuv_n must SEND it to the rank owning iuv,
+         ! which RECVs it. build_local_index_maps already brought iuv_n
+         ! into the consumer's edge halo; here we add the matching
+         ! send/recv descriptor entries. The walk is the SAME canonical
+         ! global-iuv ascending sequence, evaluated identically on every
+         ! rank, so the i-th send entry on the owning rank aligns with the
+         ! i-th recv entry on the consuming rank (SOR-35). The
+         ! straddling-edge _seen flags are intentionally NOT reset between
+         ! the two count walks: an edge that is both a straddling halo
+         ! edge and a stencil-neighbor halo edge is enumerated exactly
+         ! once -- at its straddling ordinal -- on both sides, so the
+         ! combined per-neighbor lists stay symmetric.
+         !
+         do iuv = 1, npuv_h
+            r_cons = edge_owner(iuv)             ! consumer-edge owner
+            if (r_cons < 0 .or. r_cons >= mpi_size) cycle
+            do ks = 1, 8
+               iuv_n = stencil_neighbor_h(iuv, ks)
+               if (iuv_n <= 0 .or. iuv_n > npuv_h) cycle
+               r_prod = edge_owner(iuv_n)        ! stencil-neighbor owner
+               if (r_prod < 0 .or. r_prod >= mpi_size) cycle
+               if (r_cons == r_prod) cycle
+               if (r_cons /= mpi_rank .and. r_prod /= mpi_rank) cycle
+               if (r_cons == mpi_rank) then
+                  !
+                  ! We own iuv: recv iuv_n from its owner r_prod. Global
+                  ! dedup on iuv_n (its owner is unique), mirroring the
+                  ! straddling recv.
+                  !
+                  ridx = rank_to_idx(r_prod)
+                  if (ridx <= 0) cycle
+                  if (.not. edge_recv_seen(iuv_n)) then
+                     edge_recv_seen(iuv_n) = .true.
+                     edge_recv_count(ridx) = edge_recv_count(ridx) + 1
+                  end if
+               else
+                  !
+                  ! We own iuv_n (r_prod == mpi_rank): send it to r_cons,
+                  ! the rank that reads it as a stencil neighbor.
+                  !
+                  ridx = rank_to_idx(r_cons)
+                  if (ridx <= 0) cycle
+                  if (.not. edge_send_seen(iuv_n, ridx)) then
+                     edge_send_seen(iuv_n, ridx) = .true.
+                     edge_send_count(ridx) = edge_send_count(ridx) + 1
+                  end if
+               end if
+            end do
+         end do
+         !
          ! ---- Pass 2: allocate buffers and fill index arrays ----
          !
          max_cell_recv = max(maxval(cell_recv_count), 1)
@@ -2297,6 +2448,48 @@ contains
                      edge_recv_rem(e_recv_pos(ridx), ridx) = iuv
                   end if
                end if
+            end do
+            !
+            ! ---- Pass 2b: fill stencil-neighbor edge halo (SOR-62) ----
+            !
+            ! Same canonical walk as Pass 1b. The _seen flags carry over
+            ! from the straddling fill above (not reset), so edges already
+            ! placed there are skipped and the stencil entries are
+            ! appended after them; e_send_pos / e_recv_pos continue from
+            ! the straddling counts. Both the owning and consuming ranks
+            ! traverse the identical (iuv, slot) sequence with the
+            ! identical predicate and dedup key, so the appended stencil
+            ! send/recv slots stay position-aligned across the pair.
+            !
+            do iuv = 1, npuv_h
+               r_cons = edge_owner(iuv)
+               if (r_cons < 0 .or. r_cons >= mpi_size) cycle
+               do ks = 1, 8
+                  iuv_n = stencil_neighbor_h(iuv, ks)
+                  if (iuv_n <= 0 .or. iuv_n > npuv_h) cycle
+                  r_prod = edge_owner(iuv_n)
+                  if (r_prod < 0 .or. r_prod >= mpi_size) cycle
+                  if (r_cons == r_prod) cycle
+                  if (r_cons /= mpi_rank .and. r_prod /= mpi_rank) cycle
+                  if (r_cons == mpi_rank) then
+                     ridx = rank_to_idx(r_prod)
+                     if (ridx <= 0) cycle
+                     if (.not. edge_recv_seen(iuv_n)) then
+                        edge_recv_seen(iuv_n) = .true.
+                        e_recv_pos(ridx) = e_recv_pos(ridx) + 1
+                        edge_recv_loc(e_recv_pos(ridx), ridx) = global_to_local_uv(iuv_n)
+                        edge_recv_rem(e_recv_pos(ridx), ridx) = iuv_n
+                     end if
+                  else
+                     ridx = rank_to_idx(r_cons)
+                     if (ridx <= 0) cycle
+                     if (.not. edge_send_seen(iuv_n, ridx)) then
+                        edge_send_seen(iuv_n, ridx) = .true.
+                        e_send_pos(ridx) = e_send_pos(ridx) + 1
+                        edge_send_loc(e_send_pos(ridx), ridx) = global_to_local_uv(iuv_n)
+                     end if
+                  end if
+               end do
             end do
             !
             deallocate(c_recv_pos)
@@ -2515,6 +2708,76 @@ contains
       deallocate(host_send_local_idx, host_recv_remote_idx)
       !
    end subroutine verify_halo_descriptor_symmetry
+   !
+   subroutine verify_stencil_shadow_nonzero()
+      !
+      ! Env-gated (SFINCS_DEBUG_STENCIL_SHADOW_CHECK) one-shot check that,
+      ! on rank 0, none of the eight k_compute_fluxes stencil-neighbor
+      ! device shadows (uv_index_u_nmd/nmu/ndm/num,
+      ! uv_index_v_nm/nmu/ndm/ndmu) holds a 0 at an owned-edge row
+      ! (1..npuv_local). The host stencil arrays never contain 0 (missing
+      ! u-neighbors are set to the edge itself, missing v-neighbors to the
+      ! npuv+ncuv+1 sentinel in initialize_domain), so a 0 in an owned row
+      ! can only come from gather_edge_int4_renumber_edge aliasing a
+      ! rank-foreign neighbor edge whose global_to_local_uv is 0 -- the
+      ! SOR-62 defect this issue closes. After the second halo-discovery
+      ! pass every such neighbor resolves to a valid local index, so this
+      ! routine prints OK and is otherwise inert. Defaults off (one
+      ! getenv when unset); single-rank returns immediately. Mirrors the
+      ! SFINCS_DEBUG_HALO_DESC_CHECK gating idiom above.
+      !
+      character(len=64) :: env_val
+      integer :: enabled_int, ios, ierr
+      logical :: ok
+      integer*4, allocatable :: host_tmp(:)
+      !
+      call get_environment_variable('SFINCS_DEBUG_STENCIL_SHADOW_CHECK', env_val)
+      if (len_trim(env_val) == 0) return
+      read(env_val, *, iostat=ios) enabled_int
+      if (ios /= 0 .or. enabled_int <= 0) return
+      if (mpi_size <= 1) return
+      if (mpi_rank /= 0) return
+      if (npuv_local <= 0) return
+      !
+      allocate(host_tmp(npuv_local))
+      ok = .true.
+      if (allocated(uv_index_u_nmd))  call scan_shadow(uv_index_u_nmd,  'uv_index_u_nmd')
+      if (allocated(uv_index_u_nmu))  call scan_shadow(uv_index_u_nmu,  'uv_index_u_nmu')
+      if (allocated(uv_index_u_ndm))  call scan_shadow(uv_index_u_ndm,  'uv_index_u_ndm')
+      if (allocated(uv_index_u_num))  call scan_shadow(uv_index_u_num,  'uv_index_u_num')
+      if (allocated(uv_index_v_nm))   call scan_shadow(uv_index_v_nm,   'uv_index_v_nm')
+      if (allocated(uv_index_v_nmu))  call scan_shadow(uv_index_v_nmu,  'uv_index_v_nmu')
+      if (allocated(uv_index_v_ndm))  call scan_shadow(uv_index_v_ndm,  'uv_index_v_ndm')
+      if (allocated(uv_index_v_ndmu)) call scan_shadow(uv_index_v_ndmu, 'uv_index_v_ndmu')
+      deallocate(host_tmp)
+      !
+      if (.not. ok) then
+         write(*, '(A,I0)') 'STENCIL_SHADOW ABORT: zero alias in owned-edge '// &
+            'row of a stencil shadow (SOR-62 defect) on rank ', mpi_rank
+         call MPI_Abort(MPI_COMM_WORLD, 9003, ierr)
+      else
+         write(*, '(A,I0,A)') 'STENCIL_SHADOW OK: 8 stencil shadows nonzero '// &
+            'across ', npuv_local, ' owned edge rows on rank 0'
+      end if
+      !
+   contains
+      !
+      subroutine scan_shadow(dev, nm)
+         integer*4, device, intent(in) :: dev(:)
+         character(len=*), intent(in)  :: nm
+         integer :: i
+         host_tmp = dev(1:npuv_local)
+         do i = 1, npuv_local
+            if (host_tmp(i) == 0) then
+               write(*, '(A,A,A,I0)') 'STENCIL_SHADOW zero: ', trim(nm), &
+                  ' owned-edge row ', i
+               ok = .false.
+               return
+            end if
+         end do
+      end subroutine scan_shadow
+      !
+   end subroutine verify_stencil_shadow_nonzero
    !
    subroutine device_finalize()
       !
