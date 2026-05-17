@@ -1,0 +1,353 @@
+
+====================
+== NVIDIA HPC SDK ==
+====================
+ 
+NVIDIA HPC SDK version 25.9
+ 
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+--------------------------------------------------------------------------
+WARNING: Open MPI tried to bind a process but failed.  This is a
+warning only; your job will continue, though performance may
+be degraded.
+
+  Local host:        3990b8db90b8
+  Application name:  /work/tests/perf/phase2-q-uv-device-canonical-20260517/rank_select.sh
+  Error message:     failed to bind memory
+  Location:          ../../../../../orte/mca/rtc/hwloc/rtc_hwloc.c:447
+
+--------------------------------------------------------------------------
+rank-0 sfincs PID: 81
+[LOG_CAT_ML] You must specify a valid HCA device by setting:
+-x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
+If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
+In case of unfounded HCA device please contact your system administrator.
+[LOG_CAT_ML] You must specify a valid HCA device by setting:
+-x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
+If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
+In case of unfounded HCA device please contact your system administrator.
+[3990b8db90b8:00081] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+[3990b8db90b8:00113] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    102880
+Number of active u/v points    :    205976
+Number of cells in level   1   :      5664
+Number of cells in level   2   :     27520
+Number of cells in level   3   :     69696
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    102880
+Number of active u/v points    :    205976
+Number of cells in level   1   :      5664
+Number of cells in level   2   :     27520
+Number of cells in level   3   :     69696
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : yes
+Wave paddles         : no
+------------------------------------------
+
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : yes
+Wave paddles         : no
+------------------------------------------
+
+Coupling with SnapWave ...
+
+----------- Welcome to SnapWave ---------
+
+   @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
+  @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
+  @@@      @@@ @@  @@  @@  @@  @@   @@@
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+             .......:.......
+         ...:::::::::::::::::...
+Coupling with SnapWave ...
+
+----------- Welcome to SnapWave ---------
+
+   @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
+  @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
+  @@@      @@@ @@  @@  @@  @@  @@   @@@
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      ..:::::::............::::::..
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
+.::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
+::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
+..:@@@@@@@@@@@@@@@@@@@@^..............::.
+..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
+ .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+    ..:::::::::::::::::::::::::::::..
+      ..:::::::::::::::::::::::::..
+             .......:.......
+         ...:::::::::::::::::...
+      ..:::::::............::::::..
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+         ...:::::::::::::::::...
+             .......:.......
+
+-----------------------------------------
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
+.::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
+::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
+
+Build-Revision: $Rev: svn 197-branch:SnapWave_IG
+Build-Date: $Date: 2025-04-14
+
+------ Preparing model simulation --------
+
+..:@@@@@@@@@@@@@@@@@@@@^..............::.
+..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
+ .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
+    ..:::::::::::::::::::::::::::::..
+      ..:::::::::::::::::::::::::..
+         ...:::::::::::::::::...
+             .......:.......
+
+-----------------------------------------
+
+Build-Revision: $Rev: svn 197-branch:SnapWave_IG
+Build-Date: $Date: 2025-04-14
+
+------ Preparing model simulation --------
+
+------------------------------------------
+SnapWave Computational mesh
+------------------------------------------
+Number of active SnapWave nodes:    102880
+Number of active SnapWave cells:    103105
+------------------------------------------
+SnapWave Computational mesh
+------------------------------------------
+Number of active SnapWave nodes:    102880
+Number of active SnapWave cells:    103105
+
+
+------------------------------------------
+SnapWave Processes
+------------------------------------------
+SnapWave IG waves                  : yes
+SnapWave implicit IG source term   : no
+SnapWave IG bc using Herbers       : yes
+SnapWave wind growth               : no
+SnapWave vegetation                : no
+------------------------------------------
+------------------------------------------
+SnapWave Processes
+------------------------------------------
+SnapWave IG waves                  : yes
+SnapWave implicit IG source term   : no
+SnapWave IG bc using Herbers       : yes
+SnapWave wind growth               : no
+SnapWave vegetation                : no
+------------------------------------------
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   0% complete,       - s remaining ...
+[3990b8db90b8:00076] 1 more process has sent help message help-orte-odls-default.txt / memory not bound
+[3990b8db90b8:00076] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
+   5% complete,    92.8 s remaining ...
+   5% complete,    92.1 s remaining ...
+  10% complete,    77.6 s remaining ...
+  10% complete,    77.3 s remaining ...
+  15% complete,    75.9 s remaining ...
+  15% complete,    75.7 s remaining ...
+  20% complete,    67.9 s remaining ...
+  20% complete,    67.7 s remaining ...
+Collecting data...
+  25% complete,    65.8 s remaining ...
+  25% complete,    65.8 s remaining ...
+  30% complete,    60.1 s remaining ...
+  30% complete,    60.0 s remaining ...
+  35% complete,    54.6 s remaining ...
+  35% complete,    54.6 s remaining ...
+  40% complete,    51.0 s remaining ...
+  40% complete,    50.9 s remaining ...
+  45% complete,    45.9 s remaining ...
+  45% complete,    45.8 s remaining ...
+  50% complete,    42.1 s remaining ...
+  50% complete,    42.1 s remaining ...
+  55% complete,    37.7 s remaining ...
+  55% complete,    37.7 s remaining ...
+  60% complete,    33.3 s remaining ...
+  60% complete,    33.3 s remaining ...
+  65% complete,    29.7 s remaining ...
+  65% complete,    29.7 s remaining ...
+  70% complete,    25.3 s remaining ...
+  70% complete,    25.3 s remaining ...
+  75% complete,    21.3 s remaining ...
+  75% complete,    21.3 s remaining ...
+  80% complete,    16.9 s remaining ...
+  80% complete,    16.9 s remaining ...
+  85% complete,    12.6 s remaining ...
+  85% complete,    12.6 s remaining ...
+  90% complete,     8.5 s remaining ...
+  90% complete,     8.4 s remaining ...
+  95% complete,     4.2 s remaining ...
+  95% complete,     4.2 s remaining ...
+ 100% complete,     0.0 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :     88.111
+ Total simulation time  :     85.795
+ Time in input          :      2.316
+ Time in boundaries     :      3.330 (  3.9%)
+ Time in momentum       :      4.293 (  5.0%)
+ Time in continuity     :     12.961 ( 15.1%)
+ Time in SnapWave       :     55.336 ( 64.5%)
+ Time in output         :      0.000 (  0.0%)
+
+ Average time step (s)  :      3.086
+
+----------- Closing off SFINCS -----------
+
+---------- Simulation finished -----------
+
+ Total time             :     88.099
+ Total simulation time  :     85.783
+ Time in input          :      2.316
+ Time in boundaries     :      4.276 (  5.0%)
+ Time in momentum       :      5.388 (  6.3%)
+ Time in continuity     :     14.163 ( 16.5%)
+ Time in SnapWave       :     55.340 ( 64.5%)
+ Time in output         :      0.414 (  0.5%)
+
+ Average time step (s)  :      3.086
+
+----------- Closing off SFINCS -----------
+Generating '/tmp/nsys-report-cfa5.qdstrm'
+[1/1] [0%                          ] phase2_rank0.nsys-rep[1/1] [0%                          ] phase2_rank0.nsys-rep[1/1] [=========45%                ] phase2_rank0.nsys-rep[1/1] [======================91%   ] phase2_rank0.nsys-rep[1/1] [======================92%   ] phase2_rank0.nsys-rep[1/1] [=======================93%  ] phase2_rank0.nsys-rep[1/1] [0%                          ] phase2_rank0.nsys-rep[1/1] [====25%                     ] phase2_rank0.nsys-rep[1/1] [=16%                        ] phase2_rank0.nsys-rep[1/1] [12%                         ] phase2_rank0.nsys-rep[1/1] [9%                          ] phase2_rank0.nsys-rep[1/1] [8%                          ] phase2_rank0.nsys-rep[1/1] [6%                          ] phase2_rank0.nsys-rep[1/1] [5%                          ] phase2_rank0.nsys-rep[1/1] [0%                          ] phase2_rank0.nsys-rep[1/1] [5%                          ] phase2_rank0.nsys-rep[1/1] [6%                          ] phase2_rank0.nsys-rep[1/1] [7%                          ] phase2_rank0.nsys-rep[1/1] [8%                          ] phase2_rank0.nsys-rep[1/1] [9%                          ] phase2_rank0.nsys-rep[1/1] [10%                         ] phase2_rank0.nsys-rep[1/1] [11%                         ] phase2_rank0.nsys-rep[1/1] [12%                         ] phase2_rank0.nsys-rep[1/1] [13%                         ] phase2_rank0.nsys-rep[1/1] [14%                         ] phase2_rank0.nsys-rep[1/1] [=15%                        ] phase2_rank0.nsys-rep[1/1] [=16%                        ] phase2_rank0.nsys-rep[1/1] [=17%                        ] phase2_rank0.nsys-rep[1/1] [==18%                       ] phase2_rank0.nsys-rep[1/1] [==19%                       ] phase2_rank0.nsys-rep[1/1] [==20%                       ] phase2_rank0.nsys-rep[1/1] [==21%                       ] phase2_rank0.nsys-rep[1/1] [===22%                      ] phase2_rank0.nsys-rep[1/1] [===23%                      ] phase2_rank0.nsys-rep[1/1] [===24%                      ] phase2_rank0.nsys-rep[1/1] [====25%                     ] phase2_rank0.nsys-rep[1/1] [====26%                     ] phase2_rank0.nsys-rep[1/1] [====27%                     ] phase2_rank0.nsys-rep[1/1] [====28%                     ] phase2_rank0.nsys-rep[1/1] [=====29%                    ] phase2_rank0.nsys-rep[1/1] [=====30%                    ] phase2_rank0.nsys-rep[1/1] [=====31%                    ] phase2_rank0.nsys-rep[1/1] [=====32%                    ] phase2_rank0.nsys-rep[1/1] [======33%                   ] phase2_rank0.nsys-rep[1/1] [======34%                   ] phase2_rank0.nsys-rep[1/1] [======35%                   ] phase2_rank0.nsys-rep[1/1] [=======36%                  ] phase2_rank0.nsys-rep[1/1] [=======37%                  ] phase2_rank0.nsys-rep[1/1] [=======38%                  ] phase2_rank0.nsys-rep[1/1] [=======39%                  ] phase2_rank0.nsys-rep[1/1] [========40%                 ] phase2_rank0.nsys-rep[1/1] [========41%                 ] phase2_rank0.nsys-rep[1/1] [========42%                 ] phase2_rank0.nsys-rep[1/1] [=========43%                ] phase2_rank0.nsys-rep[1/1] [=========44%                ] phase2_rank0.nsys-rep[1/1] [=========45%                ] phase2_rank0.nsys-rep[1/1] [=========46%                ] phase2_rank0.nsys-rep[1/1] [==========47%               ] phase2_rank0.nsys-rep[1/1] [==========48%               ] phase2_rank0.nsys-rep[1/1] [==========49%               ] phase2_rank0.nsys-rep[1/1] [===========50%              ] phase2_rank0.nsys-rep[1/1] [===========51%              ] phase2_rank0.nsys-rep[1/1] [===========52%              ] phase2_rank0.nsys-rep[1/1] [===========53%              ] phase2_rank0.nsys-rep[1/1] [============54%             ] phase2_rank0.nsys-rep[1/1] [============55%             ] phase2_rank0.nsys-rep[1/1] [============56%             ] phase2_rank0.nsys-rep[1/1] [============57%             ] phase2_rank0.nsys-rep[1/1] [=============58%            ] phase2_rank0.nsys-rep[1/1] [=============59%            ] phase2_rank0.nsys-rep[1/1] [=============60%            ] phase2_rank0.nsys-rep[1/1] [==============61%           ] phase2_rank0.nsys-rep[1/1] [==============62%           ] phase2_rank0.nsys-rep[1/1] [==============63%           ] phase2_rank0.nsys-rep[1/1] [==============64%           ] phase2_rank0.nsys-rep[1/1] [===============65%          ] phase2_rank0.nsys-rep[1/1] [===============66%          ] phase2_rank0.nsys-rep[1/1] [=================74%        ] phase2_rank0.nsys-rep[1/1] [========================100%] phase2_rank0.nsys-rep[1/1] [========================100%] phase2_rank0.nsys-rep
+Generated:
+	/work/tests/perf/phase2-q-uv-device-canonical-20260517/phase2_rank0.nsys-rep
