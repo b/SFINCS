@@ -1,0 +1,180 @@
+# SOR-67 Phase 3 — validation matrix run (post-feedback-1 changes)
+# Date: 2026-05-17T14:42:14Z
+# Branch: sorcerer/sor-67 @ 20963b3
+# CPU binary:  May 17 11:38 source/install_cpu/bin/sfincs
+# CUDA binary: May 17 14:41 source/install_cuda/bin/sfincs
+# Command:     tests/run_validation.sh --skip-fetch --skip-build
+#
+# --- begin output ---
+=== Skipping build (--skip-build) ===
+=== Verifying CUDA-aware MPI ===
+    CUDA-aware MPI: opal_built_with_cuda_support=true, opal_cuda_support=true
+
+=== Case: case_discharges ===
+--- Running CPU: case_discharges ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_discharges/cpu/sfincs.log
+--- Running GPU n=1: case_discharges ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_discharges/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_discharges/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_discharges/gpu_n1/sfincs_map.nc max_abs_diff=1.239776611328125e-05 max_zsmax_ref=1.1759955883026123 ratio=1.0542357672596134e-05 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_discharges ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_discharges/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_discharges/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_discharges/gpu_n2/sfincs_map.nc max_abs_diff=1.239776611328125e-05 max_zsmax_ref=1.1759955883026123 ratio=1.0542357672596134e-05 threshold=0.0001 verdict=PASS
+
+=== Case: case_infiltration ===
+--- Running CPU: case_infiltration ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_infiltration/cpu/sfincs.log
+--- Running GPU n=1: case_infiltration ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_infiltration/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_infiltration/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_infiltration/gpu_n1/sfincs_map.nc max_abs_diff=1.0728836059570312e-06 max_zsmax_ref=1.0430428981781006 ratio=1.0286092813929838e-06 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_infiltration ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_infiltration/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_infiltration/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_infiltration/gpu_n2/sfincs_map.nc max_abs_diff=1.0728836059570312e-06 max_zsmax_ref=1.0430428981781006 ratio=1.0286092813929838e-06 threshold=0.0001 verdict=PASS
+
+=== Case: case_meteo ===
+--- Running CPU: case_meteo ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_meteo/cpu/sfincs.log
+--- Running GPU n=1: case_meteo ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_meteo/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_meteo/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_meteo/gpu_n1/sfincs_map.nc max_abs_diff=1.0728836059570312e-06 max_zsmax_ref=1.0634180307388306 ratio=1.0089010858802388e-06 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_meteo ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_meteo/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_meteo/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_meteo/gpu_n2/sfincs_map.nc max_abs_diff=1.0728836059570312e-06 max_zsmax_ref=1.0634180307388306 ratio=1.0089010858802388e-06 threshold=0.0001 verdict=PASS
+
+=== Case: case_prod_compound_snapwave ===
+--- Running CPU: case_prod_compound_snapwave ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_compound_snapwave/cpu/sfincs.log
+--- Running GPU n=1: case_prod_compound_snapwave ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_compound_snapwave/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_compound_snapwave/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_compound_snapwave/gpu_n1/sfincs_map.nc max_abs_diff=4.267692565917969e-05 max_zsmax_ref=0.9975311160087585 ratio=4.278255081398882e-05 threshold=0.0005 verdict=PASS
+--- Running GPU n=2: case_prod_compound_snapwave ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_compound_snapwave/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_compound_snapwave/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_compound_snapwave/gpu_n2/sfincs_map.nc max_abs_diff=4.2557716369628906e-05 max_zsmax_ref=0.9975311160087585 ratio=4.266304648210617e-05 threshold=0.0005 verdict=PASS
+
+=== Case: case_prod_quadtree_subgrid_tide ===
+--- Running CPU: case_prod_quadtree_subgrid_tide ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_quadtree_subgrid_tide/cpu/sfincs.log
+--- Running GPU n=1: case_prod_quadtree_subgrid_tide ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_quadtree_subgrid_tide/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_quadtree_subgrid_tide/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_quadtree_subgrid_tide/gpu_n1/sfincs_map.nc max_abs_diff=7.152557373046875e-07 max_zsmax_ref=0.9857848882675171 ratio=7.255697929816359e-07 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_prod_quadtree_subgrid_tide ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_quadtree_subgrid_tide/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_quadtree_subgrid_tide/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_quadtree_subgrid_tide/gpu_n2/sfincs_map.nc max_abs_diff=6.4373016357421875e-06 max_zsmax_ref=0.9857848882675171 ratio=6.530128136834724e-06 threshold=0.0001 verdict=PASS
+
+=== Case: case_prod_regular_tide ===
+--- Running CPU: case_prod_regular_tide ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_regular_tide/cpu/sfincs.log
+--- Running GPU n=1: case_prod_regular_tide ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_regular_tide/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_regular_tide/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_regular_tide/gpu_n1/sfincs_map.nc max_abs_diff=1.9073486328125e-06 max_zsmax_ref=2.0601131916046143 ratio=9.258465217277083e-07 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_prod_regular_tide ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_regular_tide/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_regular_tide/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_regular_tide/gpu_n2/sfincs_map.nc max_abs_diff=3.0040740966796875e-05 max_zsmax_ref=2.0601131916046143 ratio=1.4582082717211405e-05 threshold=0.0001 verdict=PASS
+
+=== Case: case_prod_riverine ===
+--- Running CPU: case_prod_riverine ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_riverine/cpu/sfincs.log
+--- Running GPU n=1: case_prod_riverine ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_riverine/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_riverine/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_riverine/gpu_n1/sfincs_map.nc max_abs_diff=0.0003515481948852539 max_zsmax_ref=4.207345962524414 ratio=8.355580882022937e-05 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_prod_riverine ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_riverine/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_riverine/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_riverine/gpu_n2/sfincs_map.nc max_abs_diff=0.0003515481948852539 max_zsmax_ref=4.207345962524414 ratio=8.355580882022937e-05 threshold=0.0001 verdict=PASS
+
+=== Case: case_prod_storm_amuv ===
+--- Running CPU: case_prod_storm_amuv ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_storm_amuv/cpu/sfincs.log
+--- Running GPU n=1: case_prod_storm_amuv ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_storm_amuv/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_storm_amuv/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_storm_amuv/gpu_n1/sfincs_map.nc max_abs_diff=0.00017976760864257812 max_zsmax_ref=2.806426525115967 ratio=6.405569753341388e-05 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_prod_storm_amuv ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_storm_amuv/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_storm_amuv/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_prod_storm_amuv/gpu_n2/sfincs_map.nc max_abs_diff=0.00024187564849853516 max_zsmax_ref=2.806426525115967 ratio=8.618634634966629e-05 threshold=0.0001 verdict=PASS
+
+=== Case: case_production ===
+SKIPPED case_production — input not fetched (--skip-fetch); run tests/cases/case_production/fetch.sh or drop --skip-fetch
+
+=== Case: case_quadtree_tide ===
+--- Running CPU: case_quadtree_tide ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_quadtree_tide/cpu/sfincs.log
+--- Running GPU n=1: case_quadtree_tide ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_quadtree_tide/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_quadtree_tide/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_quadtree_tide/gpu_n1/sfincs_map.nc max_abs_diff=4.76837158203125e-07 max_zsmax_ref=0.5028051137924194 ratio=9.483538355578158e-07 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_quadtree_tide ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_quadtree_tide/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_quadtree_tide/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_quadtree_tide/gpu_n2/sfincs_map.nc max_abs_diff=7.152557373046875e-07 max_zsmax_ref=0.5028051137924194 ratio=1.4225307533367238e-06 threshold=0.0001 verdict=PASS
+
+=== Case: case_regular ===
+--- Running CPU: case_regular ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_regular/cpu/sfincs.log
+--- Running GPU n=1: case_regular ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_regular/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_regular/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_regular/gpu_n1/sfincs_map.nc max_abs_diff=1.430511474609375e-06 max_zsmax_ref=1.0435584783554077 ratio=1.3708014493483723e-06 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_regular ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_regular/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_regular/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_regular/gpu_n2/sfincs_map.nc max_abs_diff=1.430511474609375e-06 max_zsmax_ref=1.0435584783554077 ratio=1.3708014493483723e-06 threshold=0.0001 verdict=PASS
+
+=== Case: case_snapwave ===
+--- Running CPU: case_snapwave ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_snapwave/cpu/sfincs.log
+--- Running GPU n=1: case_snapwave ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_snapwave/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_snapwave/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_snapwave/gpu_n1/sfincs_map.nc max_abs_diff=4.76837158203125e-07 max_zsmax_ref=0.5194109678268433 ratio=9.180344423571912e-07 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_snapwave ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_snapwave/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_snapwave/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_snapwave/gpu_n2/sfincs_map.nc max_abs_diff=4.76837158203125e-07 max_zsmax_ref=0.5194109678268433 ratio=9.180344423571912e-07 threshold=0.0001 verdict=PASS
+
+=== Case: case_structures ===
+--- Running CPU: case_structures ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_structures/cpu/sfincs.log
+--- Running GPU n=1: case_structures ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_structures/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_structures/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_structures/gpu_n1/sfincs_map.nc max_abs_diff=8.344650268554688e-07 max_zsmax_ref=1.1780333518981934 ratio=7.083543309795731e-07 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_structures ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_structures/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_structures/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_structures/gpu_n2/sfincs_map.nc max_abs_diff=8.344650268554688e-07 max_zsmax_ref=1.1780333518981934 ratio=7.083543309795731e-07 threshold=0.0001 verdict=PASS
+
+=== Case: case_wavemaker ===
+--- Running CPU: case_wavemaker ---
+    cpu exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_wavemaker/cpu/sfincs.log
+--- Running GPU n=1: case_wavemaker ---
+    gpu_n1 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_wavemaker/gpu_n1/sfincs.log
+RESULT case=gpu_n1 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_wavemaker/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_wavemaker/gpu_n1/sfincs_map.nc max_abs_diff=7.152557373046875e-06 max_zsmax_ref=6.853550434112549 ratio=1.0436280351051424e-06 threshold=0.0001 verdict=PASS
+--- Running GPU n=2: case_wavemaker ---
+    gpu_n2 exit=0 log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_wavemaker/gpu_n2/sfincs.log
+RESULT case=gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_wavemaker/cpu/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-67/b-SFINCS/tests/runs/case_wavemaker/gpu_n2/sfincs_map.nc max_abs_diff=7.152557373046875e-06 max_zsmax_ref=6.853550434112549 ratio=1.0436280351051424e-06 threshold=0.0001 verdict=PASS
+
+=== Validation summary ===
+case                             config   verdict  reason
+----                             ------   -------  ------
+case_discharges                  gpu_n1   PASS     
+case_discharges                  gpu_n2   PASS     
+case_infiltration                gpu_n1   PASS     
+case_infiltration                gpu_n2   PASS     
+case_meteo                       gpu_n1   PASS     
+case_meteo                       gpu_n2   PASS     
+case_prod_compound_snapwave      gpu_n1   PASS     
+case_prod_compound_snapwave      gpu_n2   PASS     
+case_prod_quadtree_subgrid_tide  gpu_n1   PASS     
+case_prod_quadtree_subgrid_tide  gpu_n2   PASS     
+case_prod_regular_tide           gpu_n1   PASS     
+case_prod_regular_tide           gpu_n2   PASS     
+case_prod_riverine               gpu_n1   PASS     
+case_prod_riverine               gpu_n2   PASS     
+case_prod_storm_amuv             gpu_n1   PASS     
+case_prod_storm_amuv             gpu_n2   PASS     
+case_production                  gpu_n1   SKIPPED  input not fetched (--skip-fetch)
+case_production                  gpu_n2   SKIPPED  input not fetched (--skip-fetch)
+case_quadtree_tide               gpu_n1   PASS     
+case_quadtree_tide               gpu_n2   PASS     
+case_regular                     gpu_n1   PASS     
+case_regular                     gpu_n2   PASS     
+case_snapwave                    gpu_n1   PASS     
+case_snapwave                    gpu_n2   PASS     
+case_structures                  gpu_n1   PASS     
+case_structures                  gpu_n2   PASS     
+case_wavemaker                   gpu_n1   PASS     
+case_wavemaker                   gpu_n2   PASS     
+
+OVERALL: PASS
+# --- end output ---
+# Exit code: 0
