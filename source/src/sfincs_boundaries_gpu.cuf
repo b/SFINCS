@@ -586,9 +586,11 @@ contains
       ! zsmax is now device-canonical across the per-step loop (SOR-67,
       ! Phase 3): the former per-step `bridge_out_cell_real4(zsmax_h,
       ! zsmax)` here is dropped. See compute_water_levels_regular for
-      ! the dtmaxout reset-cycle rationale; the per-step
-      ! `bridge_in_cell_real4(zsmax, zsmax_h)` in compute_water_levels_*
-      ! still propagates the output-time host reset back to the device.
+      ! the dtmaxout reset-cycle rationale -- the per-step bridge-IN of
+      ! zsmax was also dropped, and the output-time host reset is
+      ! propagated to the device by reset_max_arrays_device_after_output
+      ! (sfincs_partition.cuf), invoked from the sfincs_lib.F90 USE_CUDA
+      ! branch immediately after write_output.
       !
    endif
    call nvtx_range_pop()
