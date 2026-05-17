@@ -863,8 +863,8 @@ contains
       integer :: nmb
       integer :: ibdr
       integer :: nmi
-      real*4  :: zst
-      real*4  :: zst_clamp
+      real*8  :: zst
+      real*8  :: zst_clamp
       !
       ib = (blockIdx%x - 1) * blockDim%x + threadIdx%x
       if (ib > ngbnd_in) return
@@ -880,17 +880,24 @@ contains
       nmi = index_zsi_bdr(ibdr)
       if (nmi <= 0) return  ! internal cell not resident on this rank
       !
-      zst = real(zs(nmi), kind=4) + dzs_bdr(ibdr)
+      ! Match the CPU sibling's promotion exactly: zst is real*8, the
+      ! addition with real*4 dzs_bdr is promoted, the max-with-clamp
+      ! is done in real*8, and the final assignment to real*4 zsb /
+      ! zsb0 carries the implicit truncation. Keeping the intermediate
+      ! in real*4 would change WHAT moves, not just WHEN, breaking
+      ! Phase 1's bit-identical contract.
+      !
+      zst = zs(nmi) + real(dzs_bdr(ibdr), kind=8)
       !
       if (subgrid_in) then
-         zst_clamp = subgrid_z_zmin(nmb)
+         zst_clamp = real(subgrid_z_zmin(nmb), kind=8)
       else
-         zst_clamp = zb(nmb)
+         zst_clamp = real(zb(nmb), kind=8)
       endif
       if (zst < zst_clamp) zst = zst_clamp
       !
-      zsb(ib)  = zst
-      zsb0(ib) = zst
+      zsb(ib)  = real(zst, kind=4)
+      zsb0(ib) = real(zst, kind=4)
       !
    end subroutine k_update_river_zsb
    !
