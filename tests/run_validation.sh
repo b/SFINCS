@@ -354,6 +354,12 @@ fi
 
 mkdir -p "$RUNS_DIR"
 declare -A verdicts
+# Per-pair skip reason, keyed by "<case>:<cfg>", populated alongside
+# verdicts wherever a SKIPPED verdict is recorded. The summary loop reads
+# it so the reason column can distinguish the two skip causes (excluded
+# via --skip vs. input not fetched). Non-SKIPPED pairs have no entry and
+# render with an empty reason column.
+declare -A reasons
 
 for case_name in "${CASES[@]}"; do
     case_dir=$CASES_DIR/$case_name
@@ -362,6 +368,8 @@ for case_name in "${CASES[@]}"; do
         echo "SKIPPED $case_name — excluded via --skip"
         verdicts["$case_name:gpu_n1"]=SKIPPED
         verdicts["$case_name:gpu_n2"]=SKIPPED
+        reasons["$case_name:gpu_n1"]="excluded via --skip"
+        reasons["$case_name:gpu_n2"]="excluded via --skip"
         continue
     fi
     echo "=== Case: $case_name ==="
@@ -374,9 +382,17 @@ for case_name in "${CASES[@]}"; do
     fi
 
     if [ ! -f "$case_dir/sfincs.inp" ]; then
-        echo "    no sfincs.inp in $case_dir — marking gpu_n1 and gpu_n2 FAIL"
-        verdicts["$case_name:gpu_n1"]=FAIL
-        verdicts["$case_name:gpu_n2"]=FAIL
+        # Input was never fetched (operator passed --skip-fetch and the
+        # archive is not extracted). This is an absent input, not a failed
+        # run — record SKIPPED with a reason distinct from the --skip one
+        # so an operator reading the summary can tell the two apart. The
+        # present-but-unrunnable case (missing sfincs_map.nc / error = 1)
+        # is still a real FAIL and is handled later by check_run.
+        echo "SKIPPED $case_name — input not fetched (--skip-fetch); run tests/cases/$case_name/fetch.sh or drop --skip-fetch"
+        verdicts["$case_name:gpu_n1"]=SKIPPED
+        verdicts["$case_name:gpu_n2"]=SKIPPED
+        reasons["$case_name:gpu_n1"]="input not fetched (--skip-fetch)"
+        reasons["$case_name:gpu_n2"]="input not fetched (--skip-fetch)"
         continue
     fi
 
@@ -411,10 +427,7 @@ overall=0
 for case_name in "${CASES[@]}"; do
     for cfg in gpu_n1 gpu_n2; do
         v=${verdicts["$case_name:$cfg"]:-FAIL}
-        reason=""
-        if [ "$v" = SKIPPED ]; then
-            reason="excluded via --skip"
-        fi
+        reason=${reasons["$case_name:$cfg"]:-}
         printf '%-32s %-8s %-8s %s\n' "$case_name" "$cfg" "$v" "$reason"
         if [ "$v" != PASS ] && [ "$v" != SKIPPED ]; then
             overall=1
