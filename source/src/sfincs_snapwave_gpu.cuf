@@ -31,6 +31,7 @@ module sfincs_snapwave
    use sfincs_data_device, only: &
       zs_dev     => zs, &
       zsm_dev    => zsm, &
+      maxzsm_dev => maxzsm, &
       windu_dev  => windu, &
       windv_dev  => windv, &
       fwuv_dev   => fwuv, &
@@ -123,9 +124,21 @@ contains
    ! shape, leaving size(zs) == np_h intact.
    !
    call bridge_out_cell_real8(zs, zs_dev)
-   if (wavemaker) then
-      call bridge_out_cell_real4(zsm, zsm_dev)
-   endif
+   !
+   ! SOR-67, Phase 3: zsm / maxzsm are device-canonical between
+   ! SnapWave coupling steps. Their per-step D2H copies that used to
+   ! live in compute_water_levels_regular / _subgrid have moved here so
+   ! they fire at `dtwave` cadence (every update_wave_field call)
+   ! instead of every per-step compute_water_levels call. The bridge is
+   ! unconditional (was wavemaker-gated for zsm only): zsm is read by
+   ! the host loop below when wavemaker is on, and maxzsm is read at
+   ! output cadence (output catches it independently through
+   ! device_to_host_for_output -- this bridge also keeps the
+   ! snapwave-cadence host shadow current for any future consumer).
+   !
+   call bridge_out_cell_real4(zsm,    zsm_dev)
+   call bridge_out_cell_real4(maxzsm, maxzsm_dev)
+   !
    if (wind .and. snapwavewind) then
       call bridge_out_cell_real4(windu, windu_dev)
       call bridge_out_cell_real4(windv, windv_dev)

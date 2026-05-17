@@ -204,6 +204,7 @@ module sfincs_partition
               halo_exchange_zsderv, &
               halo_exchange_z_volume, &
               device_to_host_for_output, &
+              reset_max_arrays_device_after_output, &
               allocate_structure_device_shadows, &
               refresh_kcuv_device_shadow, &
               allocate_discharges_device_shadows, &
@@ -3878,6 +3879,83 @@ contains
       write(unit, '(i0,",",es24.16,",",i0,",",a,",",a,",",i0,",",i0,",",i0,",",a,",",es24.16)') &
          step, t, rank, space, kind, g, inc_nm, inc_nmu, name, value
    end subroutine write_pdiff_row
+   !
+   subroutine reset_max_arrays_device_after_output()
+      !
+      ! CUDA-aware companion of the host reset block in
+      ! sfincs_output.f90:207-235. The OpenACC build propagates the host
+      ! reset via `!$acc update device(zsmax)` (and friends) in that
+      ! block; the CUDA Fortran build treats those directives as no-ops.
+      ! Before SOR-67 Phase 3 the propagation was achieved indirectly
+      ! through the per-step `bridge_in_cell_real4(zsmax, zsmax_h)` at
+      ! the top of compute_water_levels, which relied on the matching
+      ! per-step `bridge_out_cell_real4(zsmax_h, zsmax)` to keep
+      ! zsmax_h current with device every step (the H2D was identity
+      ! on normal steps and only became "real work" after a reset).
+      ! Phase 3 dropped the per-step D2H of zsmax (refresh moved to
+      ! output cadence via device_to_host_for_output), so that
+      ! round-trip is no longer available: the per-step bridge_in
+      ! would now copy a stale host shadow onto a fresh device running
+      ! max and destroy the accumulation. Phase 3 therefore also dropped
+      ! the per-step bridge_in -- zsmax is fully device-canonical
+      ! between resets -- and the reset has to be effected directly on
+      ! the device. This subroutine does that: it writes the reset
+      ! sentinel directly into the device shadows for the same arrays
+      ! sfincs_output.f90 resets on the host. Called from sfincs_lib.F90
+      ! USE_CUDA branch immediately after write_output, gated on
+      ! `write_max .and. dtmaxout > 0` (matches the host gating).
+      !
+      ! Multi-rank: each rank's device shadow holds the per-rank running
+      ! max for its OWN owned slice; the reset must therefore fire on
+      ! every rank, not just rank 0. This is a collective-by-pattern
+      ! (no MPI calls inside, but every rank calls it).
+      !
+      use sfincs_data, only: &
+         store_maximum_waterlevel_h => store_maximum_waterlevel, &
+         store_maximum_velocity_h   => store_maximum_velocity, &
+         store_maximum_flux_h       => store_maximum_flux, &
+         store_twet_h               => store_twet, &
+         store_t_zsmax_h            => store_t_zsmax
+      !
+      integer :: i, n
+      integer :: istat
+      !
+      if (store_maximum_waterlevel_h .and. allocated(zsmax)) then
+         n = size(zsmax)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            zsmax(i) = -999.0
+         end do
+      endif
+      if (store_maximum_velocity_h .and. allocated(vmax)) then
+         n = size(vmax)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            vmax(i) = -999.0
+         end do
+      endif
+      if (store_maximum_flux_h .and. allocated(qmax)) then
+         n = size(qmax)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            qmax(i) = -999.0
+         end do
+      endif
+      if (store_twet_h .and. allocated(twet)) then
+         n = size(twet)
+         !$cuf kernel do(1) <<<*,*>>>
+         do i = 1, n
+            twet(i) = 0.0
+         end do
+      endif
+      ! t_zsmax lives on host only (not in the foundation catalog, no
+      ! device shadow), so its host-side reset in sfincs_output.f90
+      ! requires no companion device write here. If a future refactor
+      ! ports t_zsmax to the device, add the equivalent reset above.
+      !
+      istat = cudaDeviceSynchronize()
+      !
+   end subroutine reset_max_arrays_device_after_output
    !
    subroutine device_to_host_for_output()
       !

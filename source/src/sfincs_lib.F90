@@ -792,6 +792,15 @@ module sfincs_lib
          if (mpi_rank == 0) then
             call write_output(tout, write_map, write_his, write_max, write_rst, ntmapout, ntmaxout, nthisout, tloopoutput)
          end if
+         ! SOR-67 Phase 3: zsmax / vmax / qmax / twet are device-canonical
+         ! between resets. After write_output completes its dtmaxout reset
+         ! block, propagate the reset to every rank's device shadow. Gated
+         ! on the same `write_max .and. dtmaxout > 0` condition write_output
+         ! uses internally; runs on every rank because each rank's device
+         ! holds its own per-rank running max for its owned slice.
+         if (write_max .and. dtmaxout > 0.0) then
+            call reset_max_arrays_device_after_output()
+         end if
 #else
          call write_output(tout, write_map, write_his, write_max, write_rst, ntmapout, ntmaxout, nthisout, tloopoutput)
 #endif
@@ -806,7 +815,7 @@ module sfincs_lib
          !
          write(error_message,'(a,f0.4,a,f0.1,a)')'Error! Minimum time step of ', dtmin, ' s reached ! Current velocity exceeded uvmax ', uvmax, ' m/s. Simulation stopped.'
          !
-         ! Write map output at last time step 
+         ! Write map output at last time step
          !
          ntmaxout = ntmaxout + 1 ! Max sure that max output is not called again through 'finalize_output'
          !
@@ -815,6 +824,11 @@ module sfincs_lib
          if (mpi_rank == 0) then
             call write_output(t, .true., .true., .true., .false., ntmapout + 1, ntmaxout, nthisout + 1, tloopoutput)
          end if
+         ! See the dtmaxout reset note above; this is the error-exit path
+         ! that takes a forced final write_max=.true., so the device-side
+         ! reset must follow here too (harmless even though the
+         ! simulation aborts immediately after).
+         call reset_max_arrays_device_after_output()
 #else
          call write_output(t, .true., .true., .true., .false., ntmapout + 1, ntmaxout, nthisout + 1, tloopoutput)
 #endif

@@ -102,8 +102,7 @@ contains
          snapwave_h => snapwave, &
          nonhydrostatic_h => nonhydrostatic, &
          uv_h => uv, &
-         timestep_analysis_required_timestep_h => timestep_analysis_required_timestep, &
-         kfuv_h => kfuv
+         timestep_analysis_required_timestep_h => timestep_analysis_required_timestep
       !
       implicit none
       !
@@ -197,12 +196,21 @@ contains
       ! device shadows are authoritative until the output-cadence flush
       ! in device_to_host_for_output (sfincs_partition.cuf:3902-3904)
       ! refreshes the host aliases for netCDF / BMI / SnapWave coupling.
-      ! kfuv keeps its D2H copy because its post-kernel value is read by
-      ! host-side consumers outside this loop (nonhydrostatic, BMI).
+      ! kfuv is now device-canonical across the per-step loop (SOR-67,
+      ! Phase 3): the former `bridge_out_edge_int1(kfuv_h, kfuv)` here
+      ! is dropped. kfuv has no per-step host reader between this
+      ! compute_fluxes call and the next: the two host-side consumers
+      ! that read kfuv (timestep_analysis_update, compute_nonhydrostatic)
+      ! are feature-gated and not exercised by the validation matrix
+      ! (timestepanalysis defaults false; no validation case enables
+      ! nonhydrostatic). Output paths do not read kfuv either (it is
+      ! not in any netCDF output). The host shadow is refreshed at
+      ! output cadence by device_to_host_for_output for BMI / future
+      ! consumers; restoring the host-side NH / timestep-analysis paths
+      ! on the GPU is deferred to those features' GPU porting phases.
       ! min_dt and timestep_analysis_required_timestep are unchanged.
       !
       call nvtx_range_push("mom_fluxes_copyout")
-      call bridge_out_edge_int1 (kfuv_h, kfuv)
       !
       min_dt_int_h = min_dt_int_d
       min_dt_h     = transfer(min_dt_int_h, 0.0_4)
