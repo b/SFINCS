@@ -81,7 +81,7 @@ libsfincs_la_SOURCES += \
 	sfincs_wavemaker_gpu.cuf \
 	sfincs_bathtub.f90 \
 	sfincs_lib.F90 \
-	sfincs_bmi.f90
+	sfincs_bmi.F90
 else
 libsfincs_la_SOURCES += \
 	sfincs_log.f90 \
@@ -136,7 +136,7 @@ libsfincs_la_SOURCES += \
 	sfincs_wavemaker.f90 \
 	sfincs_bathtub.f90 \
 	sfincs_lib.F90 \
-	sfincs_bmi.f90
+	sfincs_bmi.F90
 endif
 
 libsfincs_la_LIBADD = \
