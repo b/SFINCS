@@ -1,0 +1,35 @@
+=== Validation summary ===
+case                             config   verdict  reason
+----                             ------   -------  ------
+case_discharges                  gpu_n1   PASS     
+case_discharges                  gpu_n2   PASS     
+case_infiltration                gpu_n1   PASS     
+case_infiltration                gpu_n2   PASS     
+case_meteo                       gpu_n1   PASS     
+case_meteo                       gpu_n2   PASS     
+case_nonhydro_smoke              gpu_n1   PASS     
+case_nonhydro_smoke              gpu_n2   PASS     
+case_prod_compound_snapwave      gpu_n1   PASS     
+case_prod_compound_snapwave      gpu_n2   PASS     
+case_prod_quadtree_subgrid_tide  gpu_n1   PASS     
+case_prod_quadtree_subgrid_tide  gpu_n2   PASS     
+case_prod_regular_tide           gpu_n1   PASS     
+case_prod_regular_tide           gpu_n2   PASS     
+case_prod_riverine               gpu_n1   PASS     
+case_prod_riverine               gpu_n2   PASS     
+case_prod_storm_amuv             gpu_n1   FAIL     
+case_prod_storm_amuv             gpu_n2   PASS     
+case_production                  gpu_n1   SKIPPED  input not fetched (--skip-fetch)
+case_production                  gpu_n2   SKIPPED  input not fetched (--skip-fetch)
+case_quadtree_tide               gpu_n1   PASS     
+case_quadtree_tide               gpu_n2   PASS     
+case_regular                     gpu_n1   PASS     
+case_regular                     gpu_n2   PASS     
+case_snapwave                    gpu_n1   PASS     
+case_snapwave                    gpu_n2   PASS     
+case_structures                  gpu_n1   PASS     
+case_structures                  gpu_n2   PASS     
+case_wavemaker                   gpu_n1   PASS     
+case_wavemaker                   gpu_n2   PASS     
+
+OVERALL: FAIL

@@ -1,0 +1,104 @@
+# scripts/per-step-bridge-allowlist.txt — SOR-69 Phase 5
+#
+# Allowlist for scripts/check-no-per-step-bridges.sh. Each non-comment
+# line is `<file>:<line>:<exact trimmed line text>` and exempts that
+# specific call site from the canonical-on-device regression guard.
+#
+# Every entry is one of:
+#   (1) a gated feature-boundary bridge that fires only when its
+#       feature predicate is true (e.g. `if (use_qext_h) call
+#       bridge_in_cell_real4(qext, qext_h)`); the inner-loop fast
+#       path bypasses it on validation cases that leave the feature
+#       off, and the bridge IS the feature-boundary refresh when
+#       the feature is on, OR
+#   (2) an output-reset-cycle bridge that synchronizes a host array
+#       with the device after the host has been mutated by the
+#       per-output-interval reset in sfincs_output.f90 (vmax / qmax /
+#       twet) -- the reset cycle has no on-device equivalent yet, so
+#       the bridge stands as the propagation path.
+#
+# Adding new entries requires (a) reviewing the canonical-on-device
+# invariant in docs/gpu_canonical_on_device.md, (b) explaining in the
+# PR description why the bridge cannot be moved to a feature-boundary
+# entry point (sfincs_partition.cuf flush/pull helpers) or to an
+# output-cadence flush (device_to_host_for_output), and (c) capturing
+# the per-step PCIe impact in a NSight delta vs the SOR-69 Phase-5
+# profile so the operator can quantify any regression.
+#
+# Updating line numbers: line numbers shift as the files evolve. The
+# guard does an exact-match on `file:line:line-text` so any edit that
+# moves a bridge MUST update both the line number AND the text. A
+# silent rewrite that leaves the allowlist key stale will fail the
+# guard.
+
+# ---- momentum_gpu.cuf -------------------------------------------------
+# compute_fluxes copy-IN: gated on `if (nonhydrostatic_h)`. When NH is
+# enabled, sfincs_nonhydrostatic.f90 writes uv on the host between
+# compute_fluxes calls; the H2D bridge re-publishes that host write to
+# the device before the next compute_fluxes reads it. The bridge is a
+# no-op when NH is off, which is every case in the validation matrix
+# (no validation case enables nonhydrostatic). Phase 4's
+# pull_host_state_to_device_nonhydrostatic helper covers the wider
+# nonhydrostatic state surface; this in-loop bridge is the narrow
+# uv-only refresh paired with the NH host write.
+source/src/sfincs_momentum_gpu.cuf:146:call bridge_in_edge_real4(uv, uv_h)
+# compute_fluxes copy-OUT: gated on `if (timestep_analysis_h)`. The
+# per-uv kernel writes timestep_analysis_required_timestep on device;
+# the host-side timestep_analysis_update consumer reads its host alias
+# every step. Bridge fires only when timestepanalysis=1 (off in every
+# validation case and in case_prod_compound_snapwave).
+source/src/sfincs_momentum_gpu.cuf:222:call bridge_out_edge_real4(timestep_analysis_required_timestep_h, timestep_analysis_required_timestep)
+
+# ---- continuity_gpu.cuf -----------------------------------------------
+# compute_water_levels_regular copy-IN: gated on `if (use_qext_h)`.
+# use_qext is set by the BMI use_qext switch (sfincs_lib.f90 BMI mode);
+# the BMI consumer writes qext on the host each step. Bridge fires
+# only on BMI/XMI runs, which are not part of the standalone-binary
+# validation matrix.
+source/src/sfincs_continuity_gpu.cuf:189:if (use_qext_h)  call bridge_in_cell_real4(qext, qext_h)
+# compute_water_levels_subgrid copy-IN: same use_qext predicate as the
+# regular-grid sibling above; same rationale.
+source/src/sfincs_continuity_gpu.cuf:357:if (use_qext_h)  call bridge_in_cell_real4(qext, qext_h)
+# compute_water_levels_subgrid copy-OUT: gated on `if (wiggle_suppression_h)`.
+# The host wiggle-suppression path (sfincs_continuity.f90) reads zs0_h;
+# the device kernel k_subgrid_main writes zs0 on device. Bridge fires
+# only when wiggle_suppression=1.
+source/src/sfincs_continuity_gpu.cuf:411:call bridge_out_cell_real4(zs0_h,    zs0)
+# compute_water_levels_subgrid copy-OUT: gated on `if (use_storage_volume_h)`.
+# use_storage_volume is off by default; only enabled by cases that set
+# storagevolume=1 (none of the validation matrix entries do).
+source/src/sfincs_continuity_gpu.cuf:414:if (use_storage_volume_h) call bridge_out_cell_real4(storage_volume_h, storage_volume)
+# compute_store_variables copy-IN: retained per the catalog Section D
+# mandate. sfincs_nonhydrostatic.f90:664-665 writes q / uv on the host
+# every nonhydrostatic step between compute_fluxes and the store-
+# variables kernel; the bridge re-publishes those host writes. When NH
+# is off (every validation case) the host writes never fire, but the
+# bridge does -- it is the only retained whole-array per-step bridge
+# this guard tolerates outside a feature predicate. The bridge is
+# narrow (q / uv only) and lives in the optional compute_store_variables
+# routine that is only invoked when at least one of store_maximum_velocity
+# / store_maximum_flux / store_twet is set. Moving it inside an NH-only
+# predicate is deferred to NH GPU porting (see
+# NONHYDROSTATIC_GPU_PORTING_GUIDE.md).
+source/src/sfincs_continuity_gpu.cuf:510:call bridge_in_edge_real4(q,  q_h)
+# Sibling of line 510; same rationale.
+source/src/sfincs_continuity_gpu.cuf:511:call bridge_in_edge_real4(uv, uv_h)
+# compute_store_variables copy-IN: gated on `if (store_maximum_velocity_h)`.
+# vmax is reset on host by sfincs_output.f90:218 every dtmaxout interval;
+# the bridge re-publishes that host reset to the device. No on-device
+# equivalent of the host reset cycle exists today
+# (reset_max_arrays_device_after_output covers zsmax only). Moving the
+# vmax / qmax / twet reset onto the device is a separate phase.
+source/src/sfincs_continuity_gpu.cuf:513:if (store_maximum_velocity_h) call bridge_in_cell_real4(vmax, vmax_h)
+# Sibling of line 513; same rationale, qmax.
+source/src/sfincs_continuity_gpu.cuf:514:if (store_maximum_flux_h)     call bridge_in_cell_real4(qmax, qmax_h)
+# Sibling of line 513; same rationale, twet.
+source/src/sfincs_continuity_gpu.cuf:515:if (store_twet_h)             call bridge_in_cell_real4(twet, twet_h)
+# compute_store_variables copy-OUT: the store-variables kernel writes
+# vmax on device; the host alias must be refreshed for the output gather.
+# Same gating as the copy-IN sibling at line 513.
+source/src/sfincs_continuity_gpu.cuf:530:if (store_maximum_velocity_h) call bridge_out_cell_real4(vmax_h, vmax)
+# Sibling of line 530; same rationale, qmax.
+source/src/sfincs_continuity_gpu.cuf:531:if (store_maximum_flux_h)     call bridge_out_cell_real4(qmax_h, qmax)
+# Sibling of line 530; same rationale, twet.
+source/src/sfincs_continuity_gpu.cuf:532:if (store_twet_h)             call bridge_out_cell_real4(twet_h, twet)
