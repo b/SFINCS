@@ -15,6 +15,11 @@ contains
    !
    integer*8 dtsec
    !
+   ! SFINCS code default for the SnapWave coupling cadence; the runtime
+   ! advisory below fires when sfincs.inp overrides dtwave below this value.
+   ! See docs/waves.rst "Choosing dtwave" for the wall-clock trade-off.
+   real*4, parameter :: dtwave_default = 3600.0
+   !
    ! Temporary variables
    !
    integer iradstr
@@ -64,7 +69,7 @@ contains
    call read_real_input(500,'dtrstout',dtrstout,0.0)
    call read_real_input(500,'trstout',trst,-999.0)
    call read_real_input(500,'dthisout',dthisout,600.0)
-   call read_real_input(500,'dtwave',dtwave,3600.0)
+   call read_real_input(500,'dtwave',dtwave,dtwave_default)
    call read_real_input(500,'dtwnd',dtwindupd,1800.0)
    call read_real_input(500,'alpha',alfa,0.50)
    call read_real_input(500,'theta',theta,1.0)
@@ -343,6 +348,12 @@ contains
    if (epsg == 0) then
        call write_log('Warning : no EPSG code defined', 0) 
    endif   
+   !
+   if (dtwave < dtwave_default) then
+      write(logstr,'(a,f0.1,a)') 'Info    : dtwave=', dtwave, &
+         ' s is below the SFINCS default 3600 s; on slow-moving wave climates a larger dtwave may reduce wall clock significantly (see docs/waves.rst). Confirm with the science owner of this case.'
+      call write_log(logstr, 1)
+   endif
    !
    ! If tref not provided, assume tref=tstart
    !
