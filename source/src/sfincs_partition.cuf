@@ -214,8 +214,30 @@ module sfincs_partition
               bridge_out_cell_real4, bridge_out_cell_real8, bridge_out_cell_int1, bridge_out_cell_int4, &
               bridge_out_edge_real4, bridge_out_edge_int1, &
               bridge_out_edge_tail_real4, &
+              flush_device_to_host_state, pull_host_state_to_device, &
               dump_halo_diagnostic, &
               dump_partition_diff
+   !
+   ! Feature-boundary bundle identifiers (SOR-68 Phase 4). The inner
+   ! per-step loop is device-canonical post-SOR-65 / SOR-66 / SOR-67
+   ! (Phases 1-3), so host shadows of zs, q, uv, ... go stale across
+   ! every step. A small set of features legitimately needs an up-to-
+   ! date host shadow between SFINCS steps: the wavemaker call site
+   ! (host-side filter time-integration in sfincs_wavemaker_gpu.cuf),
+   ! compute_nonhydrostatic (host-side pressure-correction OpenMP code
+   ! in sfincs_nonhydrostatic.f90 with no GPU sibling, reads zs/q/uv/
+   ! kfuv and writes q/uv) and the BMI getters/setters
+   ! (sfincs_bmi.F90, external coupling over xmipy). The flush /
+   ! pull helpers below take one of these bundle identifiers and the
+   ! caller does not have to know which catalog arrays the bundle
+   ! covers. Helpers are paid only when their feature predicate is
+   ! true at the call site (`if (wavemaker) then ... endif`); the
+   ! inner-loop fast path is unchanged for cases with all three
+   ! features off.
+   !
+   integer, parameter, public :: bundle_for_wavemaker      = 1
+   integer, parameter, public :: bundle_for_nonhydrostatic = 2
+   integer, parameter, public :: bundle_for_bmi            = 3
    private :: compute_quadtree_geometric_partition, &
               build_local_index_maps, &
               build_halo_descriptors, &
@@ -1670,6 +1692,98 @@ contains
       end if
       deallocate(tmp)
    end subroutine bridge_out_edge_int1
+   !
+   subroutine flush_device_to_host_state(bundle)
+      !
+      ! Refresh the host shadows of every state array in `bundle` from
+      ! their device-canonical values, so the host-side feature code
+      ! that follows reads a current view of the simulation state.
+      !
+      integer, intent(in) :: bundle
+      !
+      select case (bundle)
+      case (bundle_for_wavemaker)
+         ! Wavemaker host-side filter integration and the kernel's own
+         ! catalog reads consume zs / q / uv. The GPU sibling's kernel
+         ! already does its own internal bridge_out at the end; the
+         ! explicit pre-call flush is the structural boundary contract
+         ! and is idempotent when the device and host agree.
+         if (allocated(zs)) call bridge_out_cell_real8(zs_h, zs)
+         if (allocated(q))  call bridge_out_edge_real4(q_h,  q)
+         if (allocated(uv)) call bridge_out_edge_real4(uv_h, uv)
+      case (bundle_for_nonhydrostatic)
+         ! compute_nonhydrostatic reads zs / zb / q / uv / kfuv on the
+         ! host. zb is static and `bridge_in_cell_real4(zb, zb_h)` runs
+         ! once at init; kfuv is device-canonical post-SOR-67 with a
+         ! per-step on-device writer in compute_fluxes, so refresh its
+         ! host shadow here.
+         if (allocated(zs))   call bridge_out_cell_real8(zs_h, zs)
+         if (allocated(q))    call bridge_out_edge_real4(q_h,  q)
+         if (allocated(uv))   call bridge_out_edge_real4(uv_h, uv)
+         if (allocated(kfuv)) call bridge_out_edge_int1(kfuv_h, kfuv)
+      case (bundle_for_bmi)
+         ! BMI exposes zs / qext / uorb / zb / subgrid_z_zmin / z_xz /
+         ! z_yz through get_value_ptr. zb, subgrid_z_zmin, z_xz, z_yz
+         ! are static (init-time only) so they need no per-call refresh.
+         ! uorb has no device shadow and is host-canonical. zs / q / uv
+         ! / zsmax / qext are the inner-loop state arrays consumers may
+         ! query at the BMI boundary; per the issue mandate the bundle
+         ! covers the union of "at minimum zs / q / uv / zsmax" plus the
+         ! actually-exposed mutable getters (qext).
+         if (allocated(zs))    call bridge_out_cell_real8(zs_h,    zs)
+         if (allocated(q))     call bridge_out_edge_real4(q_h,     q)
+         if (allocated(uv))    call bridge_out_edge_real4(uv_h,    uv)
+         if (allocated(zsmax)) call bridge_out_cell_real4(zsmax_h, zsmax)
+         if (allocated(qext))  call bridge_out_cell_real4(qext_h,  qext)
+      end select
+      !
+   end subroutine flush_device_to_host_state
+   !
+   subroutine pull_host_state_to_device(bundle)
+      !
+      ! Propagate host-side writes for every state array in `bundle`
+      ! back to the device, so the next device-canonical inner-loop
+      ! step picks up the host-side feature's modifications.
+      !
+      integer, intent(in) :: bundle
+      !
+      select case (bundle)
+      case (bundle_for_wavemaker)
+         ! The wavemaker kernel writes device q directly; the host-side
+         ! filter time-integration mutates wavemaker_uvtrend_h /
+         ! wavemaker_uvmean_h / wavemaker_phi_*_h in place. The catalog
+         ! state arrays consumed downstream (q, uv) are pushed back
+         ! here so an inadvertent host-side q/uv write inside the
+         ! wavemaker call site reaches the device before the next
+         ! continuity step. zs is treated as device-canonical and not
+         ! pulled back -- the wavemaker call has no host writer for
+         ! zs and pulling its (post-flush) host copy would be a no-op.
+         if (allocated(q))  call bridge_in_edge_real4(q,  q_h)
+         if (allocated(uv)) call bridge_in_edge_real4(uv, uv_h)
+      case (bundle_for_nonhydrostatic)
+         ! compute_nonhydrostatic writes q_h and uv_h via the host-side
+         ! nudging update (sfincs_nonhydrostatic.f90:664-665). Push
+         ! those writes back to device so compute_water_levels and the
+         ! next compute_fluxes see the post-nonhydrostatic flux /
+         ! velocity. zs / kfuv are read-only inside this routine, no
+         ! pull needed.
+         if (allocated(q))  call bridge_in_edge_real4(q,  q_h)
+         if (allocated(uv)) call bridge_in_edge_real4(uv, uv_h)
+      case (bundle_for_bmi)
+         ! BMI callers may have written zs / q / uv / qext via a prior
+         ! get_value_ptr; push the host edits to device before the
+         ! next sfincs_update. zsmax is conventionally a derived
+         ! running-max output and is not BMI-write-targeted, but pull
+         ! it too so the device shadow stays in step with the host
+         ! shadow that get_value_ptr handed out.
+         if (allocated(zs))    call bridge_in_cell_real8(zs,    zs_h)
+         if (allocated(q))     call bridge_in_edge_real4(q,     q_h)
+         if (allocated(uv))    call bridge_in_edge_real4(uv,    uv_h)
+         if (allocated(zsmax)) call bridge_in_cell_real4(zsmax, zsmax_h)
+         if (allocated(qext))  call bridge_in_cell_real4(qext,  qext_h)
+      end select
+      !
+   end subroutine pull_host_state_to_device
    !
    subroutine compute_quadtree_geometric_partition(cell_part)
       !

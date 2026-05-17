@@ -652,25 +652,50 @@ module sfincs_lib
          !
          if (wavemaker) then
             !
+#ifdef USE_CUDA
+            ! Refresh host shadows of zs / q / uv before the wavemaker
+            ! call site (SOR-68 Phase 4). The inner per-step loop is
+            ! device-canonical post-SOR-65 / SOR-66 / SOR-67 so the host
+            ! shadows otherwise stay stale; the wavemaker GPU sibling's
+            ! kernel and its host-side filter integration both need a
+            ! current view of state. The matching pull below propagates
+            ! any host-side writes back to device for compute_water_levels.
+            call flush_device_to_host_state(bundle_for_wavemaker)
+#endif
             call update_wavemaker_fluxes(t, dt, tloopwavemaker)
-            !         
-         endif   
+#ifdef USE_CUDA
+            call pull_host_state_to_device(bundle_for_wavemaker)
+#endif
+            !
+         endif
          !
          if (nrstructures>0) then
             !
             call compute_fluxes_over_structures(tloopstruc)
             !
          endif
-         !      
+         !
          if (nonhydrostatic) then
             !
             if (t < nh_tstop) then ! Check if non-hydrostatic corrections still need to be made
                !
                ! Apply non-hydrostatic pressure corrections to q and uv
                !
+#ifdef USE_CUDA
+               ! Flush zs / q / uv / kfuv to host so the host-side
+               ! pressure-correction OpenMP code in compute_nonhydrostatic
+               ! reads current values (SOR-68 Phase 4). compute_nonhydrostatic
+               ! has no GPU sibling and writes q_h / uv_h directly, so the
+               ! matching pull propagates the post-correction flux /
+               ! velocity to device for the continuity step.
+               call flush_device_to_host_state(bundle_for_nonhydrostatic)
+#endif
                call compute_nonhydrostatic(dt, tloopnonh)
+#ifdef USE_CUDA
+               call pull_host_state_to_device(bundle_for_nonhydrostatic)
+#endif
                !
-            endif   
+            endif
             !
          endif
          !
