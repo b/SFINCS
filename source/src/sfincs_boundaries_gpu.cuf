@@ -382,7 +382,7 @@ contains
       store_maximum_waterlevel_h => store_maximum_waterlevel, &
       store_t_zsmax_h => store_t_zsmax, t_zsmax_h => t_zsmax, &
       kcs_h => kcs, &
-      zs_h => zs, q_h => q, uv_h => uv, &
+      zs_h => zs, &
       uvmean_h => uvmean, zsmax_h => zsmax, &
       zsb_h => zsb, zsb0_h => zsb0, &
       nmbkcuv2_h => nmbkcuv2
@@ -442,15 +442,19 @@ contains
    ! zs is device-canonical (SOR-65): the former `bridge_out_cell_real8(
    ! zs_h, zs)` here is dropped. The host zs_h view is refreshed only at
    ! the existing output / SnapWave-coupling sync points
-   ! (device_to_host_for_output, update_wave_field). q / uv keep their
-   ! D2H copies (downstream CPU consumers). zsb / zsb0 are republished
-   ! (host-mutated by update_boundary_conditions; identity copy here, but
-   ! kept so the host view stays canonical for those boundary-sized
+   ! (device_to_host_for_output, update_wave_field).
+   !
+   ! q / uv are device-canonical across the per-step loop (SOR-66,
+   ! Phase 2): the former `bridge_out_edge_real4(q_h, q)` and
+   ! `bridge_out_edge_real4(uv_h, uv)` here are dropped. The host
+   ! aliases are refreshed by the output-cadence flush
+   ! (device_to_host_for_output) when output is due; in-loop consumers
+   ! read the device shadow directly. zsb / zsb0 are republished
+   ! (host-mutated by update_boundary_conditions; identity copy here,
+   ! but kept so the host view stays canonical for those boundary-sized
    ! arrays).
    !
    call nvtx_range_push("bnd_fluxes_copyout")
-   call bridge_out_edge_real4(q_h,    q)
-   call bridge_out_edge_real4(uv_h,   uv)
    ! uvmean / zsb / zsb0 are boundary-sized (nkcuv2 / ngbnd); keep bulk D2H.
    uvmean_h = uvmean
    zsb_h    = zsb
