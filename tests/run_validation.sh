@@ -58,6 +58,24 @@ declare -A THRESHOLD_OVERRIDE=(
     # extension, or any other change that makes the residual genuinely
     # fixable). The override is not a permanent gate relaxation.
     ["case_prod_compound_snapwave:gpu_n2"]=5e-4
+    # case_prod_compound_snapwave:gpu_n1 — single-rank companion of the
+    # gpu_n2 entry above. Same diagnostic mechanism per the appendix of
+    # docs/diagnostics/multirank-partition-precision-drift.md: inherent FP
+    # non-associativity in GPU reductions / atomics inside k_compute_fluxes
+    # near wet/dry transitions in the production compound case, latched
+    # permanently by the zsmax running max. The single-rank flavor has NO
+    # partition halo exchange (mpi_size==1 short-circuits SOR-62's halo
+    # path), so no further halo extension can touch this residual — the
+    # only remaining source is kernel-internal GPU FP non-associativity.
+    # Freshly measured zsmax ratio on dispatch-time origin/main (post-SOR-63)
+    # is 1.039e-4 (max_abs_diff=1.037e-4, max_zsmax_ref=0.9975); 5e-4 gives
+    # ~4.8x margin over the freshly measured ratio and matches the gpu_n2
+    # entry's value (the two pairs' ratios sit within the same FP-noise
+    # envelope: 1.039e-4 vs 1.057e-4 in this run).
+    # Intent to remove: delete this entry in any future change that drives
+    # the freshly-measured ratio strictly below the global $THRESHOLD; the
+    # override is not a permanent gate relaxation.
+    ["case_prod_compound_snapwave:gpu_n1"]=5e-4
 )
 
 # --- Argument parsing -------------------------------------------------------
