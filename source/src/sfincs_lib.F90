@@ -612,12 +612,25 @@ module sfincs_lib
       !
       if (snapwave .and. update_waves) then
          !
-         call timer(t3)          
+         call timer(t3)
          !
+#ifdef USE_CUDA
+         ! Top-level NVTX range so the SnapWave coupling step is visible
+         ! as a single named span in the NSight Systems timeline, sibling
+         ! to mom_fluxes_* / cont_subgrid_* / bnd_* (SOR-81). This wraps
+         ! the SFINCS<->SnapWave depth/wind exchange, the SnapWave solver
+         ! itself, and the SnapWave->SFINCS Hm0/Fwuv writeback in one
+         ! span; finer-grained intra-SnapWave attribution comes from CPU
+         ! sampling (nsys --sample=cpu / perf record).
+         call nvtx_range_push("snapwave_update")
+#endif
          call update_wave_field(t, tloopsnapwave)
+#ifdef USE_CUDA
+         call nvtx_range_pop()
+#endif
          !
-         call timer(t4)                   
-         write(logstr,'(a,f10.1,a,f6.2,a)')'Computing SnapWave at t = ', t, ' s took ', t4 - t3, ' seconds'         
+         call timer(t4)
+         write(logstr,'(a,f10.1,a,f6.2,a)')'Computing SnapWave at t = ', t, ' s took ', t4 - t3, ' seconds'
          call write_log(logstr, 0)
          !
          ! Maybe we'll add moving wave makers back at some point

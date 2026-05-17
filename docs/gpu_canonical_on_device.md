@@ -49,3 +49,8 @@ GPU path (`case_regular gpu_n1`) under
 [`tests/perf/phase5-bytewise-deterministic-20260517/`](../tests/perf/phase5-bytewise-deterministic-20260517/SUMMARY.md):
 `zs`, `h`, `zsmax`, `hmax`, `zb`, `msk`, `manning`, and the grid corner
 coordinates all match bit-exactly between pre-Phase-1 and post-Phase-4.
+
+The SnapWave host-side hot path on the same case is characterized in
+`tests/perf/snapwave-characterization-20260517/` (SOR-81), which
+identifies the top SnapWave routines and recommends two non-port
+interventions over a SnapWave-GPU port.
