@@ -1,0 +1,149 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 65K of event 'cycles:P'
+# Event count (approx.): 224701538026
+#
+# Overhead  Command          Shared Object              Symbol                                                           
+# ........  ...............  .........................  .................................................................
+#
+    19.66%  sfincs           sfincs                     [.] snapwave_solver_solve_energy_balance2dstat_
+            |          
+             --19.60%--snapwave_solver_solve_energy_balance2dstat_
+                       |          
+                       |--10.95%--snapwave_solver_compute_wave_field_
+                       |          |          
+                       |           --10.58%--sfincs_snapwave_compute_snapwave_
+                       |                     sfincs_snapwave_update_wave_field_
+                       |                     sfincs_lib_sfincs_update_
+                       |                     MAIN_
+                       |                     main
+                       |                     0x7bcc838181c9
+                       |                     __libc_start_main
+                       |                     _start
+                       |          
+                        --6.85%--0x3785824337858242
+
+     7.03%  sfincs           sfincs                     [.] snapwave_solver_solve_tridiag_
+            |          
+             --7.02%--snapwave_solver_solve_tridiag_
+                       |          
+                        --2.74%--snapwave_solver_solve_energy_balance2dstat_
+                                  snapwave_solver_compute_wave_field_
+                                  |          
+                                   --2.64%--sfincs_snapwave_compute_snapwave_
+                                             sfincs_snapwave_update_wave_field_
+                                             sfincs_lib_sfincs_update_
+                                             MAIN_
+                                             main
+                                             0x7bcc838181c9
+                                             __libc_start_main
+                                             _start
+
+     6.22%  sfincs           sfincs                     [.] snapwave_boundaries_make_theta_grid_
+            |          
+             --6.16%--snapwave_boundaries_make_theta_grid_
+                       |          
+                       |--3.17%--snapwave_boundaries_update_boundary_points_
+                       |          |          
+                       |           --3.02%--snapwave_boundaries_update_boundary_conditions_
+                       |                     sfincs_snapwave_compute_snapwave_
+                       |                     sfincs_snapwave_update_wave_field_
+                       |                     sfincs_lib_sfincs_update_
+                       |                     MAIN_
+                       |                     main
+                       |                     0x7bcc838181c9
+                       |                     __libc_start_main
+                       |                     _start
+                       |          
+                        --2.99%--snapwave_boundaries_update_boundary_conditions_
+                                  sfincs_snapwave_compute_snapwave_
+                                  sfincs_snapwave_update_wave_field_
+                                  sfincs_lib_sfincs_update_
+                                  MAIN_
+                                  main
+                                  0x7bcc838181c9
+                                  __libc_start_main
+                                  _start
+
+     3.92%  sfincs           libnvf.so                  [.] l_maxloc_real4l4
+            |          
+             --3.92%--l_maxloc_real4l4
+
+     3.89%  sfincs           libnvf.so                  [.] l_minloc_real4l4
+            |
+            ---l_minloc_real4l4
+
+     3.55%  sfincs           libc.so.6                  [.] malloc
+            |          
+             --3.54%--malloc
+
+     3.04%  sfincs           libc.so.6                  [.] cfree
+            |          
+             --3.04%--cfree
+
+     2.29%  sfincs           sfincs                     [.] interp_linear_interp_2d_real4_
+            |
+            ---interp_linear_interp_2d_real4_
+               |          
+                --1.19%--0xffffffffffffffff
+
+     2.14%  sfincs           sfincs                     [.] snapwave_solver_hpsort_eps_epw_
+            |
+            ---snapwave_solver_hpsort_eps_epw_
+               |          
+                --1.46%--snapwave_solver_solve_energy_balance2dstat_
+                          snapwave_solver_compute_wave_field_
+                          sfincs_snapwave_compute_snapwave_
+                          sfincs_snapwave_update_wave_field_
+                          sfincs_lib_sfincs_update_
+                          MAIN_
+                          main
+                          0x7bcc838181c9
+                          __libc_start_main
+                          _start
+
+     1.71%  sfincs           sfincs                     [.] snapwave_solver_determine_infragravity_source_sink_term_
+            |          
+             --1.62%--snapwave_solver_determine_infragravity_source_sink_term_
+
+     1.42%  sfincs           libnvcpumath.so            [.] __mth_i_sinh_avx2
+            |          
+             --1.41%--__mth_i_sinh_avx2
+
+     1.38%  sfincs           libm.so.6                  [.] feraiseexcept
+            |          
+             --1.37%--feraiseexcept
+
+     1.31%  sfincs           libcuda.so.580.159.03      [.] 0x000000000045a6e4
+            |
+            ---0x7bcc7ac5a6e4
+
+     1.22%  sfincs           sfincs                     [.] sfincs_partition_bridge_out_cell_real4_
+            |
+            ---sfincs_partition_bridge_out_cell_real4_
+               |          
+                --1.16%--sfincs_continuity_compute_water_levels_subgrid_
+                          sfincs_continuity_compute_water_levels_
+                          sfincs_lib_sfincs_update_
+                          MAIN_
+                          main
+                          0x7bcc838181c9
+                          __libc_start_main
+                          _start
+
+     1.21%  sfincs           libnvf.so                  [.] pgf90_auto_alloc04_i8
+            |          
+             --1.20%--pgf90_auto_alloc04_i8
+
+     1.12%  sfincs           sfincs                     [.] snapwave_solver_hpsort_eps_epw_hslt
+            |
+            ---snapwave_solver_hpsort_eps_epw_hslt
+
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

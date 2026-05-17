@@ -1,0 +1,32 @@
+=== HOST ===
+host: simulacra
+kernel: Linux 6.8.0-111-generic x86_64
+OS: Ubuntu 24.04.4 LTS
+CPU: AMD EPYC 7C13 64-Core Processor (cores: 128)
+RAM: 503.7 GiB
+
+=== GPUs ===
+GPU 0: NVIDIA RTX A6000 (UUID: GPU-9fbf14b5-9e28-0842-46e2-2c37752201b6)
+GPU 1: NVIDIA RTX A6000 (UUID: GPU-583fc082-fda6-0707-47ca-1519cdcd1f29)
+
+=== Docker image ===
+sfincs-build-gpu:latest (id=3b572d24caec, size=14.3GB)
+
+=== Build / case ===
+binary: source/install_cuda/bin/sfincs (built from 00acf0397aafd2b6491f44bb1cc1b3a58b83ac01)
+branch: sorcerer/sor-81
+case: case_prod_compound_snapwave, config: gpu_n2 (2 MPI ranks, 2 GPUs, CUDA-aware HPC-X 2.24)
+case dtwave: 1800.0 s (sfincs.inp override; code default is 3600.0 s)
+case tstop: 86400 s (24 h sim)
+
+=== Wall-clock timing (rank 0, from sfincs.log) ===
+ Total time             :     77.281
+ Total simulation time  :     75.166
+ Time in input          :      2.116
+ Time in boundaries     :      1.374 (  1.8%)
+ Time in momentum       :      2.133 (  2.8%)
+ Time in continuity     :      2.338 (  3.1%)
+ Time in SnapWave       :     52.184 ( 69.4%)
+ Time in output         :      0.000 (  0.0%)
+ Average time step (s)  :      3.086
+ Total time             :     77.267

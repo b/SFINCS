@@ -1,0 +1,944 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 65K of event 'cycles:P'
+# Event count (approx.): 224701538026
+#
+# Children      Self  Symbol                                                                                                                                                           IPC   [IPC Coverage]
+# ........  ........  ...............................................................................................................................................................  ....................
+#
+    31.59%     0.00%  [.] _start                                                                                                                                                       -      -            
+            |
+            ---_start
+               |          
+                --31.59%--__libc_start_main
+                          0x7bcc838181c9
+                          main
+                          MAIN_
+                          |          
+                          |--30.79%--sfincs_lib_sfincs_update_
+                          |          |          
+                          |          |--29.03%--sfincs_snapwave_update_wave_field_
+                          |          |          |          
+                          |          |           --28.66%--sfincs_snapwave_compute_snapwave_
+                          |          |                     |          
+                          |          |                     |--20.48%--snapwave_solver_compute_wave_field_
+                          |          |                     |          |          
+                          |          |                     |          |--18.99%--snapwave_solver_solve_energy_balance2dstat_
+                          |          |                     |          |          |          
+                          |          |                     |          |          |--3.14%--snapwave_solver_solve_tridiag_
+                          |          |                     |          |          |          
+                          |          |                     |          |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+                          |          |                     |          |          |          
+                          |          |                     |          |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+                          |          |                     |          |          |          
+                          |          |                     |          |          |--1.04%--snapwave_solver_baldock_
+                          |          |                     |          |          |          |          
+                          |          |                     |          |          |           --0.92%--__mth_i_exp_avx2
+                          |          |                     |          |          |                     |          
+                          |          |                     |          |          |                      --0.88%--feraiseexcept
+                          |          |                     |          |          |          
+                          |          |                     |          |           --0.50%--__ZGVyN8v__mth_i_vr4
+                          |          |                     |          |          
+                          |          |                     |           --1.11%--__ZGVyN8v__mth_i_vr4
+                          |          |                     |                     |          
+                          |          |                     |                      --0.89%--__mth_i_sinh_avx2
+                          |          |                     |          
+                          |          |                      --8.16%--snapwave_boundaries_update_boundary_conditions_
+                          |          |                                |          
+                          |          |                                |--5.14%--snapwave_boundaries_update_boundary_points_
+                          |          |                                |          |          
+                          |          |                                |          |--3.24%--snapwave_boundaries_make_theta_grid_
+                          |          |                                |          |          
+                          |          |                                |           --1.85%--snapwave_infragravity_determine_ig_bc_
+                          |          |                                |                     snapwave_infragravity_compute_herbers_
+                          |          |                                |                     |          
+                          |          |                                |                      --0.87%--interp_linear_interp_2d_real4_
+                          |          |                                |          
+                          |          |                                 --3.01%--snapwave_boundaries_make_theta_grid_
+                          |          |          
+                          |           --1.17%--sfincs_continuity_compute_water_levels_
+                          |                     sfincs_continuity_compute_water_levels_subgrid_
+                          |                     sfincs_partition_bridge_out_cell_real4_
+                          |          
+                           --0.79%--sfincs_lib_sfincs_initialize_
+                                     |          
+                                      --0.67%--sfincs_snapwave_init_couple_snapwave_
+                                                snapwave_domain_initialize_snapwave_domain_
+                                                |          
+                                                 --0.60%--snapwave_domain_find_upwind_neighbours_
+                                                           |          
+                                                            --0.58%--snapwave_domain_intersect_angle_
+
+    31.59%     0.00%  [.] __libc_start_main                                                                                                                                            -      -            
+            |
+            ---__libc_start_main
+               0x7bcc838181c9
+               main
+               MAIN_
+               |          
+               |--30.79%--sfincs_lib_sfincs_update_
+               |          |          
+               |          |--29.03%--sfincs_snapwave_update_wave_field_
+               |          |          |          
+               |          |           --28.66%--sfincs_snapwave_compute_snapwave_
+               |          |                     |          
+               |          |                     |--20.48%--snapwave_solver_compute_wave_field_
+               |          |                     |          |          
+               |          |                     |          |--18.99%--snapwave_solver_solve_energy_balance2dstat_
+               |          |                     |          |          |          
+               |          |                     |          |          |--3.14%--snapwave_solver_solve_tridiag_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.04%--snapwave_solver_baldock_
+               |          |                     |          |          |          |          
+               |          |                     |          |          |           --0.92%--__mth_i_exp_avx2
+               |          |                     |          |          |                     |          
+               |          |                     |          |          |                      --0.88%--feraiseexcept
+               |          |                     |          |          |          
+               |          |                     |          |           --0.50%--__ZGVyN8v__mth_i_vr4
+               |          |                     |          |          
+               |          |                     |           --1.11%--__ZGVyN8v__mth_i_vr4
+               |          |                     |                     |          
+               |          |                     |                      --0.89%--__mth_i_sinh_avx2
+               |          |                     |          
+               |          |                      --8.16%--snapwave_boundaries_update_boundary_conditions_
+               |          |                                |          
+               |          |                                |--5.14%--snapwave_boundaries_update_boundary_points_
+               |          |                                |          |          
+               |          |                                |          |--3.24%--snapwave_boundaries_make_theta_grid_
+               |          |                                |          |          
+               |          |                                |           --1.85%--snapwave_infragravity_determine_ig_bc_
+               |          |                                |                     snapwave_infragravity_compute_herbers_
+               |          |                                |                     |          
+               |          |                                |                      --0.87%--interp_linear_interp_2d_real4_
+               |          |                                |          
+               |          |                                 --3.01%--snapwave_boundaries_make_theta_grid_
+               |          |          
+               |           --1.17%--sfincs_continuity_compute_water_levels_
+               |                     sfincs_continuity_compute_water_levels_subgrid_
+               |                     sfincs_partition_bridge_out_cell_real4_
+               |          
+                --0.79%--sfincs_lib_sfincs_initialize_
+                          |          
+                           --0.67%--sfincs_snapwave_init_couple_snapwave_
+                                     snapwave_domain_initialize_snapwave_domain_
+                                     |          
+                                      --0.60%--snapwave_domain_find_upwind_neighbours_
+                                                |          
+                                                 --0.58%--snapwave_domain_intersect_angle_
+
+    31.59%     0.00%  [.] 0x00007bcc838181c9                                                                                                                                           -      -            
+            |
+            ---0x7bcc838181c9
+               main
+               MAIN_
+               |          
+               |--30.79%--sfincs_lib_sfincs_update_
+               |          |          
+               |          |--29.03%--sfincs_snapwave_update_wave_field_
+               |          |          |          
+               |          |           --28.66%--sfincs_snapwave_compute_snapwave_
+               |          |                     |          
+               |          |                     |--20.48%--snapwave_solver_compute_wave_field_
+               |          |                     |          |          
+               |          |                     |          |--18.99%--snapwave_solver_solve_energy_balance2dstat_
+               |          |                     |          |          |          
+               |          |                     |          |          |--3.14%--snapwave_solver_solve_tridiag_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.04%--snapwave_solver_baldock_
+               |          |                     |          |          |          |          
+               |          |                     |          |          |           --0.92%--__mth_i_exp_avx2
+               |          |                     |          |          |                     |          
+               |          |                     |          |          |                      --0.88%--feraiseexcept
+               |          |                     |          |          |          
+               |          |                     |          |           --0.50%--__ZGVyN8v__mth_i_vr4
+               |          |                     |          |          
+               |          |                     |           --1.11%--__ZGVyN8v__mth_i_vr4
+               |          |                     |                     |          
+               |          |                     |                      --0.89%--__mth_i_sinh_avx2
+               |          |                     |          
+               |          |                      --8.16%--snapwave_boundaries_update_boundary_conditions_
+               |          |                                |          
+               |          |                                |--5.14%--snapwave_boundaries_update_boundary_points_
+               |          |                                |          |          
+               |          |                                |          |--3.24%--snapwave_boundaries_make_theta_grid_
+               |          |                                |          |          
+               |          |                                |           --1.85%--snapwave_infragravity_determine_ig_bc_
+               |          |                                |                     snapwave_infragravity_compute_herbers_
+               |          |                                |                     |          
+               |          |                                |                      --0.87%--interp_linear_interp_2d_real4_
+               |          |                                |          
+               |          |                                 --3.01%--snapwave_boundaries_make_theta_grid_
+               |          |          
+               |           --1.17%--sfincs_continuity_compute_water_levels_
+               |                     sfincs_continuity_compute_water_levels_subgrid_
+               |                     sfincs_partition_bridge_out_cell_real4_
+               |          
+                --0.79%--sfincs_lib_sfincs_initialize_
+                          |          
+                           --0.67%--sfincs_snapwave_init_couple_snapwave_
+                                     snapwave_domain_initialize_snapwave_domain_
+                                     |          
+                                      --0.60%--snapwave_domain_find_upwind_neighbours_
+                                                |          
+                                                 --0.58%--snapwave_domain_intersect_angle_
+
+    31.59%     0.00%  [.] main                                                                                                                                                         -      -            
+            |
+            ---main
+               MAIN_
+               |          
+               |--30.79%--sfincs_lib_sfincs_update_
+               |          |          
+               |          |--29.03%--sfincs_snapwave_update_wave_field_
+               |          |          |          
+               |          |           --28.66%--sfincs_snapwave_compute_snapwave_
+               |          |                     |          
+               |          |                     |--20.48%--snapwave_solver_compute_wave_field_
+               |          |                     |          |          
+               |          |                     |          |--18.99%--snapwave_solver_solve_energy_balance2dstat_
+               |          |                     |          |          |          
+               |          |                     |          |          |--3.14%--snapwave_solver_solve_tridiag_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.04%--snapwave_solver_baldock_
+               |          |                     |          |          |          |          
+               |          |                     |          |          |           --0.92%--__mth_i_exp_avx2
+               |          |                     |          |          |                     |          
+               |          |                     |          |          |                      --0.88%--feraiseexcept
+               |          |                     |          |          |          
+               |          |                     |          |           --0.50%--__ZGVyN8v__mth_i_vr4
+               |          |                     |          |          
+               |          |                     |           --1.11%--__ZGVyN8v__mth_i_vr4
+               |          |                     |                     |          
+               |          |                     |                      --0.89%--__mth_i_sinh_avx2
+               |          |                     |          
+               |          |                      --8.16%--snapwave_boundaries_update_boundary_conditions_
+               |          |                                |          
+               |          |                                |--5.14%--snapwave_boundaries_update_boundary_points_
+               |          |                                |          |          
+               |          |                                |          |--3.24%--snapwave_boundaries_make_theta_grid_
+               |          |                                |          |          
+               |          |                                |           --1.85%--snapwave_infragravity_determine_ig_bc_
+               |          |                                |                     snapwave_infragravity_compute_herbers_
+               |          |                                |                     |          
+               |          |                                |                      --0.87%--interp_linear_interp_2d_real4_
+               |          |                                |          
+               |          |                                 --3.01%--snapwave_boundaries_make_theta_grid_
+               |          |          
+               |           --1.17%--sfincs_continuity_compute_water_levels_
+               |                     sfincs_continuity_compute_water_levels_subgrid_
+               |                     sfincs_partition_bridge_out_cell_real4_
+               |          
+                --0.79%--sfincs_lib_sfincs_initialize_
+                          |          
+                           --0.67%--sfincs_snapwave_init_couple_snapwave_
+                                     snapwave_domain_initialize_snapwave_domain_
+                                     |          
+                                      --0.60%--snapwave_domain_find_upwind_neighbours_
+                                                |          
+                                                 --0.58%--snapwave_domain_intersect_angle_
+
+    31.59%     0.00%  [.] MAIN_                                                                                                                                                        -      -            
+            |
+            ---MAIN_
+               |          
+               |--30.79%--sfincs_lib_sfincs_update_
+               |          |          
+               |          |--29.03%--sfincs_snapwave_update_wave_field_
+               |          |          |          
+               |          |           --28.66%--sfincs_snapwave_compute_snapwave_
+               |          |                     |          
+               |          |                     |--20.48%--snapwave_solver_compute_wave_field_
+               |          |                     |          |          
+               |          |                     |          |--18.99%--snapwave_solver_solve_energy_balance2dstat_
+               |          |                     |          |          |          
+               |          |                     |          |          |--3.14%--snapwave_solver_solve_tridiag_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+               |          |                     |          |          |          
+               |          |                     |          |          |--1.04%--snapwave_solver_baldock_
+               |          |                     |          |          |          |          
+               |          |                     |          |          |           --0.92%--__mth_i_exp_avx2
+               |          |                     |          |          |                     |          
+               |          |                     |          |          |                      --0.88%--feraiseexcept
+               |          |                     |          |          |          
+               |          |                     |          |           --0.50%--__ZGVyN8v__mth_i_vr4
+               |          |                     |          |          
+               |          |                     |           --1.11%--__ZGVyN8v__mth_i_vr4
+               |          |                     |                     |          
+               |          |                     |                      --0.89%--__mth_i_sinh_avx2
+               |          |                     |          
+               |          |                      --8.16%--snapwave_boundaries_update_boundary_conditions_
+               |          |                                |          
+               |          |                                |--5.14%--snapwave_boundaries_update_boundary_points_
+               |          |                                |          |          
+               |          |                                |          |--3.24%--snapwave_boundaries_make_theta_grid_
+               |          |                                |          |          
+               |          |                                |           --1.85%--snapwave_infragravity_determine_ig_bc_
+               |          |                                |                     snapwave_infragravity_compute_herbers_
+               |          |                                |                     |          
+               |          |                                |                      --0.87%--interp_linear_interp_2d_real4_
+               |          |                                |          
+               |          |                                 --3.01%--snapwave_boundaries_make_theta_grid_
+               |          |          
+               |           --1.17%--sfincs_continuity_compute_water_levels_
+               |                     sfincs_continuity_compute_water_levels_subgrid_
+               |                     sfincs_partition_bridge_out_cell_real4_
+               |          
+                --0.79%--sfincs_lib_sfincs_initialize_
+                          |          
+                           --0.67%--sfincs_snapwave_init_couple_snapwave_
+                                     snapwave_domain_initialize_snapwave_domain_
+                                     |          
+                                      --0.60%--snapwave_domain_find_upwind_neighbours_
+                                                |          
+                                                 --0.58%--snapwave_domain_intersect_angle_
+
+    30.79%     0.00%  [.] sfincs_lib_sfincs_update_                                                                                                                                    -      -            
+            |          
+             --30.79%--sfincs_lib_sfincs_update_
+                       |          
+                       |--29.03%--sfincs_snapwave_update_wave_field_
+                       |          |          
+                       |           --28.66%--sfincs_snapwave_compute_snapwave_
+                       |                     |          
+                       |                     |--20.48%--snapwave_solver_compute_wave_field_
+                       |                     |          |          
+                       |                     |          |--18.99%--snapwave_solver_solve_energy_balance2dstat_
+                       |                     |          |          |          
+                       |                     |          |          |--3.14%--snapwave_solver_solve_tridiag_
+                       |                     |          |          |          
+                       |                     |          |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+                       |                     |          |          |          
+                       |                     |          |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+                       |                     |          |          |          
+                       |                     |          |          |--1.04%--snapwave_solver_baldock_
+                       |                     |          |          |          |          
+                       |                     |          |          |           --0.92%--__mth_i_exp_avx2
+                       |                     |          |          |                     |          
+                       |                     |          |          |                      --0.88%--feraiseexcept
+                       |                     |          |          |          
+                       |                     |          |           --0.50%--__ZGVyN8v__mth_i_vr4
+                       |                     |          |          
+                       |                     |           --1.11%--__ZGVyN8v__mth_i_vr4
+                       |                     |                     |          
+                       |                     |                      --0.89%--__mth_i_sinh_avx2
+                       |                     |          
+                       |                      --8.16%--snapwave_boundaries_update_boundary_conditions_
+                       |                                |          
+                       |                                |--5.14%--snapwave_boundaries_update_boundary_points_
+                       |                                |          |          
+                       |                                |          |--3.24%--snapwave_boundaries_make_theta_grid_
+                       |                                |          |          
+                       |                                |           --1.85%--snapwave_infragravity_determine_ig_bc_
+                       |                                |                     snapwave_infragravity_compute_herbers_
+                       |                                |                     |          
+                       |                                |                      --0.87%--interp_linear_interp_2d_real4_
+                       |                                |          
+                       |                                 --3.01%--snapwave_boundaries_make_theta_grid_
+                       |          
+                        --1.17%--sfincs_continuity_compute_water_levels_
+                                  sfincs_continuity_compute_water_levels_subgrid_
+                                  sfincs_partition_bridge_out_cell_real4_
+
+    29.04%     0.12%  [.] sfincs_snapwave_update_wave_field_                                                                                                                           -      -            
+            |          
+             --28.93%--sfincs_snapwave_update_wave_field_
+                       |          
+                        --28.66%--sfincs_snapwave_compute_snapwave_
+                                  |          
+                                  |--20.48%--snapwave_solver_compute_wave_field_
+                                  |          |          
+                                  |          |--18.99%--snapwave_solver_solve_energy_balance2dstat_
+                                  |          |          |          
+                                  |          |          |--3.14%--snapwave_solver_solve_tridiag_
+                                  |          |          |          
+                                  |          |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+                                  |          |          |          
+                                  |          |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+                                  |          |          |          
+                                  |          |          |--1.04%--snapwave_solver_baldock_
+                                  |          |          |          |          
+                                  |          |          |           --0.92%--__mth_i_exp_avx2
+                                  |          |          |                     |          
+                                  |          |          |                      --0.88%--feraiseexcept
+                                  |          |          |          
+                                  |          |           --0.50%--__ZGVyN8v__mth_i_vr4
+                                  |          |          
+                                  |           --1.11%--__ZGVyN8v__mth_i_vr4
+                                  |                     |          
+                                  |                      --0.89%--__mth_i_sinh_avx2
+                                  |          
+                                   --8.16%--snapwave_boundaries_update_boundary_conditions_
+                                             |          
+                                             |--5.14%--snapwave_boundaries_update_boundary_points_
+                                             |          |          
+                                             |          |--3.24%--snapwave_boundaries_make_theta_grid_
+                                             |          |          
+                                             |           --1.85%--snapwave_infragravity_determine_ig_bc_
+                                             |                     snapwave_infragravity_compute_herbers_
+                                             |                     |          
+                                             |                      --0.87%--interp_linear_interp_2d_real4_
+                                             |          
+                                              --3.01%--snapwave_boundaries_make_theta_grid_
+
+    28.67%     0.02%  [.] sfincs_snapwave_compute_snapwave_                                                                                                                            -      -            
+            |          
+             --28.65%--sfincs_snapwave_compute_snapwave_
+                       |          
+                       |--20.48%--snapwave_solver_compute_wave_field_
+                       |          |          
+                       |          |--18.99%--snapwave_solver_solve_energy_balance2dstat_
+                       |          |          |          
+                       |          |          |--3.14%--snapwave_solver_solve_tridiag_
+                       |          |          |          
+                       |          |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+                       |          |          |          
+                       |          |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+                       |          |          |          
+                       |          |          |--1.04%--snapwave_solver_baldock_
+                       |          |          |          |          
+                       |          |          |           --0.92%--__mth_i_exp_avx2
+                       |          |          |                     |          
+                       |          |          |                      --0.88%--feraiseexcept
+                       |          |          |          
+                       |          |           --0.50%--__ZGVyN8v__mth_i_vr4
+                       |          |          
+                       |           --1.11%--__ZGVyN8v__mth_i_vr4
+                       |                     |          
+                       |                      --0.89%--__mth_i_sinh_avx2
+                       |          
+                        --8.16%--snapwave_boundaries_update_boundary_conditions_
+                                  |          
+                                  |--5.14%--snapwave_boundaries_update_boundary_points_
+                                  |          |          
+                                  |          |--3.24%--snapwave_boundaries_make_theta_grid_
+                                  |          |          
+                                  |           --1.85%--snapwave_infragravity_determine_ig_bc_
+                                  |                     snapwave_infragravity_compute_herbers_
+                                  |                     |          
+                                  |                      --0.87%--interp_linear_interp_2d_real4_
+                                  |          
+                                   --3.01%--snapwave_boundaries_make_theta_grid_
+
+    28.31%    19.66%  [.] snapwave_solver_solve_energy_balance2dstat_                                                                                                                  -      -            
+            |          
+            |--10.72%--_start
+            |          __libc_start_main
+            |          0x7bcc838181c9
+            |          main
+            |          MAIN_
+            |          sfincs_lib_sfincs_update_
+            |          sfincs_snapwave_update_wave_field_
+            |          sfincs_snapwave_compute_snapwave_
+            |          snapwave_solver_compute_wave_field_
+            |          |          
+            |           --10.58%--snapwave_solver_solve_energy_balance2dstat_
+            |          
+            |--8.66%--snapwave_solver_solve_energy_balance2dstat_
+            |          |          
+            |          |--3.27%--snapwave_solver_solve_tridiag_
+            |          |          
+            |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+            |          |          
+            |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+            |          |          
+            |          |--1.05%--snapwave_solver_baldock_
+            |          |          |          
+            |          |           --0.92%--__mth_i_exp_avx2
+            |          |                     |          
+            |          |                      --0.88%--feraiseexcept
+            |          |          
+            |           --0.54%--__ZGVyN8v__mth_i_vr4
+            |          
+             --6.85%--0x3785824337858242
+                       snapwave_solver_solve_energy_balance2dstat_
+
+    21.18%     0.18%  [.] snapwave_solver_compute_wave_field_                                                                                                                          -      -            
+            |          
+             --21.00%--snapwave_solver_compute_wave_field_
+                       |          
+                       |--19.60%--snapwave_solver_solve_energy_balance2dstat_
+                       |          |          
+                       |          |--3.27%--snapwave_solver_solve_tridiag_
+                       |          |          
+                       |          |--1.84%--snapwave_solver_hpsort_eps_epw_
+                       |          |          
+                       |          |--1.51%--snapwave_solver_determine_infragravity_source_sink_term_
+                       |          |          
+                       |          |--1.05%--snapwave_solver_baldock_
+                       |          |          |          
+                       |          |           --0.92%--__mth_i_exp_avx2
+                       |          |                     |          
+                       |          |                      --0.88%--feraiseexcept
+                       |          |          
+                       |           --0.54%--__ZGVyN8v__mth_i_vr4
+                       |          
+                        --1.11%--__ZGVyN8v__mth_i_vr4
+                                  |          
+                                   --0.89%--__mth_i_sinh_avx2
+
+     8.16%     0.00%  [.] snapwave_boundaries_update_boundary_conditions_                                                                                                              -      -            
+            |
+            ---snapwave_boundaries_update_boundary_conditions_
+               |          
+               |--5.14%--snapwave_boundaries_update_boundary_points_
+               |          |          
+               |          |--3.24%--snapwave_boundaries_make_theta_grid_
+               |          |          
+               |           --1.85%--snapwave_infragravity_determine_ig_bc_
+               |                     snapwave_infragravity_compute_herbers_
+               |                     |          
+               |                      --0.87%--interp_linear_interp_2d_real4_
+               |          
+                --3.01%--snapwave_boundaries_make_theta_grid_
+
+     8.09%     0.00%  [.] 0xffffffffffffffff                                                                                                                                           -      -            
+            |
+            ---0xffffffffffffffff
+               |          
+               |--1.19%--interp_linear_interp_2d_real4_
+               |          
+               |--0.89%--malloc
+               |          
+               |--0.61%--snapwave_solver_compute_wave_field_
+               |          |          
+               |           --0.60%--snapwave_solver_solve_energy_balance2dstat_
+               |          
+                --0.53%--cfree
+
+     7.55%     7.03%  [.] snapwave_solver_solve_tridiag_                                                                                                                               -      -            
+            |          
+            |--2.72%--_start
+            |          __libc_start_main
+            |          0x7bcc838181c9
+            |          main
+            |          MAIN_
+            |          sfincs_lib_sfincs_update_
+            |          sfincs_snapwave_update_wave_field_
+            |          sfincs_snapwave_compute_snapwave_
+            |          snapwave_solver_compute_wave_field_
+            |          snapwave_solver_solve_energy_balance2dstat_
+            |          |          
+            |           --2.65%--snapwave_solver_solve_tridiag_
+            |          
+             --0.52%--snapwave_solver_solve_tridiag_
+
+     6.85%     0.00%  [.] 0x3785824337858242                                                                                                                                           -      -            
+            |
+            ---0x3785824337858242
+               snapwave_solver_solve_energy_balance2dstat_
+
+     6.52%     6.22%  [.] snapwave_boundaries_make_theta_grid_                                                                                                                         -      -            
+            |          
+             --6.02%--_start
+                       __libc_start_main
+                       0x7bcc838181c9
+                       main
+                       MAIN_
+                       sfincs_lib_sfincs_update_
+                       sfincs_snapwave_update_wave_field_
+                       sfincs_snapwave_compute_snapwave_
+                       snapwave_boundaries_update_boundary_conditions_
+                       |          
+                       |--3.02%--snapwave_boundaries_update_boundary_points_
+                       |          snapwave_boundaries_make_theta_grid_
+                       |          
+                        --2.99%--snapwave_boundaries_make_theta_grid_
+
+     5.37%     0.00%  [.] snapwave_boundaries_update_boundary_points_                                                                                                                  -      -            
+            |          
+             --5.37%--snapwave_boundaries_update_boundary_points_
+                       |          
+                       |--3.45%--snapwave_boundaries_make_theta_grid_
+                       |          
+                        --1.87%--snapwave_infragravity_determine_ig_bc_
+                                  snapwave_infragravity_compute_herbers_
+                                  |          
+                                   --0.87%--interp_linear_interp_2d_real4_
+
+     3.94%     3.92%  [.] l_maxloc_real4l4                                                                                                                                             -      -            
+            |          
+             --3.71%--l_maxloc_real4l4
+
+     3.91%     3.89%  [.] l_minloc_real4l4                                                                                                                                             -      -            
+            |          
+             --3.57%--l_minloc_real4l4
+
+     3.64%     3.04%  [.] cfree                                                                                                                                                        -      -            
+            |          
+            |--2.39%--cfree
+            |          
+             --0.56%--0xffffffffffffffff
+                       |          
+                        --0.53%--cfree
+
+     3.63%     3.55%  [.] malloc                                                                                                                                                       -      -            
+            |          
+            |--2.12%--malloc
+            |          
+             --0.90%--0xffffffffffffffff
+                       |          
+                        --0.89%--malloc
+
+     2.92%     2.29%  [.] interp_linear_interp_2d_real4_                                                                                                                               -      -            
+            |          
+            |--1.20%--0xffffffffffffffff
+            |          |          
+            |           --1.19%--interp_linear_interp_2d_real4_
+            |          
+             --0.80%--interp_linear_interp_2d_real4_
+
+     2.55%     0.08%  [k] asm_exc_page_fault                                                                                                                                           -      -            
+            |          
+             --2.48%--asm_exc_page_fault
+                       |          
+                        --1.92%--exc_page_fault
+                                  |          
+                                   --1.76%--do_user_addr_fault
+                                             |          
+                                              --1.55%--handle_mm_fault
+                                                        |          
+                                                         --1.40%--__handle_mm_fault
+                                                                   |          
+                                                                    --1.30%--handle_pte_fault
+                                                                              |          
+                                                                               --1.03%--do_anonymous_page
+
+     2.51%     2.14%  [.] snapwave_solver_hpsort_eps_epw_                                                                                                                              -      -            
+            |          
+             --1.46%--_start
+                       __libc_start_main
+                       0x7bcc838181c9
+                       main
+                       MAIN_
+                       sfincs_lib_sfincs_update_
+                       sfincs_snapwave_update_wave_field_
+                       sfincs_snapwave_compute_snapwave_
+                       snapwave_solver_compute_wave_field_
+                       snapwave_solver_solve_energy_balance2dstat_
+                       snapwave_solver_hpsort_eps_epw_
+
+     2.26%     1.71%  [.] snapwave_solver_determine_infragravity_source_sink_term_                                                                                                     -      -            
+            |          
+            |--0.96%--_start
+            |          __libc_start_main
+            |          0x7bcc838181c9
+            |          main
+            |          MAIN_
+            |          sfincs_lib_sfincs_update_
+            |          sfincs_snapwave_update_wave_field_
+            |          sfincs_snapwave_compute_snapwave_
+            |          snapwave_solver_compute_wave_field_
+            |          snapwave_solver_solve_energy_balance2dstat_
+            |          snapwave_solver_determine_infragravity_source_sink_term_
+            |          
+             --0.71%--snapwave_solver_determine_infragravity_source_sink_term_
+
+     2.26%     0.42%  [.] __ZGVyN8v__mth_i_vr4                                                                                                                                         -      -            
+            |          
+             --1.84%--__ZGVyN8v__mth_i_vr4
+                       |          
+                        --0.89%--__mth_i_sinh_avx2
+
+     2.03%     0.77%  [.] snapwave_infragravity_compute_herbers_                                                                                                                       -      -            
+            |          
+            |--1.26%--snapwave_infragravity_compute_herbers_
+            |          |          
+            |           --0.90%--interp_linear_interp_2d_real4_
+            |          
+             --0.62%--_start
+                       __libc_start_main
+                       0x7bcc838181c9
+                       main
+                       MAIN_
+                       sfincs_lib_sfincs_update_
+                       sfincs_snapwave_update_wave_field_
+                       sfincs_snapwave_compute_snapwave_
+                       snapwave_boundaries_update_boundary_conditions_
+                       snapwave_boundaries_update_boundary_points_
+                       snapwave_infragravity_determine_ig_bc_
+                       snapwave_infragravity_compute_herbers_
+
+     2.00%     0.08%  [k] exc_page_fault                                                                                                                                               -      -            
+            |          
+             --1.93%--exc_page_fault
+                       |          
+                        --1.76%--do_user_addr_fault
+                                  |          
+                                   --1.55%--handle_mm_fault
+                                             |          
+                                              --1.41%--__handle_mm_fault
+                                                        |          
+                                                         --1.30%--handle_pte_fault
+                                                                   |          
+                                                                    --1.03%--do_anonymous_page
+
+     1.87%     0.47%  [.] __c_mset16_avx                                                                                                                                               -      -            
+            |          
+             --1.48%--__c_mset16_avx
+                       |          
+                        --1.15%--asm_exc_page_fault
+                                  |          
+                                   --0.81%--exc_page_fault
+                                             |          
+                                              --0.72%--do_user_addr_fault
+                                                        |          
+                                                         --0.62%--handle_mm_fault
+                                                                   |          
+                                                                    --0.54%--__handle_mm_fault
+
+     1.87%     0.00%  [.] snapwave_infragravity_determine_ig_bc_                                                                                                                       -      -            
+            |
+            ---snapwave_infragravity_determine_ig_bc_
+               snapwave_infragravity_compute_herbers_
+               |          
+                --0.87%--interp_linear_interp_2d_real4_
+
+     1.85%     0.09%  [k] do_user_addr_fault                                                                                                                                           -      -            
+            |          
+             --1.76%--do_user_addr_fault
+                       |          
+                        --1.56%--handle_mm_fault
+                                  |          
+                                   --1.42%--__handle_mm_fault
+                                             |          
+                                              --1.30%--handle_pte_fault
+                                                        |          
+                                                         --1.04%--do_anonymous_page
+
+     1.66%     0.74%  [.] __mth_i_exp_avx2                                                                                                                                             -      -            
+            |          
+             --0.92%--__mth_i_exp_avx2
+                       |          
+                        --0.88%--feraiseexcept
+
+     1.65%     0.07%  [k] handle_mm_fault                                                                                                                                              -      -            
+            |          
+             --1.59%--handle_mm_fault
+                       |          
+                        --1.44%--__handle_mm_fault
+                                  |          
+                                   --1.33%--handle_pte_fault
+                                             |          
+                                              --1.06%--do_anonymous_page
+
+     1.56%     0.55%  [.] snapwave_solver_baldock_                                                                                                                                     -      -            
+            |          
+             --1.00%--snapwave_solver_baldock_
+                       |          
+                        --0.92%--__mth_i_exp_avx2
+                                  |          
+                                   --0.88%--feraiseexcept
+
+     1.51%     0.12%  [k] __handle_mm_fault                                                                                                                                            -      -            
+            |          
+             --1.38%--__handle_mm_fault
+                       |          
+                        --1.27%--handle_pte_fault
+                                  |          
+                                   --0.99%--do_anonymous_page
+
+     1.44%     1.42%  [.] __mth_i_sinh_avx2                                                                                                                                            -      -            
+            |          
+             --0.88%--_start
+                       __libc_start_main
+                       0x7bcc838181c9
+                       main
+                       MAIN_
+                       sfincs_lib_sfincs_update_
+                       sfincs_snapwave_update_wave_field_
+                       sfincs_snapwave_compute_snapwave_
+                       snapwave_solver_compute_wave_field_
+                       |          
+                        --0.88%--__ZGVyN8v__mth_i_vr4
+                                  __mth_i_sinh_avx2
+
+     1.42%     1.21%  [.] pgf90_auto_alloc04_i8                                                                                                                                        -      -            
+     1.38%     1.38%  [.] feraiseexcept                                                                                                                                                -      -            
+            |          
+             --0.89%--_start
+                       __libc_start_main
+                       0x7bcc838181c9
+                       main
+                       MAIN_
+                       sfincs_lib_sfincs_update_
+                       sfincs_snapwave_update_wave_field_
+                       sfincs_snapwave_compute_snapwave_
+                       snapwave_solver_compute_wave_field_
+                       |          
+                        --0.88%--snapwave_solver_solve_energy_balance2dstat_
+                                  snapwave_solver_baldock_
+                                  __mth_i_exp_avx2
+                                  feraiseexcept
+
+     1.37%     0.04%  [k] handle_pte_fault                                                                                                                                             -      -            
+            |          
+             --1.32%--handle_pte_fault
+                       |          
+                        --1.05%--do_anonymous_page
+
+     1.31%     1.31%  [.] 0x000000000045a6e4                                                                                                                                           -      -            
+            |
+            ---0x7bcc7ac5a6e4
+
+     1.31%     0.00%  [.] 0x00007bcc7ac5a6e4                                                                                                                                           -      -            
+            |
+            ---0x7bcc7ac5a6e4
+
+     1.23%     1.22%  [.] sfincs_partition_bridge_out_cell_real4_                                                                                                                      -      -            
+            |          
+             --1.18%--_start
+                       __libc_start_main
+                       0x7bcc838181c9
+                       main
+                       MAIN_
+                       sfincs_lib_sfincs_update_
+                       |          
+                        --1.16%--sfincs_continuity_compute_water_levels_
+                                  sfincs_continuity_compute_water_levels_subgrid_
+                                  sfincs_partition_bridge_out_cell_real4_
+
+     1.18%     0.00%  [.] sfincs_continuity_compute_water_levels_                                                                                                                      -      -            
+            |          
+             --1.17%--sfincs_continuity_compute_water_levels_
+                       sfincs_continuity_compute_water_levels_subgrid_
+                       sfincs_partition_bridge_out_cell_real4_
+
+     1.18%     0.00%  [.] sfincs_continuity_compute_water_levels_subgrid_                                                                                                              -      -            
+            |          
+             --1.17%--sfincs_continuity_compute_water_levels_subgrid_
+                       |          
+                        --1.17%--sfincs_partition_bridge_out_cell_real4_
+
+     1.15%     0.11%  [k] do_anonymous_page                                                                                                                                            -      -            
+            |          
+             --1.04%--do_anonymous_page
+
+     1.12%     1.12%  [.] snapwave_solver_hpsort_eps_epw_hslt                                                                                                                          -      -            
+     1.05%     0.69%  [.] __fort_red_arraylk_i8                                                                                                                                        -      -            
+     1.03%     0.35%  [.] snapwave_domain_intersect_angle_                                                                                                                             -      -            
+            |          
+             --0.68%--snapwave_domain_intersect_angle_
+                       |          
+                        --0.58%--hypot
+
+     1.00%     0.98%  [.] __mth_i_cos_avx2                                                                                                                                             -      -            
+     0.87%     0.59%  [.] snapwave_solver_estimate_shoaling_parameter_alphaig_                                                                                                         -      -            
+     0.84%     0.02%  [.] snapwave_domain_initialize_snapwave_domain_                                                                                                                  -      -            
+            |          
+             --0.82%--snapwave_domain_initialize_snapwave_domain_
+                       |          
+                        --0.70%--snapwave_domain_find_upwind_neighbours_
+                                  |          
+                                   --0.69%--snapwave_domain_intersect_angle_
+                                             |          
+                                              --0.58%--hypot
+
+     0.83%     0.00%  [.] sfincs_snapwave_init_couple_snapwave_                                                                                                                        -      -            
+            |
+            ---sfincs_snapwave_init_couple_snapwave_
+               |          
+                --0.83%--snapwave_domain_initialize_snapwave_domain_
+                          |          
+                           --0.70%--snapwave_domain_find_upwind_neighbours_
+                                     |          
+                                      --0.69%--snapwave_domain_intersect_angle_
+                                                |          
+                                                 --0.58%--hypot
+
+     0.82%     0.54%  [.] pgf90_alloc04a_i8                                                                                                                                            -      -            
+     0.80%     0.10%  [.] snapwave_domain_find_upwind_neighbours_                                                                                                                      -      -            
+            |          
+             --0.70%--snapwave_domain_find_upwind_neighbours_
+                       |          
+                        --0.69%--snapwave_domain_intersect_angle_
+                                  |          
+                                   --0.58%--hypot
+
+     0.79%     0.77%  [.] __mth_i_sin_avx2                                                                                                                                             -      -            
+     0.79%     0.00%  [.] sfincs_lib_sfincs_initialize_                                                                                                                                -      -            
+            |
+            ---sfincs_lib_sfincs_initialize_
+               |          
+                --0.67%--sfincs_snapwave_init_couple_snapwave_
+                          snapwave_domain_initialize_snapwave_domain_
+                          |          
+                           --0.60%--snapwave_domain_find_upwind_neighbours_
+                                     |          
+                                      --0.58%--snapwave_domain_intersect_angle_
+
+     0.75%     0.33%  [.] hypot                                                                                                                                                        -      -            
+     0.66%     0.63%  [.] hypot                                                                                                                                                        -      -            
+     0.63%     0.00%  [.] .C850_snapwave_solver_solve_energy_balance2dstat_+0x3                                                                                                        -      -            
+            |
+            ---.C850_snapwave_solver_solve_energy_balance2dstat_
+
+     0.61%     0.00%  [k] entry_SYSCALL_64_after_hwframe                                                                                                                               -      -            
+            |          
+             --0.61%--entry_SYSCALL_64_after_hwframe
+                       |          
+                        --0.60%--do_syscall_64
+                                  |          
+                                   --0.57%--x64_sys_call
+
+     0.60%     0.01%  [k] do_syscall_64                                                                                                                                                -      -            
+            |          
+             --0.59%--do_syscall_64
+                       |          
+                        --0.57%--x64_sys_call
+
+     0.58%     0.35%  [.] powf                                                                                                                                                         -      -            
+     0.58%     0.00%  [k] x64_sys_call                                                                                                                                                 -      -            
+            |          
+             --0.58%--x64_sys_call
+
+     0.58%     0.00%  [.] 0x00000000005d9fef                                                                                                                                           -      -            
+            |
+            ---0x5d9fef
+
+     0.56%     0.56%  [.] 0x0000000000000b00                                                                                                                                           -      -            
+            |          
+             --0.56%--0x7ffcea1eeb00
+
+     0.56%     0.00%  [.] 0x00007ffcea1eeb00                                                                                                                                           -      -            
+            |
+            ---0x7ffcea1eeb00
+
+     0.55%     0.00%  [.] H5Z_pipeline                                                                                                                                                 -      -            
+            |
+            ---H5Z_pipeline
+
+     0.53%     0.01%  [k] asm_sysvec_apic_timer_interrupt                                                                                                                              -      -            
+            |          
+             --0.52%--asm_sysvec_apic_timer_interrupt
+
+     0.52%     0.00%  [.] 0x00007ffcea1c5ffb                                                                                                                                           -      -            
+            |
+            ---0x7ffcea1c5ffb
+
+     0.51%     0.00%  [k] sysvec_apic_timer_interrupt                                                                                                                                  -      -            
+            |          
+             --0.50%--sysvec_apic_timer_interrupt
+
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#
