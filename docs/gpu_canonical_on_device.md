@@ -42,3 +42,10 @@ require justification in the PR description that adds them, against the
 three sync points above. See `tests/perf/` for the Phase-0 baseline
 profile (`phase0-baseline-20260516/`) and the Phase-5 final-state
 profile that quantify the per-step PCIe reduction this invariant buys.
+
+Strict byte-identicality of every simulation-output variable across the
+SOR-65 → SOR-68 refactor was verified on the deterministic single-rank
+GPU path (`case_regular gpu_n1`) under
+[`tests/perf/phase5-bytewise-deterministic-20260517/`](../tests/perf/phase5-bytewise-deterministic-20260517/SUMMARY.md):
+`zs`, `h`, `zsmax`, `hmax`, `zb`, `msk`, `manning`, and the grid corner
+coordinates all match bit-exactly between pre-Phase-1 and post-Phase-4.
