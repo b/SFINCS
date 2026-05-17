@@ -259,12 +259,16 @@ contains
          ! (SOR-67, Phase 3): the former per-step `bridge_out_cell_real4(
          ! zsmax_h, zsmax)` here is dropped. zsmax_h for output is
          ! refreshed by device_to_host_for_output (sfincs_partition.cuf
-         ! line 3905) at output cadence. The dtmaxout reset cycle in
-         ! sfincs_output.f90:207-210 still works: write_output reads the
-         ! freshly gathered zsmax_h, then resets zsmax_h = -999.0; the
-         ! reset propagates to the device via the per-step
-         ! `bridge_in_cell_real4(zsmax, zsmax_h)` at the top of the next
-         ! call to compute_water_levels (kept unchanged).
+         ! line 3983) at output cadence. The dtmaxout reset cycle in
+         ! sfincs_output.f90:207-235 still works, but no longer relies on
+         ! a per-step bridge-IN of zsmax (that bridge was also dropped --
+         ! see the copy-IN comment block at the top of this routine for
+         ! why a per-step H2D would clobber the running max). The reset
+         ! is propagated to the device directly by
+         ! reset_max_arrays_device_after_output (sfincs_partition.cuf),
+         ! called from the sfincs_lib.F90 USE_CUDA branch immediately
+         ! after write_output and gated on the same
+         ! `write_max .and. dtmaxout > 0` condition the host reset uses.
          !
       endif
       call nvtx_range_pop()
@@ -445,9 +449,11 @@ contains
          ! (SOR-67, Phase 3): the former per-step `bridge_out_cell_real4(
          ! zsmax_h, zsmax)` here is dropped. See the matching block in
          ! compute_water_levels_regular for the dtmaxout reset-cycle
-         ! rationale -- the per-step `bridge_in_cell_real4(zsmax,
-         ! zsmax_h)` at the top of this routine still propagates the
-         ! output-time host reset back to the device.
+         ! rationale -- the per-step bridge-IN of zsmax was also dropped,
+         ! and the output-time host reset is propagated to the device by
+         ! reset_max_arrays_device_after_output (sfincs_partition.cuf),
+         ! invoked from the sfincs_lib.F90 USE_CUDA branch immediately
+         ! after write_output.
          !
       endif
       call nvtx_range_pop()

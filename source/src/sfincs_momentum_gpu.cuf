@@ -203,11 +203,14 @@ contains
       ! that read kfuv (timestep_analysis_update, compute_nonhydrostatic)
       ! are feature-gated and not exercised by the validation matrix
       ! (timestepanalysis defaults false; no validation case enables
-      ! nonhydrostatic). Output paths do not read kfuv either (it is
-      ! not in any netCDF output). The host shadow is refreshed at
-      ! output cadence by device_to_host_for_output for BMI / future
-      ! consumers; restoring the host-side NH / timestep-analysis paths
-      ! on the GPU is deferred to those features' GPU porting phases.
+      ! nonhydrostatic). No netCDF output writer reads kfuv either.
+      ! The host shadow is refreshed at output cadence by
+      ! device_to_host_for_output (sfincs_partition.cuf -- the kfuv
+      ! entry alongside zs / q / uv) so that BMI consumers and the
+      ! feature-gated NH / timestep-analysis paths see runtime wet/dry
+      ! state when the output flush fires. Restoring per-step host-side
+      ! NH / timestep-analysis reads on the GPU build is deferred to
+      ! those features' GPU porting phases.
       ! min_dt and timestep_analysis_required_timestep are unchanged.
       !
       call nvtx_range_push("mom_fluxes_copyout")
