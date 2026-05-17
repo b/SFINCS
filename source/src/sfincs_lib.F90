@@ -29,6 +29,8 @@ module sfincs_lib
    use sfincs_partition
    use sfincs_data_device, only: mpi_rank, mpi_size
    use sfincs_nvtx, only: nvtx_range_push, nvtx_range_pop
+#else
+   use sfincs_diag_dump, only: dump_state_diff
 #endif
    use sfincs_log
    use sfincs_timestep_analysis
@@ -759,6 +761,20 @@ module sfincs_lib
          ! smoking gun that maps to the kernel producing it.
          !
          call dump_partition_diff(nt, t)
+#else
+         !
+         ! SOR-73 env-gated host-side state-divergence dump (CPU build).
+         ! Sibling of the GPU-side dump_partition_diff above. No-op unless
+         ! SFINCS_DUMP_PARTITION_DIFF is set to a positive integer N; then
+         ! every Nth step it writes the per-step state arrays (zs,
+         ! z_volume, zsderv at cells; q, uv at edges) inside the
+         ! configurable cell-index windows to sfincs_partition_diff_rank0.csv
+         ! in the run cwd. The CSV schema matches the GPU dump exactly so
+         ! tests/scripts/diff_partition_dump.py can compare a CPU run
+         ! against a gpu_n1 run and pinpoint the (step, gidx, array) at
+         ! which the GPU value first diverges from the CPU baseline.
+         !
+         call dump_state_diff(nt, t)
 #endif
          !
       endif
