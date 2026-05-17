@@ -86,7 +86,9 @@ contains
    !
    index_sparse_matrix = 0
    row_ptr = 0
-   col_idx = 0
+   ! Do NOT zero the module-level col_idx here: it is allocated below at
+   ! `allocate(col_idx(nr_vals_in_matrix))` once the value count is known,
+   ! and fully populated by `col_idx(1:k) = col_idx0(1:k)` on the next line.
    col_idx0 = 0
    irow = 0
    k = 0
