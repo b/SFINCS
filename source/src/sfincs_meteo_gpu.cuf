@@ -18,10 +18,12 @@ module sfincs_meteo
    ! H2D copies have been retired (per audit catalog gpu-bridge-in-trim,
    ! SOR-787): with no per-step host writer mutating these arrays between
    ! the previous-step bridge-OUT and the next-step kernel, the device
-   ! shadow already holds the correct value. The single retained bridge-IN
-   ! is `zs = zs_h`, kept under the catalog Section C.3 caveat
-   ! (update_boundary_conditions in sfincs_boundaries_gpu.cuf:210 writes
-   ! zs(nmb) host-side for kcs==6 Neumann boundary cells).
+   ! shadow already holds the correct value. There is no per-step
+   ! bridge-IN: zs is device-canonical across the entire per-step loop
+   ! (SOR-65) -- the kcs==6 Neumann host write in
+   ! update_boundary_conditions that was the sole justification for the
+   ! former `zs = zs_h` (catalog Section C.3) is now the on-device
+   ! k_update_neumann_zs kernel.
    !
    use cudafor
    use sfincs_data_device
@@ -72,8 +74,7 @@ contains
          windmax_h => windmax, &
          patm_h => patm, patmb_h => patmb, &
          prcp_h => prcp, &
-         cumprcp_h => cumprcp, netprcp_h => netprcp, &
-         zs_h => zs
+         cumprcp_h => cumprcp, netprcp_h => netprcp
       !
       implicit none
       !
@@ -120,13 +121,13 @@ contains
          ! steps). Bridge-INs for z_volume (B.1) and zb (A.6 init-time)
          ! have likewise been dropped.
          !
-         ! Retained: zs = zs_h, under the catalog Section C.3 caveat --
-         ! update_boundary_conditions (sfincs_boundaries_gpu.cuf:210)
-         ! writes zs(nmb) host-side for kcs==6 (Neumann lateral) cells.
-         !
-         if (precip_h .and. .not. subgrid_h) then
-            call bridge_in_cell_real8(zs, zs_h)
-         endif
+         ! No per-step zs bridge-IN: zs is device-canonical across the
+         ! entire per-step loop (SOR-65). The kcs==6 (Neumann lateral)
+         ! host write in update_boundary_conditions that was the sole
+         ! justification for the former `zs = zs_h` (catalog Section C.3)
+         ! is now the on-device k_update_neumann_zs kernel; zs_h is no
+         ! longer refreshed per-step so bridging it in would clobber the
+         ! canonical device zs.
          !
          ! ------ Per-cell time interpolation kernel -------------------------
          !

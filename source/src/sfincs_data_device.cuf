@@ -147,6 +147,20 @@ module sfincs_data_device
    real*4,    device, dimension(:), allocatable :: patm1
    real*4,    device, dimension(:), allocatable :: patmb
    integer*4, device, dimension(:), allocatable :: nmindbnd
+   ! nm index of the kcs==1 internal point feeding each Neumann (kcs==6)
+   ! grid boundary point. Entries are renumbered to local cell indices by
+   ! renumber_to_local_cell (same treatment as nmindbnd); read on-device
+   ! by k_update_neumann_zs to apply the Neumann dzs/dx=0 lateral update.
+   integer*4, device, dimension(:), allocatable :: nmi_gbp
+   ! Downstream-river (kcs==5) boundary catalogs. index_bdr_gbp maps grid
+   ! boundary point index (1..ngbnd) to the bdr-file row index (1..nbdr);
+   ! index_zsi_bdr maps the bdr-file row to a kcs==1 internal cell index
+   ! (renumbered to local like nmindbnd); dzs_bdr is the slope*distance
+   ! water-level offset for that bdr row. Read on-device by
+   ! k_update_river_zsb to compute zsb/zsb0 from the device zs stencil.
+   integer*4, device, dimension(:), allocatable :: index_bdr_gbp
+   integer*4, device, dimension(:), allocatable :: index_zsi_bdr
+   real*4,    device, dimension(:), allocatable :: dzs_bdr
    !
    ! Precipitation & external flux
    !

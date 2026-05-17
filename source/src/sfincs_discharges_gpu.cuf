@@ -16,11 +16,13 @@ module sfincs_discharges
    ! are imported bare. CUDA Fortran translates `<dev> = <host>` (and the
    ! reverse) into cudaMemcpy at the assignment level.
    !
-   ! Post-trim bridge state: the only per-step bridge-IN retained is
-   ! `zs = zs_h`, because `update_boundary_conditions` writes
-   ! `zs_h(nmb)` for kcs==6 (Neumann lateral) cells on the host between
-   ! bridge-OUT and the next bridge-IN (catalog C.3). Every other
-   ! formerly-bridged read-set member is either init-time-only (zb,
+   ! Post-trim bridge state: there is no per-step bridge-IN. zs is
+   ! device-canonical across the entire per-step loop (SOR-65) -- the
+   ! kcs==6 (Neumann lateral) host write in update_boundary_conditions
+   ! that was the sole justification for the former `zs = zs_h`
+   ! (catalog C.3) is now the on-device k_update_neumann_zs kernel.
+   ! Every other formerly-bridged read-set member is either
+   ! init-time-only (zb,
    ! nmindsrc, drainage_type, drainage_params, drainage_distance) or
    ! written on-device the previous step with no per-step host writer
    ! (qtsrc, z_volume, drainage_status, drainage_fraction_open) and so
@@ -87,7 +89,6 @@ contains
          tsrc_h => tsrc, qsrc_h => qsrc, &
          subgrid_h => subgrid, structure_relax_h => structure_relax, g_h => g, &
          qtsrc_h => qtsrc, &
-         zs_h => zs, &
          drainage_status_h => drainage_status, &
          drainage_distance_h => drainage_distance, &
          drainage_fraction_open_h => drainage_fraction_open
@@ -164,17 +165,18 @@ contains
             drainage_fraction_open_d = drainage_fraction_open_h
          endif
          !
-         ! ------ Bridge-IN: only `zs = zs_h` is retained, because
-         ! `update_boundary_conditions` writes `zs_h(nmb)` for kcs==6
-         ! (Neumann lateral) cells between bridge-OUT and the next
-         ! bridge-IN (catalog C.3). Every other formerly-bridged
-         ! read-set member is now device-resident: zb / nmindsrc /
-         ! drainage_type / drainage_params / drainage_distance are
-         ! init-time-only; z_volume / drainage_status /
-         ! drainage_fraction_open are written on-device the previous
-         ! step with no per-step host writer.
-         !
-         call bridge_in_cell_real8(zs, zs_h)
+         ! ------ Bridge-IN: none. zs is device-canonical across the
+         ! entire per-step loop (SOR-65): the sole former justification
+         ! for `zs = zs_h` was the kcs==6 (Neumann lateral) host write in
+         ! update_boundary_conditions (catalog C.3), now ported to the
+         ! on-device k_update_neumann_zs kernel. zs_h is no longer
+         ! refreshed per-step, so bridging it in would clobber the
+         ! canonical device zs. Every other formerly-bridged read-set
+         ! member is device-resident: zb / nmindsrc / drainage_type /
+         ! drainage_params / drainage_distance are init-time-only;
+         ! z_volume / drainage_status / drainage_fraction_open are
+         ! written on-device the previous step with no per-step host
+         ! writer.
          !
          ! ------ Kernel launch ------------------------------------
          !

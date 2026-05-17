@@ -15,11 +15,11 @@ module sfincs_momentum
    ! array that is init-time-only (mesh / index / geometry / friction /
    ! static initial state, populated once by partition_and_localize) or
    ! written on-device the previous step with no host writer in between has
-   ! been dropped because its device shadow is already up-to-date. Two
-   ! bridge-IN copies are retained:
-   !   * `zs = zs_h` — update_boundary_conditions writes zs_h(nmb) on host
-   !     for kcs==6 (Neumann) cells before compute_fluxes runs
-   !     (catalog Section C.3).
+   ! been dropped because its device shadow is already up-to-date. zs is
+   ! device-canonical across the per-step loop (SOR-65): its former
+   ! `zs = zs_h` bridge-IN here is dropped because the only per-step host
+   ! writer of zs (the kcs==6 Neumann copy) is ported to a device kernel
+   ! in update_boundary_conditions. One bridge-IN copy is retained:
    !   * `uv = uv_h` — when nonhydrostatic is on, compute_nonhydrostatic
    !     (sfincs_nonhydrostatic.f90:665) writes uv(ipuv) on host every step
    !     between compute_fluxes calls (sfincs_lib.F90:633 then 659). The
@@ -99,8 +99,7 @@ contains
          snapwave_h => snapwave, &
          q_h => q, q0_h => q0, uv_h => uv, uv0_h => uv0, &
          timestep_analysis_required_timestep_h => timestep_analysis_required_timestep, &
-         kfuv_h => kfuv, &
-         zs_h => zs
+         kfuv_h => kfuv
       !
       implicit none
       !
@@ -116,24 +115,24 @@ contains
       !
       ! ------ Copy-IN: host -> device for kernel READ set ------------------
       !
-      ! After gpu-bridge-in-trim (SOR-782), two per-step H2D copies remain:
-      !   * `zs = zs_h` — update_boundary_conditions writes zs(nmb) on host
-      !     for kcs==6 (Neumann lateral) cells before compute_fluxes runs
-      !     (sfincs_boundaries_gpu.cuf:194).
+      ! After gpu-bridge-in-trim (SOR-782) and zs device-canonical
+      ! (SOR-65), one per-step H2D copy remains here:
       !   * `uv = uv_h` — compute_nonhydrostatic writes uv(ipuv) on host
       !     between compute_fluxes calls (sfincs_nonhydrostatic.f90:665);
       !     downstream uv bridge-IN sites are conditional, so this copy
       !     publishes the post-NH host uv to device unconditionally.
-      ! All other kernel-read arrays are init-time-only
-      ! (partition_and_localize populates the device shadows once) or were
-      ! written on-device the previous step and bridged-OUT to host without
-      ! any intervening per-step host writer (q, zb, zbuv, zbuvmx, kfuv,
-      ! kcs, kcuv, tauwu, tauwv, patm, fwuv, mesh / index / geometry /
-      ! friction arrays, subgrid tables, etc.). See PR description for the
-      ! full per-array tally.
+      ! The former `zs = zs_h` bridge-IN is dropped: zs is now
+      ! device-canonical across the per-step loop (its only per-step host
+      ! writer, the kcs==6 Neumann copy, is ported to a device kernel in
+      ! update_boundary_conditions -- SOR-65). All other kernel-read
+      ! arrays are init-time-only (partition_and_localize populates the
+      ! device shadows once) or were written on-device the previous step
+      ! and bridged-OUT to host without any intervening per-step host
+      ! writer (q, zb, zbuv, zbuvmx, kfuv, kcs, kcuv, tauwu, tauwv, patm,
+      ! fwuv, mesh / index / geometry / friction arrays, subgrid tables,
+      ! etc.). See PR description for the full per-array tally.
       !
       call nvtx_range_push("mom_fluxes_copyin")
-      call bridge_in_cell_real8(zs, zs_h)
       call bridge_in_edge_real4(uv, uv_h)
       call nvtx_range_pop()
       !

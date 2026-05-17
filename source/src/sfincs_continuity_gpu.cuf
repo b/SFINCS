@@ -14,13 +14,20 @@ module sfincs_continuity
    ! cudaMemcpy at the assignment level.
    !
    ! Bridge-IN H2D copies for init-time arrays and previous-step on-device
-   ! writers have been retired (gpu-bridge-in-trim sub-epic). The two named
-   ! exclusions are zs (catalog C.3 — kcs==6 boundary cells get a per-step
-   ! host write in sfincs_boundaries_gpu.cuf:194) and qext (catalog C.1 —
-   ! BMI/XMI external injection between time steps). Bridge-OUT D2H copies
-   ! remain in place because downstream CPU consumers (netCDF / binary
-   ! output, BMI getters, snapwave coupling, host-side store_t_zsmax loop)
-   ! still read host arrays after each step.
+   ! writers have been retired (gpu-bridge-in-trim sub-epic). zs is now
+   ! device-canonical across the per-step loop (SOR-65): its per-step
+   ! zs bridge-IN and bridge-OUT in compute_water_levels_regular /
+   ! _subgrid are dropped because the only per-step host writer of zs
+   ! (the kcs==6 Neumann copy) is ported to a device kernel in
+   ! update_boundary_conditions. The remaining bridge-IN exclusion is
+   ! qext (catalog C.1 — BMI/XMI external injection between time steps).
+   ! Non-zs Bridge-OUT D2H copies remain in place because downstream CPU
+   ! consumers (netCDF / binary output, BMI getters, snapwave coupling)
+   ! still read host arrays after each step; the host-side store_t_zsmax
+   ! loop still reads zs_h but is gated off in every validation case
+   ! (storetzsmax=0) per AC #3. compute_store_variables (vmax/qmax/twet)
+   ! keeps its own zs bridge-IN; it is out of this phase's scope and not
+   ! exercised by any validation case.
    !
    use cudafor
    use sfincs_data_device
@@ -131,9 +138,11 @@ contains
       ! zsm, maxzsm) are already current device-side; their H2D
       ! copies have been retired.
       !
-      ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
-      ! cells receive a per-step host write at
-      ! sfincs_boundaries_gpu.cuf:194 inside update_boundary_conditions).
+      ! zs is device-canonical across the per-step loop (SOR-65): its
+      ! former `bridge_in_cell_real8(zs, zs_h)` here is dropped. The only
+      ! per-step host writer of zs (the kcs==6 Neumann copy) is ported to
+      ! the device kernel k_update_neumann_zs in update_boundary_conditions,
+      ! so the device zs shadow is already current on entry.
       !
       ! qext is retained per audit catalog Section C.1 (BMI/XMI external
       ! discharge injection between SFINCS time steps).
@@ -151,15 +160,11 @@ contains
       ! sfincs_output.f90:208 writes the host alias to a default value at
       ! each output interval. The OpenACC build propagates that reset via
       ! `!$acc update device(zsmax)` at sfincs_output.f90:209, but the
-      ! CUDA Fortran build treats that directive as a no-op. The
-      ! bridge-IN at sfincs_boundaries_gpu.cuf:339 only runs when
-      ! `boundaries_in_mask` is true; closed-domain models without
-      ! boundary cells skip it entirely, so the host reset must reach
-      ! the device here. Same conservative rationale as vmax/qmax/twet
-      ! in compute_store_variables.
+      ! CUDA Fortran build treats that directive as a no-op. The host
+      ! reset must therefore reach the device here. Same conservative
+      ! rationale as vmax/qmax/twet in compute_store_variables.
       !
       call nvtx_range_push("cont_regular_copyin")
-      call bridge_in_cell_real8(zs, zs_h)
       call bridge_in_edge_real4(q,  q_h)
       !
       if (use_qext_h)  call bridge_in_cell_real4(qext, qext_h)
@@ -188,9 +193,15 @@ contains
       call nvtx_range_pop()
       !
       ! ------ Copy-OUT: device -> host for WRITE set ---------------------
+      ! zs is device-canonical (SOR-65): the former `bridge_out_cell_real8(
+      ! zs_h, zs)` here is dropped. Host zs_h is refreshed only at the
+      ! existing output / SnapWave-coupling sync points
+      ! (device_to_host_for_output, update_wave_field) -- no new sync
+      ! points. The store_t_zsmax host loop below still reads zs_h but is
+      ! gated off in every validation case (storetzsmax=0); see the note
+      ! at that block.
       !
       call nvtx_range_push("cont_regular_copyout")
-      call bridge_out_cell_real8(zs_h, zs)
       !
       if (snapwave_h) then
          call bridge_out_cell_real4(zsm_h,    zsm)
@@ -199,12 +210,17 @@ contains
       !
       if (store_maximum_waterlevel_h) then
          !
-         ! t_zsmax is host-only (not in foundation catalog). We compare the new
-         ! zs_h (just copied from device) against the old zsmax_h (still the
-         ! pre-kernel value) to decide whether each cell's zsmax was updated;
-         ! same predicate as the CPU sibling. Iterate the rank-local owned
-         ! slice so multi-rank runs only update zsmax_h on cells they own;
-         ! halo / non-owned positions stay authoritative on the owning rank.
+         ! t_zsmax is host-only (not in foundation catalog). NOTE (SOR-65):
+         ! zs is now device-canonical, so zs_h is NOT refreshed per-step
+         ! here (the zs bridge-out above was dropped). This branch only
+         ! runs when store_t_zsmax (storetzsmax=1), which is off in every
+         ! validation case and in case_prod_compound_snapwave, so it is
+         ! gated unchanged per the issue's AC #3. Making this read
+         ! device-canonical is deferred to the feature-boundary phase; if
+         ! storetzsmax is enabled this loop would read a stale zs_h and
+         ! must be refactored then. Iterate the rank-local owned slice so
+         ! multi-rank runs only update zsmax_h on cells they own; halo /
+         ! non-owned positions stay authoritative on the owning rank.
          !
          if (store_t_zsmax_h) then
             do nm = 1, npn_local
@@ -280,9 +296,11 @@ contains
       ! maxzsm) are already current device-side; their H2D copies have
       ! been retired.
       !
-      ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
-      ! cells receive a per-step host write at
-      ! sfincs_boundaries_gpu.cuf:194 inside update_boundary_conditions).
+      ! zs is device-canonical across the per-step loop (SOR-65): its
+      ! former `bridge_in_cell_real8(zs, zs_h)` here is dropped. The only
+      ! per-step host writer of zs (the kcs==6 Neumann copy) is ported to
+      ! the device kernel k_update_neumann_zs in update_boundary_conditions,
+      ! so the device zs shadow is already current on entry.
       !
       ! qext is retained per audit catalog Section C.1 (BMI/XMI external
       ! discharge injection between SFINCS time steps).
@@ -300,15 +318,11 @@ contains
       ! sfincs_output.f90:208 writes the host alias to a default value at
       ! each output interval. The OpenACC build propagates that reset via
       ! `!$acc update device(zsmax)` at sfincs_output.f90:209, but the
-      ! CUDA Fortran build treats that directive as a no-op. The
-      ! bridge-IN at sfincs_boundaries_gpu.cuf:339 only runs when
-      ! `boundaries_in_mask` is true; closed-domain models without
-      ! boundary cells skip it entirely, so the host reset must reach
-      ! the device here. Same conservative rationale as vmax/qmax/twet
-      ! in compute_store_variables.
+      ! CUDA Fortran build treats that directive as a no-op. The host
+      ! reset must therefore reach the device here. Same conservative
+      ! rationale as vmax/qmax/twet in compute_store_variables.
       !
       call nvtx_range_push("cont_subgrid_copyin")
-      call bridge_in_cell_real8(zs, zs_h)
       call bridge_in_edge_real4(q,  q_h)
       !
       if (use_qext_h)  call bridge_in_cell_real4(qext, qext_h)
@@ -339,9 +353,15 @@ contains
       call nvtx_range_pop()
       !
       ! ------ Copy-OUT ---------------------------------------------------
+      ! zs is device-canonical (SOR-65): the former `bridge_out_cell_real8(
+      ! zs_h, zs)` here is dropped. Host zs_h is refreshed only at the
+      ! existing output / SnapWave-coupling sync points
+      ! (device_to_host_for_output, update_wave_field) -- no new sync
+      ! points. The store_t_zsmax host loop below still reads zs_h but is
+      ! gated off in every validation case (storetzsmax=0); see the note
+      ! at that block.
       !
       call nvtx_range_push("cont_subgrid_copyout")
-      call bridge_out_cell_real8(zs_h,       zs)
       call bridge_out_cell_real8(z_volume_h, z_volume)
       !
       if (wiggle_suppression_h) then
@@ -359,8 +379,11 @@ contains
       if (store_maximum_waterlevel_h) then
          !
          ! Host-side t_zsmax (not in catalog). See compute_water_levels_regular
-         ! for the same pattern. Iterate owned slice in rank-local order;
-         ! halo / non-owned cells stay untouched.
+         ! for the same pattern and the SOR-65 stale-zs_h note: zs is now
+         ! device-canonical so zs_h is not refreshed per-step here; this
+         ! branch is gated off in every validation case (storetzsmax=0) so
+         ! it is unchanged per AC #3. Iterate owned slice in rank-local
+         ! order; halo / non-owned cells stay untouched.
          !
          if (store_t_zsmax_h) then
             do nm = 1, npn_local
@@ -394,7 +417,7 @@ contains
          store_maximum_flux_h => store_maximum_flux, &
          store_twet_h => store_twet, &
          twet_threshold_h => twet_threshold, &
-         zs_h => zs, q_h => q, uv_h => uv, &
+         q_h => q, uv_h => uv, &
          vmax_h => vmax, qmax_h => qmax, twet_h => twet
       !
       implicit none
@@ -409,9 +432,12 @@ contains
       ! Init-time arrays (kcs, zb, z_index_uv_*, subgrid_z_zmin) are
       ! already current device-side; their H2D copies have been retired.
       !
-      ! zs is retained per audit catalog Section C.3 (kcs==6 boundary
-      ! cells receive a per-step host write at
-      ! sfincs_boundaries_gpu.cuf:194 inside update_boundary_conditions).
+      ! zs is device-canonical across the entire per-step loop (SOR-65):
+      ! no per-step zs bridge-IN. The kcs==6 (Neumann) host write in
+      ! update_boundary_conditions that was the sole justification for the
+      ! former `zs = zs_h` (catalog Section C.3) is now the on-device
+      ! k_update_neumann_zs kernel; zs_h is no longer refreshed per-step
+      ! so bridging it in would clobber the canonical device zs.
       !
       ! q and uv are retained because sfincs_nonhydrostatic.f90:664-665
       ! writes the host aliases every nonhydrostatic step
@@ -427,7 +453,6 @@ contains
       ! aliases to default values each output interval, and no other
       ! per-step GPU bridge-IN propagates that reset to the device.
       !
-      call bridge_in_cell_real8(zs, zs_h)
       call bridge_in_edge_real4(q,  q_h)
       call bridge_in_edge_real4(uv, uv_h)
       !

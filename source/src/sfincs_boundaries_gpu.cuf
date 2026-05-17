@@ -24,15 +24,36 @@ module sfincs_boundaries
    ! ibuvdir) or written on-device the previous step with no host writer
    ! in between (q, uv, uvmean, z_volume, zsmax) has had its `<dev> =
    ! <host>` line dropped because the device shadow is already current.
-   ! Three named retentions:
+   ! Retentions:
    !   zsb / zsb0 : update_boundary_conditions runs on host immediately
    !     before update_boundary_fluxes every step and writes
-   !     zsb_h(ib) / zsb0_h(ib) (lines 168-169) per catalog Section C.2.
-   !   zs         : update_boundary_conditions also writes zs_h(nmb) on
-   !     host for kcs==6 (Neumann lateral) cells (line 194) per catalog
-   !     Section C.3 -- conservative default.
-   ! The bridge-OUT (D2H) block at the end of update_boundary_fluxes is
-   ! unchanged and still required for downstream CPU consumers.
+   !     zsb_h(ib) / zsb0_h(ib) per catalog Section C.2.
+   !
+   ! zs device-canonical (SOR-65): zs is now device-resident across the
+   ! whole per-step loop. The three per-step host touches of zs that used
+   ! to live in update_boundary_conditions / update_boundary_fluxes are
+   ! all ported to device kernels launched from update_boundary_conditions
+   ! before update_boundary_fluxes' k_update_boundary_fluxes:
+   !   * kcs==6 Neumann lateral copy -> k_update_neumann_zs
+   !   * kcs==5 downstream-river stencil (zsb from device zs) ->
+   !     k_update_river_zsb
+   !   * kcs==2/5 boundary-condition fan-out write zs(nmb)=zsb(indb) ->
+   !     k_apply_boundary_zs (extracted from the tail of
+   !     k_update_boundary_fluxes so the whole boundary-conditions phase
+   !     finishes before the flux kernel reads the refreshed zsb).
+   ! Consequently the per-step zs bridge-IN (was in update_boundary_fluxes
+   ! copy-IN) and the per-step zs bridge-OUT (was in update_boundary_fluxes
+   ! copy-OUT) are dropped. The zsb/zsb0 H2D bridge moves to
+   ! update_boundary_conditions so the three new device kernels see
+   ! the kcs==2 entries the host OMP loop just wrote; k_update_river_zsb
+   ! overwrites the kcs==5 entries from the device zs stencil; the
+   ! kcs==2 bridge-IN of zsb/zsb0 is therefore *not* repeated in
+   ! update_boundary_fluxes (zsb/zsb0 are device-current on entry).
+   ! Host zs_h is refreshed only at the existing output / SnapWave-coupling
+   ! sync points (device_to_host_for_output, update_wave_field) -- no new
+   ! sync points are introduced. The store_t_zsmax host loop below still
+   ! reads zs_h but is gated off in every validation case (storetzsmax=0);
+   ! see the note at that block.
    !
    use cudafor
    use mpi
@@ -131,36 +152,54 @@ contains
 
    subroutine update_boundary_conditions(t, dt)
    !
-   ! Update water level at boundary grid points (host).
+   ! Update water level at boundary grid points.
    !
    ! GPU sibling: rank 0 computes the kcs==2 boundary water levels into
    ! zsb_global_workbuf / zsb0_global_workbuf (size = global boundary
    ! count), the workbufs are MPI_Bcast-ed to every rank, and each rank
-   ! fans the workbuf into its rank-local subset of zsb / zsb0. The
-   ! kcs==5 (downstream river) and kcs==6 (Neumann) entries depend on
-   ! local model state (zs values inside this rank's slab) and so are
-   ! filled per-rank, gated by the rank-local ownership filter.
+   ! fans the workbuf into its rank-local subset of zsb_h / zsb0_h. The
+   ! host loop is now restricted to the kcs==2 fan-out only; the kcs==5
+   ! and kcs==6 entries depend on local model state (zs values inside
+   ! this rank's slab) and so are filled on-device after the bridge-IN
+   ! by the k_update_river_zsb and k_update_neumann_zs kernels.
+   !
+   ! After the host fan-out, zsb / zsb0 are bridged H2D once. Then three
+   ! tiny device kernels run in sequence to finish the boundary-conditions
+   ! phase entirely on the device shadows (SOR-65):
+   !   1. k_update_neumann_zs  : zs(nmb)  = zs(nmi_gbp(ib))           (kcs==6)
+   !   2. k_update_river_zsb   : zsb(ib)  = zs(index_zsi_bdr(ibdr))
+   !                                       + dzs_bdr(ibdr), clamped   (kcs==5)
+   !   3. k_apply_boundary_zs  : zs(nmb)  = zsb(ib)                   (kcs==2,3,5)
+   ! After (3) returns, update_boundary_fluxes' k_update_boundary_fluxes
+   ! reads device zsb / zs directly with no bridge-IN of either array.
    !
    ! MPI_Bcast on mpi_size==1 is a no-op (rank 0 is its own communicator),
    ! preserving the N=1 baseline bit-for-bit modulo any unavoidable FP
    ! reordering from the helper extraction.
    !
-   use sfincs_data
+   ! USE-rename: every host array that has a device shadow at module
+   ! scope (zsb / zsb0 / nmindbnd / kcs) is brought in with an `_h`
+   ! suffix so the bare names in this routine refer to the device
+   ! shadow from sfincs_data_device (consistent with the
+   ! update_boundary_fluxes convention).
+   !
+   use sfincs_data, only: &
+      ngbnd_h    => ngbnd, &
+      nkcuv2_h   => nkcuv2, &
+      bndtype_h  => bndtype, &
+      subgrid_h  => subgrid, &
+      neumann_boundaries_in_mask_h          => neumann_boundaries_in_mask, &
+      downstream_river_boundaries_in_mask_h => downstream_river_boundaries_in_mask, &
+      nmindbnd_h => nmindbnd, kcs_h => kcs, &
+      zsb_h => zsb, zsb0_h => zsb0
    !
    implicit none
    !
    real*8 :: t
    real   :: dt
    !
-   integer :: ib, nmb, ibdr, ierr
-   real*8  :: zst
-   !
-   ! AC #1 names this routine update_boundary_conditions; the per-step
-   ! copy-IN/kernel/copy-OUT H<->D structure the issue's Notes cite by
-   ! line number actually lives in update_boundary_fluxes (this routine
-   ! is the host-side MPI_Bcast that feeds it). Both routines are
-   ! annotated so the named routine carries a range and the per-step
-   ! H<->D traffic is attributable separately from the bcast.
+   integer :: ib, nmb, ierr
+   integer :: blocks, istat
    !
    call nvtx_range_push("bnd_conditions")
    !
@@ -175,60 +214,97 @@ contains
    call mpi_bcast(zsb_global_workbuf,  size(zsb_global_workbuf),  MPI_REAL, 0, MPI_COMM_WORLD, ierr)
    call mpi_bcast(zsb0_global_workbuf, size(zsb0_global_workbuf), MPI_REAL, 0, MPI_COMM_WORLD, ierr)
    !
-   ! Assignment loop: fan workbuf into zsb / zsb0 (kcs==2) and fill the
-   ! kcs==5 / kcs==6 entries from local model state. Each rank applies
-   ! only to its rank-local subset of grid boundary points.
+   ! Host fan-out loop: kcs==2 only. kcs==5 / kcs==6 are device-only now
+   ! (SOR-65 AC #1a / AC #1c). Each rank still applies only to its
+   ! locally-owned grid boundary points.
    !
    ! kcs = 1 : regular point
    ! kcs = 2 : water level boundary point (workbuf)
    ! kcs = 3 : outflow boundary point (set at initialization, no update)
    ! kcs = 4 : wave maker point
-   ! kcs = 5 : river outflow point (dzs/dx = i)
-   ! kcs = 6 : lateral (coastal) boundary point (Neumann dzs/dx = 0.0)
+   ! kcs = 5 : river outflow point (dzs/dx = i) -- device, see k_update_river_zsb
+   ! kcs = 6 : lateral (coastal) boundary point (Neumann) -- device, see k_update_neumann_zs
    !
-   !$omp parallel private ( ib, nmb, zst, ibdr ) if(ngbnd > 10000)
+   !$omp parallel private ( ib, nmb ) if(ngbnd_h > 10000)
    !$omp do schedule(dynamic, 64)
-   do ib = 1, ngbnd
+   do ib = 1, ngbnd_h
       !
       if (.not. bnd_is_local(ib)) cycle
       !
-      nmb = nmindbnd(ib)
+      nmb = nmindbnd_h(ib)
       !
-      if (kcs(nmb) == 2) then
+      if (kcs_h(nmb) == 2) then
          !
-         zsb(ib)  = zsb_global_workbuf(ib)
-         zsb0(ib) = zsb0_global_workbuf(ib)
-         !
-      elseif (kcs(nmb) == 5) then
-         !
-         ! Downstream river point: water level inside model adjusted by slope.
-         !
-         ibdr = index_bdr_gbp(ib)
-         !
-         zst = zs(index_zsi_bdr(ibdr)) + dzs_bdr(ibdr)
-         !
-         if (subgrid) then
-            zst = max(zst, subgrid_z_zmin(nmb))
-         else
-            zst = max(zst, zb(nmb))
-         endif
-         !
-         zsb(ib)  = zst
-         zsb0(ib) = zst
-         !
-      elseif (kcs(nmb) == 6) then
-         !
-         ! Lateral coastal (Neumann) boundary: water level at boundary equals
-         ! water level inside the model. zsb / zsb0 are not used here; flux
-         ! at kcuv=6 points is solved in sfincs_momentum.
-         !
-         zs(nmb) = zs(nmi_gbp(ib))
+         zsb_h(ib)  = zsb_global_workbuf(ib)
+         zsb0_h(ib) = zsb0_global_workbuf(ib)
          !
       endif
       !
    enddo
    !$omp end do
    !$omp end parallel
+   !
+   ! ----- Bridge zsb / zsb0 H2D (moved here from update_boundary_fluxes) ----
+   !
+   ! The kcs==2 fan-out just wrote zsb_h / zsb0_h on the host; the kcs==5
+   ! kernel below overwrites those entries' kcs==5 slots from the device
+   ! zs stencil, and k_apply_boundary_zs reads the merged zsb shadow.
+   ! update_boundary_fluxes therefore needs no zsb / zsb0 bridge-IN of
+   ! its own (catalog Section C.2 -- the bridge moves with its consumers).
+   !
+   call nvtx_range_push("bnd_conditions_copyin")
+   zsb  = zsb_h
+   zsb0 = zsb0_h
+   call nvtx_range_pop()
+   !
+   ! Neumann (kcs==6) lateral water-level update, on-device. zs is
+   ! device-canonical across the per-step loop (SOR-65). Gated on
+   ! neumann_boundaries_in_mask, which is exactly the predicate that
+   ! guards the host-side allocation of nmi_gbp, so nmi_gbp is allocated
+   ! on host (hence its device shadow exists) whenever this fires. Writes
+   ! zs(nmb) for kcs==6 cells; k_update_boundary_fluxes returns early for
+   ! kcs==6 so the update does not interact with the flux kernel.
+   !
+   if (neumann_boundaries_in_mask_h .and. ngbnd_h > 0) then
+      call nvtx_range_push("bnd_neumann_zs")
+      blocks = (ngbnd_h + TPB - 1) / TPB
+      call k_update_neumann_zs<<<blocks, TPB>>>(ngbnd_h, npn_local)
+      istat = cudaDeviceSynchronize()
+      call nvtx_range_pop()
+   endif
+   !
+   ! Downstream-river (kcs==5) zsb / zsb0 update, on-device (SOR-65 AC #1a).
+   ! Reads device zs at the bdr internal point (kcs==1 cell), adds the
+   ! per-bdr slope*distance offset, clamps to subgrid_z_zmin / zb, and
+   ! writes device zsb / zsb0 for that boundary point. Gated on
+   ! downstream_river_boundaries_in_mask (the predicate that guards the
+   ! host-side allocation of index_bdr_gbp), so the device shadows of
+   ! index_bdr_gbp / index_zsi_bdr / dzs_bdr exist whenever this fires.
+   !
+   if (downstream_river_boundaries_in_mask_h .and. ngbnd_h > 0) then
+      call nvtx_range_push("bnd_river_zsb")
+      blocks = (ngbnd_h + TPB - 1) / TPB
+      call k_update_river_zsb<<<blocks, TPB>>>(ngbnd_h, npn_local, subgrid_h)
+      istat = cudaDeviceSynchronize()
+      call nvtx_range_pop()
+   endif
+   !
+   ! Apply boundary-condition water level zs(nmb) = zsb(ib) on-device
+   ! (SOR-65 AC #1b). Mirrors the gating in k_update_boundary_fluxes:
+   ! bndtype==1 (weakly reflective, the only branch in which the CPU
+   ! sibling writes zs(nmb)=zsb(indb)); skips kcs==6 (Neumann lateral,
+   ! flux at kcuv=6 is solved in sfincs_momentum and does not lean on
+   ! this assignment); ownership-gates via nmb in [1, npn_local].
+   ! Runs before k_update_boundary_fluxes so the flux kernel reads a
+   ! consistent zs(nmb) when later computing zsmax(nmb).
+   !
+   if (bndtype_h == 1 .and. nkcuv2_h > 0) then
+      call nvtx_range_push("bnd_apply_zs")
+      blocks = (nkcuv2_h + TPB - 1) / TPB
+      call k_apply_boundary_zs<<<blocks, TPB>>>(nkcuv2_h)
+      istat = cudaDeviceSynchronize()
+      call nvtx_range_pop()
+   endif
    !
    call nvtx_range_pop()
    !
@@ -335,21 +411,19 @@ contains
    ! for init-time-only catalog/mesh/geometry/subgrid arrays (Section A)
    ! and for arrays kept current on-device by the previous step's GPU
    ! kernels with no per-step host writer (Section B) have been dropped.
-   ! Three retentions:
-   !   zsb / zsb0 : per-step host writer in update_boundary_conditions
-   !     (this same module, sfincs_boundaries_gpu.cuf:168-169) -- catalog
-   !     Section C.2.
-   !   zs         : per-step host writer in update_boundary_conditions
-   !     (sfincs_boundaries_gpu.cuf:194) for kcs==6 cells -- catalog
-   !     Section C.3, conservative default.
-   !
-   call nvtx_range_push("bnd_fluxes_copyin")
-   call bridge_in_cell_real8(zs, zs_h)
-   ! zsb / zsb0 are boundary-sized (ngbnd), not edge-rank: keep bulk H2D.
-   zsb  = zsb_h
-   zsb0 = zsb0_h
-   call nvtx_range_pop()
-   !
+   ! zs is now device-canonical across the per-step loop (SOR-65): its
+   ! per-step host writers (the kcs==6 Neumann copy AND the kcs==2/3/5
+   ! boundary-condition fan-out write zs(nmb)=zsb(indb)) have all been
+   ! ported to device kernels launched from update_boundary_conditions,
+   ! so the former `bridge_in_cell_real8(zs, zs_h)` here is dropped --
+   ! the device zs shadow is already current. zsb / zsb0 are also
+   ! device-current on entry: update_boundary_conditions just bridged
+   ! the kcs==2 host fan-out H2D and the on-device k_update_river_zsb
+   ! kernel filled the kcs==5 entries from the device zs stencil. The
+   ! former bulk `zsb = zsb_h` / `zsb0 = zsb0_h` H2D copies here are
+   ! therefore dropped too (the bridge moved with its consumers --
+   ! catalog Section C.2 mandate now satisfied by the producer-side
+   ! bridge in update_boundary_conditions).
    ! ------ Main per-boundary-point kernel -------------------------------
    !
    call nvtx_range_push("bnd_fluxes_kernel")
@@ -365,13 +439,16 @@ contains
    call nvtx_range_pop()
    !
    ! ------ Copy-OUT: device -> host for WRITE set -----------------------
-   ! Per architect's bridge contract: zsb/zsb0 are republished as well
+   ! zs is device-canonical (SOR-65): the former `bridge_out_cell_real8(
+   ! zs_h, zs)` here is dropped. The host zs_h view is refreshed only at
+   ! the existing output / SnapWave-coupling sync points
+   ! (device_to_host_for_output, update_wave_field). q / uv keep their
+   ! D2H copies (downstream CPU consumers). zsb / zsb0 are republished
    ! (host-mutated by update_boundary_conditions; identity copy here, but
-   ! kept to keep the host view canonical and so future device-side
-   ! mutations stay correct without further changes).
+   ! kept so the host view stays canonical for those boundary-sized
+   ! arrays).
    !
    call nvtx_range_push("bnd_fluxes_copyout")
-   call bridge_out_cell_real8(zs_h,   zs)
    call bridge_out_edge_real4(q_h,    q)
    call bridge_out_edge_real4(uv_h,   uv)
    ! uvmean / zsb / zsb0 are boundary-sized (nkcuv2 / ngbnd); keep bulk D2H.
@@ -381,10 +458,14 @@ contains
    !
    if (store_maximum_waterlevel_h) then
       !
-      ! Host-side t_zsmax (not in foundation catalog): predicate uses the
-      ! new zs_h (post-kernel, just copied above) against the old zsmax_h
-      ! (pre-kernel; zsmax_h was never written on host between copy-in and
-      ! copy-out, so it still holds the pre-kernel snapshot).
+      ! Host-side t_zsmax (not in foundation catalog). NOTE (SOR-65): zs
+      ! is now device-canonical, so zs_h here is NOT refreshed per-step
+      ! (the zs bridge-out above was dropped). This branch only runs when
+      ! store_t_zsmax (storetzsmax=1), which is off in every validation
+      ! case and in case_prod_compound_snapwave, so it is gated unchanged
+      ! per the issue's AC #3. Making this read device-canonical is
+      ! deferred to the feature-boundary phase; if storetzsmax is enabled
+      ! this loop would read a stale zs_h and must be refactored then.
       !
       if (store_t_zsmax_h .and. bndtype_h == 1) then
          do ib = 1, nkcuv2_h
@@ -666,9 +747,14 @@ contains
             uvmean(ib) = 0.0
          endif
          !
-         ! Set value on kcs=2 point to boundary condition
-         !
-         zs(nmb) = zsb(indb)
+         ! kcs==2/3/5 boundary-condition water-level fan-out write
+         ! zs(nmb) = zsb(indb) was applied earlier in this step by
+         ! k_apply_boundary_zs (launched from update_boundary_conditions,
+         ! SOR-65 AC #1b). zsmax(nmb) still gets sampled here so the
+         ! store_maximum_waterlevel bookkeeping continues to see the
+         ! post-update value (the cell index nmb -> indb mapping is
+         ! deterministic for kcs==2/3/5 cells, so zsmax reads the same
+         ! value k_apply_boundary_zs wrote).
          !
          if (store_max_zs_in) then
             zsmax(nmb) = max(zsmax(nmb), real(zs(nmb), kind=4))
@@ -677,5 +763,192 @@ contains
       endif
       !
    end subroutine k_update_boundary_fluxes
+   !
+   ! -------------------------------------------------------------------
+   ! Neumann (kcs==6) lateral boundary water-level update (SOR-65).
+   !
+   ! Device port of the kcs==6 branch that used to run on the host inside
+   ! update_boundary_conditions:
+   !
+   !    do ib = 1, ngbnd
+   !       if (.not. bnd_is_local(ib)) cycle
+   !       nmb = nmindbnd(ib)
+   !       ...
+   !       elseif (kcs(nmb) == 6) then
+   !          zs(nmb) = zs(nmi_gbp(ib))
+   !
+   ! One thread per grid boundary point ib in [1, ngbnd_in]. nmindbnd /
+   ! nmi_gbp carry cell indices renumbered to this rank's local space
+   ! (renumber_to_local_cell, same as nmbkcuv2 / nmikcuv2). The owned-slice
+   ! test `nmb in [1, npn_local_in]` is the exact device equivalent of the
+   ! host `bnd_is_local(ib)` filter (true iff the boundary cell is in this
+   ! rank's owned slice; halo / non-resident boundary cells are skipped
+   ! here and refreshed by halo_exchange_zs from the owning rank). zs is
+   ! device-canonical, so the kcs==1 internal value is read straight from
+   ! the device shadow; the assignment is a pure integer-indexed real*8
+   ! copy (kcs==6 targets and kcs==1 sources are disjoint, and each nmb
+   ! appears once in nmindbnd), so it is bit-identical to the serial /
+   ! OpenMP host loop regardless of thread order.
+   ! -------------------------------------------------------------------
+   !
+   attributes(global) subroutine k_update_neumann_zs(ngbnd_in, npn_local_in)
+      !
+      implicit none
+      !
+      integer, value :: ngbnd_in
+      integer, value :: npn_local_in
+      !
+      integer :: ib
+      integer :: nmb
+      integer :: nmi
+      !
+      ib = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (ib > ngbnd_in) return
+      !
+      nmb = nmindbnd(ib)
+      if (nmb < 1 .or. nmb > npn_local_in) return  ! mirrors .not. bnd_is_local
+      !
+      if (kcs(nmb) /= 6) return
+      !
+      nmi = nmi_gbp(ib)
+      if (nmi <= 0) return  ! internal cell not resident on this rank
+      !
+      zs(nmb) = zs(nmi)
+      !
+   end subroutine k_update_neumann_zs
+   !
+   ! -------------------------------------------------------------------
+   ! Downstream-river (kcs==5) zsb / zsb0 update (SOR-65 AC #1a).
+   !
+   ! Device port of the kcs==5 branch that used to run on the host inside
+   ! update_boundary_conditions:
+   !
+   !    do ib = 1, ngbnd
+   !       if (.not. bnd_is_local(ib)) cycle
+   !       nmb = nmindbnd(ib)
+   !       elseif (kcs(nmb) == 5) then
+   !          ibdr = index_bdr_gbp(ib)
+   !          zst  = zs(index_zsi_bdr(ibdr)) + dzs_bdr(ibdr)
+   !          if (subgrid) then
+   !             zst = max(zst, subgrid_z_zmin(nmb))
+   !          else
+   !             zst = max(zst, zb(nmb))
+   !          endif
+   !          zsb(ib)  = zst
+   !          zsb0(ib) = zst
+   !
+   ! One thread per grid boundary point ib in [1, ngbnd_in]. The kcs==5
+   ! gate matches the host CPU sibling (sfincs_boundaries.f90:127-143).
+   ! `nmb in [1, npn_local_in]` mirrors `.not. bnd_is_local`. The device
+   ! zs read at `index_zsi_bdr(ibdr)` is correct only when the internal
+   ! cell (a kcs==1 cell) is resident on this rank as owned or halo: if
+   ! the renumber mapped index_zsi_bdr(ibdr) to 0 (non-resident on this
+   ! rank's slab), the kernel skips writing this entry. The owning rank
+   ! still writes its own kcs==5 entries unconditionally (the host bdr
+   ! catalog is global, and find_quadtree_cell picks a kcs==1 cell on
+   ! the same model-side region as the boundary, so the owning rank
+   ! typically holds the internal cell as owned or halo after the
+   ! cycle-1 boundary halo extension).
+   ! -------------------------------------------------------------------
+   !
+   attributes(global) subroutine k_update_river_zsb(ngbnd_in, npn_local_in, subgrid_in)
+      !
+      implicit none
+      !
+      integer, value :: ngbnd_in
+      integer, value :: npn_local_in
+      logical, value :: subgrid_in
+      !
+      integer :: ib
+      integer :: nmb
+      integer :: ibdr
+      integer :: nmi
+      real*8  :: zst
+      real*8  :: zst_clamp
+      !
+      ib = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (ib > ngbnd_in) return
+      !
+      nmb = nmindbnd(ib)
+      if (nmb < 1 .or. nmb > npn_local_in) return  ! mirrors .not. bnd_is_local
+      !
+      if (kcs(nmb) /= 5) return
+      !
+      ibdr = index_bdr_gbp(ib)
+      if (ibdr <= 0) return  ! no bdr-file entry mapped for this gbp
+      !
+      nmi = index_zsi_bdr(ibdr)
+      if (nmi <= 0) return  ! internal cell not resident on this rank
+      !
+      ! Match the CPU sibling's promotion exactly: zst is real*8, the
+      ! addition with real*4 dzs_bdr is promoted, the max-with-clamp
+      ! is done in real*8, and the final assignment to real*4 zsb /
+      ! zsb0 carries the implicit truncation. Keeping the intermediate
+      ! in real*4 would change WHAT moves, not just WHEN, breaking
+      ! Phase 1's bit-identical contract.
+      !
+      zst = zs(nmi) + real(dzs_bdr(ibdr), kind=8)
+      !
+      if (subgrid_in) then
+         zst_clamp = real(subgrid_z_zmin(nmb), kind=8)
+      else
+         zst_clamp = real(zb(nmb), kind=8)
+      endif
+      if (zst < zst_clamp) zst = zst_clamp
+      !
+      zsb(ib)  = real(zst, kind=4)
+      zsb0(ib) = real(zst, kind=4)
+      !
+   end subroutine k_update_river_zsb
+   !
+   ! -------------------------------------------------------------------
+   ! Boundary-condition water-level fan-out (SOR-65 AC #1b).
+   !
+   ! Device port of the `zs(nmb) = zsb(indb)` write that used to live at
+   ! the tail of k_update_boundary_fluxes (and on the CPU sibling at
+   ! sfincs_boundaries.f90:329). Iterates boundary uv-points (1..nkcuv2)
+   ! -- one thread per uv-point -- so the write set exactly matches the
+   ! original kernel: a kcs==2/3/5 cell only gets zs(nmb) written if it
+   ! has at least one boundary uv-point. (Iterating grid boundary points
+   ! 1..ngbnd would over-write: corner / sandwich cells exist in the
+   ! mask that have kcs in {2,3,5,6} but no active boundary uv-point --
+   ! e.g. kcs==2 corners where both face neighbours are also boundary
+   ! cells get kcuv=0 -- and the CPU sibling does NOT touch zs there.)
+   ! kcs==6 (Neumann) is skipped because zsb is not used for Neumann
+   ! cells (their zs(nmb) is set by k_update_neumann_zs). The owned /
+   ! non-resident filter mirrors k_update_boundary_fluxes' nmb/nmi/ip
+   ! gate, and bndtype gating is done at the launch site (the kernel
+   ! is only fired when bndtype==1).
+   ! -------------------------------------------------------------------
+   !
+   attributes(global) subroutine k_apply_boundary_zs(nkcuv2_in)
+      !
+      implicit none
+      !
+      integer, value :: nkcuv2_in
+      !
+      integer :: ib
+      integer :: indb
+      integer :: nmb
+      integer :: nmi
+      integer :: ip
+      !
+      ib = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (ib > nkcuv2_in) return
+      !
+      indb = ibkcuv2(ib)
+      nmb  = nmbkcuv2(ib)
+      nmi  = nmikcuv2(ib)
+      ip   = index_kcuv2(ib)
+      !
+      ! Skip boundary points that are neither owned nor halo on this rank,
+      ! mirroring the early-return at the top of k_update_boundary_fluxes.
+      if (nmb <= 0 .or. nmi <= 0 .or. ip <= 0) return
+      !
+      if (kcs(nmb) == 6) return  ! Neumann: zs(nmb) set by k_update_neumann_zs
+      !
+      zs(nmb) = real(zsb(indb), kind=8)
+      !
+   end subroutine k_apply_boundary_zs
 
 end module

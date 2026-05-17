@@ -1,0 +1,1367 @@
+top - 01:34:55 up 6 days, 15 min,  0 user,  load average: 3.39, 4.77, 4.68
+Tasks:   1 total,   0 running,   1 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  1.8 us,  0.7 sy,  0.0 ni, 97.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 447017.3 free,  13863.2 used,  57948.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501936.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0 9892.9m 208716  93740 S   0.0   0.0   0:00.34 sfincs
+
+top - 01:34:56 up 6 days, 15 min,  0 user,  load average: 3.39, 4.77, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.1 us,  1.0 sy,  0.0 ni, 96.9 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 447017.3 free,  13863.2 used,  57948.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501936.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 444612 191780 R  51.0   0.1   0:00.85 sfincs
+
+top - 01:34:57 up 6 days, 15 min,  0 user,  load average: 3.39, 4.77, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.5 sy,  0.0 ni, 96.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 447017.3 free,  13863.2 used,  57948.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501936.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 621820 192208 R 100.0   0.1   0:01.85 sfincs
+
+top - 01:34:58 up 6 days, 16 min,  0 user,  load average: 3.52, 4.77, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.6 us,  0.9 sy,  0.0 ni, 95.4 id,  0.1 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445521.0 free,  15282.5 used,  58059.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500516.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 579096 192488 R 100.0   0.1   0:02.85 sfincs
+
+top - 01:34:59 up 6 days, 16 min,  0 user,  load average: 3.52, 4.77, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.3 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445521.0 free,  15282.5 used,  58059.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500516.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 579096 192488 R 101.0   0.1   0:03.86 sfincs
+
+top - 01:35:00 up 6 days, 16 min,  0 user,  load average: 3.52, 4.77, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.3 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445521.0 free,  15282.5 used,  58059.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500516.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580088 193476 R  98.0   0.1   0:04.85 sfincs
+
+top - 01:35:01 up 6 days, 16 min,  0 user,  load average: 3.52, 4.77, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.3 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445514.2 free,  15269.8 used,  58080.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500529.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580100 193488 R 101.0   0.1   0:05.86 sfincs
+
+top - 01:35:02 up 6 days, 16 min,  0 user,  load average: 3.52, 4.77, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.3 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445514.2 free,  15269.8 used,  58080.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500529.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580148 193536 R 101.0   0.1   0:06.87 sfincs
+
+top - 01:35:03 up 6 days, 16 min,  0 user,  load average: 3.64, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.3 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445514.2 free,  15269.8 used,  58080.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500529.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580300 193688 R 100.0   0.1   0:07.87 sfincs
+
+top - 01:35:04 up 6 days, 16 min,  0 user,  load average: 3.64, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.3 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445555.8 free,  15245.9 used,  58067.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500553.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580576 193964 R  99.0   0.1   0:08.87 sfincs
+
+top - 01:35:05 up 6 days, 16 min,  0 user,  load average: 3.64, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.3 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445555.8 free,  15245.9 used,  58067.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500553.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580608 193996 R 100.0   0.1   0:09.87 sfincs
+
+top - 01:35:06 up 6 days, 16 min,  0 user,  load average: 3.64, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.2 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445555.8 free,  15245.9 used,  58067.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500553.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580608 193996 R 100.0   0.1   0:10.87 sfincs
+
+top - 01:35:07 up 6 days, 16 min,  0 user,  load average: 3.64, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.2 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445530.2 free,  15270.7 used,  58063.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500528.6 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580608 193996 R 101.0   0.1   0:11.88 sfincs
+
+top - 01:35:08 up 6 days, 16 min,  0 user,  load average: 3.67, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.4 sy,  0.0 ni, 96.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445530.2 free,  15270.7 used,  58063.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500528.6 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580632 194020 R  99.0   0.1   0:12.88 sfincs
+
+top - 01:35:09 up 6 days, 16 min,  0 user,  load average: 3.67, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.2 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445530.2 free,  15270.7 used,  58063.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500528.6 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580640 194028 R 100.0   0.1   0:13.88 sfincs
+
+top - 01:35:10 up 6 days, 16 min,  0 user,  load average: 3.67, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.2 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445593.2 free,  15211.9 used,  58058.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500587.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580640 194028 R 100.0   0.1   0:14.88 sfincs
+
+top - 01:35:11 up 6 days, 16 min,  0 user,  load average: 3.67, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445593.2 free,  15211.9 used,  58058.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500587.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580640 194028 R 101.0   0.1   0:15.89 sfincs
+
+top - 01:35:12 up 6 days, 16 min,  0 user,  load average: 3.67, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.2 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445593.2 free,  15211.9 used,  58058.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500587.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580696 194084 R  99.0   0.1   0:16.89 sfincs
+
+top - 01:35:13 up 6 days, 16 min,  0 user,  load average: 3.69, 4.75, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.2 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445670.1 free,  15134.1 used,  58059.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500665.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580696 194084 R 100.0   0.1   0:17.89 sfincs
+
+top - 01:35:14 up 6 days, 16 min,  0 user,  load average: 3.69, 4.75, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.2 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445670.1 free,  15134.1 used,  58059.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500665.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580696 194084 R 101.0   0.1   0:18.90 sfincs
+
+top - 01:35:15 up 6 days, 16 min,  0 user,  load average: 3.69, 4.75, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.5 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445670.1 free,  15134.1 used,  58059.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500665.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580696 194084 R 100.0   0.1   0:19.90 sfincs
+
+top - 01:35:16 up 6 days, 16 min,  0 user,  load average: 3.69, 4.75, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.7 sy,  0.0 ni, 95.8 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445653.8 free,  15142.5 used,  58067.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500656.7 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580696 194084 R 100.0   0.1   0:20.90 sfincs
+
+top - 01:35:17 up 6 days, 16 min,  0 user,  load average: 3.69, 4.75, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.4 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445653.8 free,  15142.5 used,  58067.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500656.7 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580700 194088 R 100.0   0.1   0:21.91 sfincs
+
+top - 01:35:18 up 6 days, 16 min,  0 user,  load average: 3.72, 4.74, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.4 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445653.8 free,  15142.5 used,  58067.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500656.7 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:22.91 sfincs
+
+top - 01:35:19 up 6 days, 16 min,  0 user,  load average: 3.72, 4.74, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.3 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445525.8 free,  15199.3 used,  58139.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500599.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:23.91 sfincs
+
+top - 01:35:20 up 6 days, 16 min,  0 user,  load average: 3.72, 4.74, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.2 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445525.8 free,  15199.3 used,  58139.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500599.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:24.91 sfincs
+
+top - 01:35:21 up 6 days, 16 min,  0 user,  load average: 3.72, 4.74, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.3 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445525.8 free,  15199.3 used,  58139.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500599.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R  99.0   0.1   0:25.91 sfincs
+
+top - 01:35:22 up 6 days, 16 min,  0 user,  load average: 3.72, 4.74, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.3 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445493.4 free,  15148.2 used,  58222.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500651.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 101.0   0.1   0:26.92 sfincs
+
+top - 01:35:23 up 6 days, 16 min,  0 user,  load average: 3.74, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445493.4 free,  15148.2 used,  58222.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500651.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:27.92 sfincs
+
+top - 01:35:24 up 6 days, 16 min,  0 user,  load average: 3.74, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.3 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445493.4 free,  15148.2 used,  58222.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500651.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:28.92 sfincs
+
+top - 01:35:25 up 6 days, 16 min,  0 user,  load average: 3.74, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.2 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445530.6 free,  15119.4 used,  58214.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500679.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:29.92 sfincs
+
+top - 01:35:26 up 6 days, 16 min,  0 user,  load average: 3.74, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.2 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445530.6 free,  15119.4 used,  58214.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500679.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:30.93 sfincs
+
+top - 01:35:27 up 6 days, 16 min,  0 user,  load average: 3.74, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.2 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445530.6 free,  15119.4 used,  58214.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500679.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:31.93 sfincs
+
+top - 01:35:28 up 6 days, 16 min,  0 user,  load average: 3.76, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.2 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445486.4 free,  15064.4 used,  58313.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500734.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:32.93 sfincs
+
+top - 01:35:29 up 6 days, 16 min,  0 user,  load average: 3.76, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.1 sy,  0.0 ni, 96.8 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445486.4 free,  15064.4 used,  58313.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500734.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:33.93 sfincs
+
+top - 01:35:30 up 6 days, 16 min,  0 user,  load average: 3.76, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.2 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445486.4 free,  15064.4 used,  58313.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500734.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:34.94 sfincs
+
+top - 01:35:31 up 6 days, 16 min,  0 user,  load average: 3.76, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.0 us,  0.2 sy,  0.0 ni, 96.8 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445438.8 free,  15091.0 used,  58334.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500708.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:35.94 sfincs
+
+top - 01:35:32 up 6 days, 16 min,  0 user,  load average: 3.76, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.3 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445438.8 free,  15091.0 used,  58334.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500708.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:36.94 sfincs
+
+top - 01:35:33 up 6 days, 16 min,  0 user,  load average: 3.78, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.3 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445438.8 free,  15091.0 used,  58334.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500708.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:37.94 sfincs
+
+top - 01:35:34 up 6 days, 16 min,  0 user,  load average: 3.78, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.3 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445258.3 free,  15221.1 used,  58384.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500578.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 101.0   0.1   0:38.95 sfincs
+
+top - 01:35:35 up 6 days, 16 min,  0 user,  load average: 3.78, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.5 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445258.3 free,  15221.1 used,  58384.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500578.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R  99.0   0.1   0:39.95 sfincs
+
+top - 01:35:36 up 6 days, 16 min,  0 user,  load average: 3.78, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.2 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445258.3 free,  15221.1 used,  58384.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500578.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:40.95 sfincs
+
+top - 01:35:37 up 6 days, 16 min,  0 user,  load average: 3.78, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.3 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445144.7 free,  15265.4 used,  58454.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500533.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:41.95 sfincs
+
+top - 01:35:38 up 6 days, 16 min,  0 user,  load average: 3.80, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.2 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445144.7 free,  15265.4 used,  58454.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500533.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 101.0   0.1   0:42.96 sfincs
+
+top - 01:35:39 up 6 days, 16 min,  0 user,  load average: 3.80, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.3 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445144.7 free,  15265.4 used,  58454.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500533.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R  99.0   0.1   0:43.96 sfincs
+
+top - 01:35:40 up 6 days, 16 min,  0 user,  load average: 3.80, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.7 us,  0.7 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445161.5 free,  15201.1 used,  58501.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500598.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580928 194316 R 100.0   0.1   0:44.96 sfincs
+
+top - 01:35:41 up 6 days, 16 min,  0 user,  load average: 3.80, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.9 us,  0.6 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445161.5 free,  15201.1 used,  58501.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500598.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:45.96 sfincs
+
+top - 01:35:42 up 6 days, 16 min,  0 user,  load average: 3.80, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.6 us,  0.7 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445161.5 free,  15201.1 used,  58501.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500598.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:46.96 sfincs
+
+top - 01:35:43 up 6 days, 16 min,  0 user,  load average: 3.97, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.8 us,  1.0 sy,  0.0 ni, 96.1 id,  0.2 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445249.3 free,  15054.0 used,  58560.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500745.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:47.97 sfincs
+
+top - 01:35:44 up 6 days, 16 min,  0 user,  load average: 3.97, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.1 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445249.3 free,  15054.0 used,  58560.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500745.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:48.97 sfincs
+
+top - 01:35:45 up 6 days, 16 min,  0 user,  load average: 3.97, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445249.3 free,  15054.0 used,  58560.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500745.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:49.97 sfincs
+
+top - 01:35:46 up 6 days, 16 min,  0 user,  load average: 3.97, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.1 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445223.5 free,  15013.0 used,  58627.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500786.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 101.0   0.1   0:50.98 sfincs
+
+top - 01:35:47 up 6 days, 16 min,  0 user,  load average: 3.97, 4.71, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.3 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445223.5 free,  15013.0 used,  58627.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500786.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R  99.0   0.1   0:51.98 sfincs
+
+top - 01:35:48 up 6 days, 16 min,  0 user,  load average: 3.98, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.7 us,  1.0 sy,  0.0 ni, 96.2 id,  0.1 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445223.5 free,  15013.0 used,  58627.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500786.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:52.98 sfincs
+
+top - 01:35:49 up 6 days, 16 min,  0 user,  load average: 3.98, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.2 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445100.8 free,  15088.7 used,  58688.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500710.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 101.0   0.1   0:53.99 sfincs
+
+top - 01:35:50 up 6 days, 16 min,  0 user,  load average: 3.98, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.2 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445100.8 free,  15088.7 used,  58688.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500710.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:54.99 sfincs
+
+top - 01:35:51 up 6 days, 16 min,  0 user,  load average: 3.98, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.3 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445100.8 free,  15088.7 used,  58688.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500710.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 101.0   0.1   0:56.00 sfincs
+
+top - 01:35:52 up 6 days, 16 min,  0 user,  load average: 3.98, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.0 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445211.2 free,  14942.0 used,  58725.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500857.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R  99.0   0.1   0:57.00 sfincs
+
+top - 01:35:53 up 6 days, 16 min,  0 user,  load average: 3.98, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.1 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445211.2 free,  14942.0 used,  58725.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500857.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:58.00 sfincs
+
+top - 01:35:54 up 6 days, 16 min,  0 user,  load average: 3.98, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.1 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445211.2 free,  14942.0 used,  58725.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500857.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   0:59.00 sfincs
+
+top - 01:35:55 up 6 days, 16 min,  0 user,  load average: 3.98, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.0 us,  0.4 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445537.6 free,  14591.9 used,  58735.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501207.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   1:00.00 sfincs
+
+top - 01:35:56 up 6 days, 16 min,  0 user,  load average: 3.98, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  9.5 us,  0.5 sy,  0.0 ni, 89.9 id,  0.1 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445537.6 free,  14591.9 used,  58735.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501207.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   1:01.01 sfincs
+
+top - 01:35:57 up 6 days, 16 min,  0 user,  load average: 3.98, 4.69, 4.65
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.8 us,  1.2 sy,  0.0 ni, 95.9 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445537.6 free,  14591.9 used,  58735.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501207.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   1:02.01 sfincs
+
+top - 01:35:58 up 6 days, 17 min,  0 user,  load average: 4.06, 4.69, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.9 us,  0.1 sy,  0.0 ni, 96.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444864.3 free,  15216.9 used,  58823.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500582.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   1:03.01 sfincs
+
+top - 01:35:59 up 6 days, 17 min,  0 user,  load average: 4.06, 4.69, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.0 us,  0.1 sy,  0.0 ni, 95.9 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444864.3 free,  15216.9 used,  58823.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500582.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 101.0   0.1   1:04.02 sfincs
+
+top - 01:36:00 up 6 days, 17 min,  0 user,  load average: 4.06, 4.69, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.0 us,  0.2 sy,  0.0 ni, 95.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444864.3 free,  15216.9 used,  58823.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500582.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R 100.0   0.1   1:05.02 sfincs
+
+top - 01:36:01 up 6 days, 17 min,  0 user,  load average: 4.06, 4.69, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.0 us,  0.1 sy,  0.0 ni, 95.9 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444972.9 free,  15077.9 used,  58854.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500721.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580944 194332 R  99.0   0.1   1:06.02 sfincs
+
+top - 01:36:02 up 6 days, 17 min,  0 user,  load average: 4.06, 4.69, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.9 us,  0.1 sy,  0.0 ni, 96.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444972.9 free,  15077.9 used,  58854.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500721.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:07.02 sfincs
+
+top - 01:36:03 up 6 days, 17 min,  0 user,  load average: 4.14, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.0 us,  0.1 sy,  0.0 ni, 95.9 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444972.9 free,  15077.9 used,  58854.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500721.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:08.03 sfincs
+
+top - 01:36:04 up 6 days, 17 min,  0 user,  load average: 4.14, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.0 us,  0.2 sy,  0.0 ni, 95.8 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444948.9 free,  15094.5 used,  58862.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500704.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:09.03 sfincs
+
+top - 01:36:05 up 6 days, 17 min,  0 user,  load average: 4.14, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.2 us,  0.1 sy,  0.0 ni, 95.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444948.9 free,  15094.5 used,  58862.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500704.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:10.03 sfincs
+
+top - 01:36:06 up 6 days, 17 min,  0 user,  load average: 4.14, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.2 us,  0.1 sy,  0.0 ni, 95.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444948.9 free,  15094.5 used,  58862.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500704.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:11.03 sfincs
+
+top - 01:36:07 up 6 days, 17 min,  0 user,  load average: 4.14, 4.70, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.3 us,  0.2 sy,  0.0 ni, 95.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444986.3 free,  15020.1 used,  58898.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500779.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:12.04 sfincs
+
+top - 01:36:08 up 6 days, 17 min,  0 user,  load average: 4.29, 4.72, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  4.0 us,  0.1 sy,  0.0 ni, 95.9 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444986.3 free,  15020.1 used,  58898.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500779.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:13.04 sfincs
+
+top - 01:36:09 up 6 days, 17 min,  0 user,  load average: 4.29, 4.72, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  9.7 us,  0.7 sy,  0.0 ni, 89.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444986.3 free,  15020.1 used,  58898.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500779.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:14.04 sfincs
+
+top - 01:36:11 up 6 days, 17 min,  0 user,  load average: 4.29, 4.72, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.2 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445391.4 free,  14564.3 used,  58908.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501234.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:15.04 sfincs
+
+top - 01:36:12 up 6 days, 17 min,  0 user,  load average: 4.29, 4.72, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445391.4 free,  14564.3 used,  58908.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501234.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:16.05 sfincs
+
+top - 01:36:13 up 6 days, 17 min,  0 user,  load average: 4.29, 4.72, 4.66
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445391.4 free,  14564.3 used,  58908.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501234.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:17.05 sfincs
+
+top - 01:36:14 up 6 days, 17 min,  0 user,  load average: 4.34, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.1 us,  0.5 sy,  0.0 ni, 96.3 id,  0.1 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445300.8 free,  14617.1 used,  58946.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501182.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:18.05 sfincs
+
+top - 01:36:15 up 6 days, 17 min,  0 user,  load average: 4.34, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.9 us,  0.8 sy,  0.0 ni, 96.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445300.8 free,  14617.1 used,  58946.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501182.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:19.05 sfincs
+
+top - 01:36:16 up 6 days, 17 min,  0 user,  load average: 4.34, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445300.8 free,  14617.1 used,  58946.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501182.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:20.05 sfincs
+
+top - 01:36:17 up 6 days, 17 min,  0 user,  load average: 4.34, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445019.8 free,  14842.5 used,  59016.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500956.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:21.06 sfincs
+
+top - 01:36:18 up 6 days, 17 min,  0 user,  load average: 4.34, 4.72, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.3 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445019.8 free,  14842.5 used,  59016.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500956.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:22.06 sfincs
+
+top - 01:36:19 up 6 days, 17 min,  0 user,  load average: 4.40, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.2 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445019.8 free,  14842.5 used,  59016.1 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500956.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:23.06 sfincs
+
+top - 01:36:20 up 6 days, 17 min,  0 user,  load average: 4.40, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445100.0 free,  14758.7 used,  59019.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501040.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:24.06 sfincs
+
+top - 01:36:21 up 6 days, 17 min,  0 user,  load average: 4.40, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.6 us,  0.1 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445100.0 free,  14758.7 used,  59019.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501040.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:25.07 sfincs
+
+top - 01:36:22 up 6 days, 17 min,  0 user,  load average: 4.40, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445100.0 free,  14758.7 used,  59019.6 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501040.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:26.07 sfincs
+
+top - 01:36:23 up 6 days, 17 min,  0 user,  load average: 4.40, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.2 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445131.8 free,  14722.1 used,  59024.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501077.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:27.07 sfincs
+
+top - 01:36:24 up 6 days, 17 min,  0 user,  load average: 4.44, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445131.8 free,  14722.1 used,  59024.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501077.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:28.07 sfincs
+
+top - 01:36:25 up 6 days, 17 min,  0 user,  load average: 4.44, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 10.1 us,  0.4 sy,  0.0 ni, 89.5 id,  0.1 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445131.8 free,  14722.1 used,  59024.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501077.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:29.08 sfincs
+
+top - 01:36:26 up 6 days, 17 min,  0 user,  load average: 4.44, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  1.1 sy,  0.0 ni, 95.3 id,  0.3 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445148.6 free,  14701.3 used,  59014.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501097.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:30.08 sfincs
+
+top - 01:36:27 up 6 days, 17 min,  0 user,  load average: 4.44, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.4 us,  1.3 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445148.6 free,  14701.3 used,  59014.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501097.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:31.08 sfincs
+
+top - 01:36:28 up 6 days, 17 min,  0 user,  load average: 4.44, 4.73, 4.67
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.3 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445148.6 free,  14701.3 used,  59014.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501097.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:32.08 sfincs
+
+top - 01:36:29 up 6 days, 17 min,  0 user,  load average: 4.57, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.3 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444423.3 free,  15409.0 used,  59087.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500390.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:33.08 sfincs
+
+top - 01:36:30 up 6 days, 17 min,  0 user,  load average: 4.57, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.4 sy,  0.0 ni, 96.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444423.3 free,  15409.0 used,  59087.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500390.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:34.09 sfincs
+
+top - 01:36:31 up 6 days, 17 min,  0 user,  load average: 4.57, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444423.3 free,  15409.0 used,  59087.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500390.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:35.09 sfincs
+
+top - 01:36:32 up 6 days, 17 min,  0 user,  load average: 4.57, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444522.8 free,  15306.8 used,  59089.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500492.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:36.09 sfincs
+
+top - 01:36:33 up 6 days, 17 min,  0 user,  load average: 4.57, 4.76, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444522.8 free,  15306.8 used,  59089.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500492.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:37.10 sfincs
+
+top - 01:36:34 up 6 days, 17 min,  0 user,  load average: 4.68, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444522.8 free,  15306.8 used,  59089.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500492.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:38.10 sfincs
+
+top - 01:36:35 up 6 days, 17 min,  0 user,  load average: 4.68, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444536.1 free,  15290.6 used,  59092.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500508.7 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:39.10 sfincs
+
+top - 01:36:36 up 6 days, 17 min,  0 user,  load average: 4.68, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444536.1 free,  15290.6 used,  59092.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500508.7 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:40.10 sfincs
+
+top - 01:36:37 up 6 days, 17 min,  0 user,  load average: 4.68, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444536.1 free,  15290.6 used,  59092.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500508.7 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:41.11 sfincs
+
+top - 01:36:38 up 6 days, 17 min,  0 user,  load average: 4.68, 4.78, 4.68
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.6 us,  0.2 sy,  0.0 ni, 96.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444547.2 free,  15277.1 used,  59095.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500522.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:42.11 sfincs
+
+top - 01:36:39 up 6 days, 17 min,  0 user,  load average: 4.79, 4.80, 4.69
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444547.2 free,  15277.1 used,  59095.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500522.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:43.11 sfincs
+
+top - 01:36:40 up 6 days, 17 min,  0 user,  load average: 4.79, 4.80, 4.69
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444547.2 free,  15277.1 used,  59095.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500522.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:44.12 sfincs
+
+top - 01:36:41 up 6 days, 17 min,  0 user,  load average: 4.79, 4.80, 4.69
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444565.3 free,  15255.9 used,  59098.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500543.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:45.12 sfincs
+
+top - 01:36:42 up 6 days, 17 min,  0 user,  load average: 4.79, 4.80, 4.69
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444565.3 free,  15255.9 used,  59098.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500543.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:46.12 sfincs
+
+top - 01:36:43 up 6 days, 17 min,  0 user,  load average: 4.79, 4.80, 4.69
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444565.3 free,  15255.9 used,  59098.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500543.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:47.12 sfincs
+
+top - 01:36:44 up 6 days, 17 min,  0 user,  load average: 4.89, 4.82, 4.70
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444614.9 free,  15203.8 used,  59100.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500595.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:48.13 sfincs
+
+top - 01:36:45 up 6 days, 17 min,  0 user,  load average: 4.89, 4.82, 4.70
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444614.9 free,  15203.8 used,  59100.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500595.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:49.13 sfincs
+
+top - 01:36:46 up 6 days, 17 min,  0 user,  load average: 4.89, 4.82, 4.70
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444614.9 free,  15203.8 used,  59100.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500595.4 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:50.13 sfincs
+
+top - 01:36:47 up 6 days, 17 min,  0 user,  load average: 4.89, 4.82, 4.70
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.7 us,  0.1 sy,  0.0 ni, 96.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444650.9 free,  15165.0 used,  59103.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500634.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:51.13 sfincs
+
+top - 01:36:48 up 6 days, 17 min,  0 user,  load average: 4.89, 4.82, 4.70
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444650.9 free,  15165.0 used,  59103.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500634.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:52.14 sfincs
+
+top - 01:36:49 up 6 days, 17 min,  0 user,  load average: 4.98, 4.84, 4.71
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444650.9 free,  15165.0 used,  59103.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500634.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:53.14 sfincs
+
+top - 01:36:50 up 6 days, 17 min,  0 user,  load average: 4.98, 4.84, 4.71
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444662.7 free,  15150.7 used,  59106.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500648.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:54.14 sfincs
+
+top - 01:36:51 up 6 days, 17 min,  0 user,  load average: 4.98, 4.84, 4.71
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.2 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444662.7 free,  15150.7 used,  59106.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500648.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:55.15 sfincs
+
+top - 01:36:52 up 6 days, 17 min,  0 user,  load average: 4.98, 4.84, 4.71
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444662.7 free,  15150.7 used,  59106.4 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500648.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   1:56.15 sfincs
+
+top - 01:36:53 up 6 days, 17 min,  0 user,  load average: 4.98, 4.84, 4.71
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444633.6 free,  15177.4 used,  59108.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500621.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:57.15 sfincs
+
+top - 01:36:54 up 6 days, 17 min,  0 user,  load average: 5.14, 4.87, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444633.6 free,  15177.4 used,  59108.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500621.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   1:58.15 sfincs
+
+top - 01:36:55 up 6 days, 17 min,  0 user,  load average: 5.14, 4.87, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.6 us,  0.2 sy,  0.0 ni, 96.1 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444633.6 free,  15177.4 used,  59108.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500621.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   1:59.16 sfincs
+
+top - 01:36:56 up 6 days, 17 min,  0 user,  load average: 5.14, 4.87, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.6 sy,  0.0 ni, 96.1 id,  0.1 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444991.5 free,  14825.1 used,  59061.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500974.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:00.16 sfincs
+
+top - 01:36:57 up 6 days, 17 min,  0 user,  load average: 5.14, 4.87, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  9.8 us,  0.2 sy,  0.0 ni, 90.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444991.5 free,  14825.1 used,  59061.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500974.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   2:01.16 sfincs
+
+top - 01:36:58 up 6 days, 17 min,  0 user,  load average: 5.14, 4.87, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444991.5 free,  14825.1 used,  59061.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500974.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:02.16 sfincs
+
+top - 01:36:59 up 6 days, 18 min,  0 user,  load average: 5.13, 4.88, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444968.5 free,  14845.7 used,  59064.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500953.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 102.0   0.1   2:03.18 sfincs
+
+top - 01:37:00 up 6 days, 18 min,  0 user,  load average: 5.13, 4.88, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.3 sy,  0.0 ni, 96.4 id,  0.1 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444968.5 free,  14845.7 used,  59064.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500953.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:04.18 sfincs
+
+top - 01:37:01 up 6 days, 18 min,  0 user,  load average: 5.13, 4.88, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.8 us,  0.8 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444968.5 free,  14845.7 used,  59064.0 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500953.5 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:05.18 sfincs
+
+top - 01:37:02 up 6 days, 18 min,  0 user,  load average: 5.13, 4.88, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.7 us,  0.3 sy,  0.0 ni, 97.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444641.8 free,  15158.3 used,  59084.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500640.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   2:06.18 sfincs
+
+top - 01:37:03 up 6 days, 18 min,  0 user,  load average: 5.13, 4.88, 4.72
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.5 us,  0.2 sy,  0.0 ni, 97.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444641.8 free,  15158.3 used,  59084.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500640.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   2:07.19 sfincs
+
+top - 01:37:04 up 6 days, 18 min,  0 user,  load average: 5.28, 4.91, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.6 us,  0.2 sy,  0.0 ni, 97.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 444641.8 free,  15158.3 used,  59084.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500640.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:08.19 sfincs
+
+top - 01:37:05 up 6 days, 18 min,  0 user,  load average: 5.28, 4.91, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.5 us,  0.2 sy,  0.0 ni, 97.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445148.8 free,  15098.9 used,  58644.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500700.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:09.19 sfincs
+
+top - 01:37:06 up 6 days, 18 min,  0 user,  load average: 5.28, 4.91, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.4 us,  0.4 sy,  0.0 ni, 97.1 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445148.8 free,  15098.9 used,  58644.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500700.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   2:10.19 sfincs
+
+top - 01:37:07 up 6 days, 18 min,  0 user,  load average: 5.28, 4.91, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.3 us,  0.4 sy,  0.0 ni, 97.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445148.8 free,  15098.9 used,  58644.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500700.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   2:11.20 sfincs
+
+top - 01:37:08 up 6 days, 18 min,  0 user,  load average: 5.28, 4.91, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.5 us,  0.3 sy,  0.0 ni, 97.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 446686.9 free,  13998.1 used,  58189.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501801.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:12.20 sfincs
+
+top - 01:37:09 up 6 days, 18 min,  0 user,  load average: 5.18, 4.90, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.7 us,  0.1 sy,  0.0 ni, 97.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 446686.9 free,  13998.1 used,  58189.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501801.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:13.20 sfincs
+
+top - 01:37:10 up 6 days, 18 min,  0 user,  load average: 5.18, 4.90, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.6 us,  0.1 sy,  0.0 ni, 97.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 446686.9 free,  13998.1 used,  58189.3 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501801.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R  99.0   0.1   2:14.20 sfincs
+
+top - 01:37:11 up 6 days, 18 min,  0 user,  load average: 5.18, 4.90, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.5 us,  0.3 sy,  0.0 ni, 97.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 446645.2 free,  14037.4 used,  58191.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501761.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 101.0   0.1   2:15.21 sfincs
+
+top - 01:37:12 up 6 days, 18 min,  0 user,  load average: 5.18, 4.90, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.4 us,  0.3 sy,  0.0 ni, 97.3 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 446645.2 free,  14037.4 used,  58191.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501761.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:16.21 sfincs
+
+top - 01:37:13 up 6 days, 18 min,  0 user,  load average: 5.18, 4.90, 4.73
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.5 us,  0.4 sy,  0.0 ni, 97.1 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 446645.2 free,  14037.4 used,  58191.8 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501761.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:17.21 sfincs
+
+top - 01:37:14 up 6 days, 18 min,  0 user,  load average: 10.13, 5.93, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  9.0 us,  0.8 sy,  0.0 ni, 90.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445942.4 free,  14750.4 used,  58167.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501048.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:18.22 sfincs
+
+top - 01:37:15 up 6 days, 18 min,  0 user,  load average: 10.13, 5.93, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.8 us,  1.1 sy,  0.0 ni, 95.9 id,  0.2 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445942.4 free,  14750.4 used,  58167.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501048.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:19.22 sfincs
+
+top - 01:37:16 up 6 days, 18 min,  0 user,  load average: 10.13, 5.93, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  2.4 us,  0.4 sy,  0.0 ni, 97.2 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445942.4 free,  14750.4 used,  58167.2 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501048.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:20.22 sfincs
+
+top - 01:37:17 up 6 days, 18 min,  0 user,  load average: 10.13, 5.93, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.0 us,  0.6 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445194.1 free,  15488.3 used,  58218.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500310.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:21.22 sfincs
+
+top - 01:37:18 up 6 days, 18 min,  0 user,  load average: 10.13, 5.93, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.1 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445194.1 free,  15488.3 used,  58218.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500310.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:22.23 sfincs
+
+top - 01:37:19 up 6 days, 18 min,  0 user,  load average: 9.72, 5.91, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.4 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445194.1 free,  15488.3 used,  58218.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500310.9 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:23.23 sfincs
+
+top - 01:37:20 up 6 days, 18 min,  0 user,  load average: 9.72, 5.91, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445754.2 free,  14928.1 used,  58218.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500871.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580948 194336 R 100.0   0.1   2:24.23 sfincs
+
+top - 01:37:21 up 6 days, 18 min,  0 user,  load average: 9.72, 5.91, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.4 us,  0.1 sy,  0.0 ni, 96.5 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445754.2 free,  14928.1 used,  58218.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500871.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580952 194336 R 100.0   0.1   2:25.23 sfincs
+
+top - 01:37:22 up 6 days, 18 min,  0 user,  load average: 9.72, 5.91, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.3 us,  0.1 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445754.2 free,  14928.1 used,  58218.7 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500871.1 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580952 194336 R 101.0   0.1   2:26.24 sfincs
+
+top - 01:37:23 up 6 days, 18 min,  0 user,  load average: 9.72, 5.91, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.2 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445774.8 free,  14888.4 used,  58237.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500910.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580952 194336 R  99.0   0.1   2:27.24 sfincs
+
+top - 01:37:24 up 6 days, 18 min,  0 user,  load average: 9.34, 5.90, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.1 sy,  0.0 ni, 96.7 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445774.8 free,  14888.4 used,  58237.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500910.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580952 194336 R 100.0   0.1   2:28.24 sfincs
+
+top - 01:37:25 up 6 days, 18 min,  0 user,  load average: 9.34, 5.90, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.1 sy,  0.0 ni, 96.8 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445774.8 free,  14888.4 used,  58237.9 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 500910.8 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580952 194336 R 100.0   0.1   2:29.24 sfincs
+
+top - 01:37:26 up 6 days, 18 min,  0 user,  load average: 9.34, 5.90, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.5 us,  0.1 sy,  0.0 ni, 96.4 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445852.1 free,  14772.7 used,  58276.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501026.6 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580952 194336 R 101.0   0.1   2:30.25 sfincs
+
+top - 01:37:27 up 6 days, 18 min,  0 user,  load average: 9.34, 5.90, 5.06
+Tasks:   1 total,   1 running,   0 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  0.2 sy,  0.0 ni, 96.6 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st 
+MiB Mem : 515799.2 total, 445852.1 free,  14772.7 used,  58276.5 buff/cache     
+MiB Swap:   8192.0 total,   8192.0 free,      0.0 used. 501026.6 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+     81 ubuntu    20   0   10.6g 580952 194336 R  99.0   0.1   2:31.25 sfincs
