@@ -75,6 +75,17 @@ CASE_DIR=$REPO_ROOT/tests/cases/$CASE_NAME
 OUT_DIR=$REPO_ROOT/tests/perf/$VARIANT
 RUN_DIR=$OUT_DIR/run
 
+# SOR-69 Phase 5 — canonical-on-device regression guard. The perf
+# harness is the operator-facing entry point that the operator always
+# re-runs whenever the GPU build is exercised, so the guard runs here
+# before each invocation. If a per-step bridge has been (re)introduced
+# in source/src/sfincs_{momentum,continuity,boundaries}_gpu.cuf the
+# guard exits non-zero and the perf run is aborted, preventing the
+# operator from spending an hour on a docker run that would only
+# confirm a known PCIe regression.
+echo "--- canonical-on-device regression guard ---"
+"$REPO_ROOT/scripts/check-no-per-step-bridges.sh"
+
 # Bound simulated time so the bench fits a single implementer cycle.
 # 6 h at the case's dt_avg of ~3 s gives ~7 200 steps, enough wall
 # clock (~30 s) to fill dozens of dmon / top sample rows.

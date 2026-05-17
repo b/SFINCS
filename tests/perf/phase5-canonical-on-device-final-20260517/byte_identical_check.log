@@ -1,0 +1,28 @@
+=== SOR-69 Phase 5 AC #2 — byte-identical check ===
+pre-Phase-1 baseline: /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-69/b-SFINCS/tests/perf/phase5-canonical-on-device-final-20260517/pre_phase1_sfincs_map.nc
+post-Phase-4 result : /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-69/b-SFINCS/tests/perf/phase5-canonical-on-device-final-20260517/post_phase4_sfincs_map.nc
+
+--- size + sha256 ---
+/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-69/b-SFINCS/tests/perf/phase5-canonical-on-device-final-20260517/pre_phase1_sfincs_map.nc  14606948 bytes
+/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-69/b-SFINCS/tests/perf/phase5-canonical-on-device-final-20260517/post_phase4_sfincs_map.nc  14601075 bytes
+a2a008d7407254d8d81a59a9a3b566a5dded80e12983094206e5b448923f51c5  /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-69/b-SFINCS/tests/perf/phase5-canonical-on-device-final-20260517/pre_phase1_sfincs_map.nc
+9de33134add6ac7a926b1ef78c2e5c5b46c09181a19694db1d857abdfca642c6  /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-69/b-SFINCS/tests/perf/phase5-canonical-on-device-final-20260517/post_phase4_sfincs_map.nc
+
+--- cmp byte-by-byte (first 10 diffs) ---
+      29 144 163
+      30 342 313
+      45  66  35
+      46 273 377
+      47 224 367
+      48 346  25
+   18025 201  67
+   18026 210 161
+   18410  54 153
+   18411 116 350
+cmp: NOT byte-identical (AC #2 strict — see ratio check below)
+
+--- ncdump -h diff ---
+ncdump not on PATH; skipping header diff
+
+--- diff_zsmax ratio check (pre as reference, 1e-4 threshold) ---
+RESULT case=phase5-canonical-on-device-final-20260517 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-69/b-SFINCS/tests/perf/phase5-canonical-on-device-final-20260517/pre_phase1_sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-69/b-SFINCS/tests/perf/phase5-canonical-on-device-final-20260517/post_phase4_sfincs_map.nc max_abs_diff=0.0001640915870666504 max_zsmax_ref=0.9975454807281494 ratio=0.00016449534405877235 threshold=0.0001 verdict=FAIL

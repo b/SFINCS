@@ -1,0 +1,24 @@
+name: canonical-on-device-guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  check-no-per-step-bridges:
+    name: Per-step H<->D bridge regression guard
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # SOR-69 Phase 5 — scans source/src/sfincs_{momentum,continuity,
+      # boundaries}_gpu.cuf for `call bridge_in_*` / `call bridge_out_*`
+      # calls and bare `<name>[_h] = <name>[_h]` shadow assignments;
+      # exits non-zero on any line not on the allowlist.
+      # See docs/gpu_canonical_on_device.md for the invariant the guard
+      # enforces; the allowlist is at scripts/per-step-bridge-allowlist.txt.
+      - name: Run canonical-on-device regression guard
+        run: bash scripts/check-no-per-step-bridges.sh
