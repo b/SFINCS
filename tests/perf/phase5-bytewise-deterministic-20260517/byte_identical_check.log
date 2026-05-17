@@ -1,0 +1,25 @@
+=== SOR-79 — bytewise-deterministic byte-identical check ===
+case               : case_regular
+config             : gpu_n1 (nranks=1)
+pre-Phase-1 commit : d1b84c1
+post-Phase-4 commit: 00acf0397aafd2b6491f44bb1cc1b3a58b83ac01
+pre baseline       : /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-79/b-SFINCS/tests/perf/phase5-bytewise-deterministic-20260517/pre_phase1_sfincs_map.nc
+post baseline      : /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-79/b-SFINCS/tests/perf/phase5-bytewise-deterministic-20260517/post_phase4_sfincs_map.nc
+
+--- size + sha256 ---
+/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-79/b-SFINCS/tests/perf/phase5-bytewise-deterministic-20260517/pre_phase1_sfincs_map.nc  160466 bytes
+/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-79/b-SFINCS/tests/perf/phase5-bytewise-deterministic-20260517/post_phase4_sfincs_map.nc  160466 bytes
+49776bcdd000ff6ca184b687b20e2bddd53230e6ec79ee2620ffa05dd20fef60  /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-79/b-SFINCS/tests/perf/phase5-bytewise-deterministic-20260517/pre_phase1_sfincs_map.nc
+11a98e8cca4980d029fc800c06d3264b492ae6f39afe110cc1a80550155b9ee5  /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-79/b-SFINCS/tests/perf/phase5-bytewise-deterministic-20260517/post_phase4_sfincs_map.nc
+
+--- cmp byte-by-byte (first 10 diffs) ---
+ 56714  45  66
+ 56715 252 302
+ 56716 274 213
+cmp: NOT byte-identical (SOR-79 strict gate — see 1e-6 ratio below)
+
+--- ncdump -h diff ---
+ncdump not on PATH; skipping header diff
+
+--- diff_zsmax ratio check (pre as reference, 1e-6 threshold) ---
+RESULT case=phase5-bytewise-deterministic-20260517 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-79/b-SFINCS/tests/perf/phase5-bytewise-deterministic-20260517/pre_phase1_sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-79/b-SFINCS/tests/perf/phase5-bytewise-deterministic-20260517/post_phase4_sfincs_map.nc max_abs_diff=0.0 max_zsmax_ref=1.0435584783554077 ratio=0.0 threshold=1e-06 verdict=PASS
