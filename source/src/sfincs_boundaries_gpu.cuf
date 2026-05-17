@@ -94,6 +94,32 @@ module sfincs_boundaries
    logical, allocatable, save :: bnd_is_local(:)
    logical,              save :: bnd_first_call = .true.
    !
+   ! SOR-67, Phase 3: sliced H2D state for zsb / zsb0. The host fan-out
+   ! in update_boundary_conditions writes zsb_h(ib) / zsb0_h(ib) only at
+   ! kcs==2 boundary points; kcs==5 entries are written on-device by
+   ! k_update_river_zsb each step and kcs in {3,6} entries are never
+   ! mutated after init. The pre-Phase-3 bulk H2D `zsb = zsb_h` therefore
+   ! transferred ngbnd reals per step where only the kcs==2 subset was
+   ! actually fresh on the host (the kcs==5 transfer was stale host data
+   ! that the device kernel immediately overwrote; kcs in {3,6} just
+   ! ferried the unchanged init value back and forth). The post-Phase-3
+   ! H2D is restricted to the kcs==2 boundary index list built once at
+   ! the first call: a small compact host workbuf is filled in-place from
+   ! zsb_h, copied to a device workbuf, then scattered into device zsb /
+   ! zsb0 at the same indices by k_scatter_kcs2_bnd. The slice is the
+   ! whole touched set (each rank sees the same global kcs==2 list because
+   ! the kcs_h mask is replicated globally), so each rank's device zsb /
+   ! zsb0 receives identical kcs==2 entries -- consistent with the
+   ! mpi_bcast of the workbufs above the fan-out loop.
+   !
+   integer, allocatable, save :: kcs2_bnd_idx_h(:)
+   integer, device, allocatable, save :: kcs2_bnd_idx_d(:)
+   real*4,  allocatable, save :: zsb_kcs2_workbuf_h(:)
+   real*4,  allocatable, save :: zsb0_kcs2_workbuf_h(:)
+   real*4,  device, allocatable, save :: zsb_kcs2_workbuf_d(:)
+   real*4,  device, allocatable, save :: zsb0_kcs2_workbuf_d(:)
+   integer,              save :: n_kcs2_bnd_idx = 0
+   !
 contains
 
    subroutine read_boundary_data()
@@ -198,7 +224,7 @@ contains
    real*8 :: t
    real   :: dt
    !
-   integer :: ib, nmb, ierr
+   integer :: ib, nmb, ierr, k
    integer :: blocks, istat
    !
    call nvtx_range_push("bnd_conditions")
@@ -244,7 +270,7 @@ contains
    !$omp end do
    !$omp end parallel
    !
-   ! ----- Bridge zsb / zsb0 H2D (moved here from update_boundary_fluxes) ----
+   ! ----- Bridge zsb / zsb0 H2D, sliced to the kcs==2 boundary points -----
    !
    ! The kcs==2 fan-out just wrote zsb_h / zsb0_h on the host; the kcs==5
    ! kernel below overwrites those entries' kcs==5 slots from the device
@@ -252,9 +278,44 @@ contains
    ! update_boundary_fluxes therefore needs no zsb / zsb0 bridge-IN of
    ! its own (catalog Section C.2 -- the bridge moves with its consumers).
    !
+   ! SOR-67, Phase 3: the H2D is restricted to the kcs==2 index list
+   ! built once in ensure_bnd_workbufs (see kcs2_bnd_idx_h / _d). The
+   ! pre-Phase-3 bulk `zsb = zsb_h` copied ngbnd reals every step where
+   ! only the kcs==2 subset carried fresh host data; the kcs==5 entries
+   ! were stale on the host and got overwritten on-device by the next
+   ! kernel anyway, and kcs in {3,6} entries were re-shipping the
+   ! unchanged init value. The compact pack -> small H2D -> small scatter
+   ! kernel below transfers exactly n_kcs2 reals per side. Each rank sees
+   ! the same global kcs==2 list (kcs_h is replicated globally) and the
+   ! device zsb / zsb0 shadows are also replicated -- so each rank writes
+   ! identical kcs==2 entries on its device, consistent with the
+   ! mpi_bcast above. kcs==2 entries on the host fall through to k=ib
+   ! that bnd_is_local skipped; their workbuf values are whatever the
+   ! mpi_bcast distributed (correct globally) -- the host fan-out's
+   ! per-rank gating preserves the host shadow only for owned cells,
+   ! but the workbuf carries the globally consistent values.
+   !
    call nvtx_range_push("bnd_conditions_copyin")
-   zsb  = zsb_h
-   zsb0 = zsb0_h
+   if (n_kcs2_bnd_idx > 0) then
+      ! Pack host kcs==2 values into the compact workbuf. We read from
+      ! the per-rank-fanned zsb_h for entries this rank owns and from
+      ! the global workbuf otherwise -- the workbuf is the
+      ! mpi_bcast-broadcast rank-0 result and is correct on every rank
+      ! for every kcs==2 entry, so it is the authoritative source for
+      ! the sliced H2D regardless of bnd_is_local.
+      do k = 1, n_kcs2_bnd_idx
+         ib = kcs2_bnd_idx_h(k)
+         zsb_kcs2_workbuf_h (k) = zsb_global_workbuf (ib)
+         zsb0_kcs2_workbuf_h(k) = zsb0_global_workbuf(ib)
+      enddo
+      ! H2D the small workbuf; CUDA Fortran emits a single cudaMemcpy.
+      zsb_kcs2_workbuf_d  = zsb_kcs2_workbuf_h
+      zsb0_kcs2_workbuf_d = zsb0_kcs2_workbuf_h
+      ! Scatter into device zsb / zsb0 at the kcs==2 indices.
+      blocks = (n_kcs2_bnd_idx + TPB - 1) / TPB
+      call k_scatter_kcs2_bnd<<<blocks, TPB>>>(n_kcs2_bnd_idx)
+      istat = cudaDeviceSynchronize()
+   endif
    call nvtx_range_pop()
    !
    ! Neumann (kcs==6) lateral water-level update, on-device. zs is
@@ -329,11 +390,11 @@ contains
    ! partition_and_localize, but local_to_global is sufficient for this
    ! lookup.
    !
-   use sfincs_data, only: nmindbnd_h => nmindbnd, npn_h => np
+   use sfincs_data, only: nmindbnd_h => nmindbnd, npn_h => np, kcs_h => kcs
    !
    implicit none
    !
-   integer :: i, ib
+   integer :: i, ib, k, alloc_n
    integer, allocatable :: global_to_local_cell(:)
    !
    if (.not. bnd_first_call) return
@@ -363,6 +424,41 @@ contains
       !
       deallocate(global_to_local_cell)
       !
+   endif
+   !
+   ! SOR-67, Phase 3: build the kcs==2 boundary-point index list used by
+   ! the sliced H2D of zsb / zsb0 in update_boundary_conditions. The list
+   ! is global -- it indexes 1..ngbnd, matching nmindbnd_h's coverage --
+   ! because kcs_h is the global host mask (replicated on every rank, set
+   ! at startup by initialize_domain). Every rank therefore builds an
+   ! identical index list, mirroring the bulk H2D pattern this replaces
+   ! (which also wrote identical zsb / zsb0 entries to every rank's
+   ! replicated device shadow). The compact workbufs are sized n_kcs2; we
+   ! allocate at least 1 element so CUDA Fortran whole-array assigns are
+   ! valid even on a degenerate (no-kcs==2) case.
+   !
+   n_kcs2_bnd_idx = 0
+   do ib = 1, size(nmindbnd_h)
+      if (kcs_h(nmindbnd_h(ib)) == 2) n_kcs2_bnd_idx = n_kcs2_bnd_idx + 1
+   enddo
+   !
+   alloc_n = max(n_kcs2_bnd_idx, 1)
+   allocate(kcs2_bnd_idx_h     (alloc_n))
+   allocate(kcs2_bnd_idx_d     (alloc_n))
+   allocate(zsb_kcs2_workbuf_h (alloc_n))
+   allocate(zsb0_kcs2_workbuf_h(alloc_n))
+   allocate(zsb_kcs2_workbuf_d (alloc_n))
+   allocate(zsb0_kcs2_workbuf_d(alloc_n))
+   !
+   if (n_kcs2_bnd_idx > 0) then
+      k = 0
+      do ib = 1, size(nmindbnd_h)
+         if (kcs_h(nmindbnd_h(ib)) == 2) then
+            k = k + 1
+            kcs2_bnd_idx_h(k) = ib
+         endif
+      enddo
+      kcs2_bnd_idx_d = kcs2_bnd_idx_h
    endif
    !
    bnd_first_call = .false.
@@ -449,16 +545,22 @@ contains
    ! `bridge_out_edge_real4(uv_h, uv)` here are dropped. The host
    ! aliases are refreshed by the output-cadence flush
    ! (device_to_host_for_output) when output is due; in-loop consumers
-   ! read the device shadow directly. zsb / zsb0 are republished
-   ! (host-mutated by update_boundary_conditions; identity copy here,
-   ! but kept so the host view stays canonical for those boundary-sized
-   ! arrays).
+   ! read the device shadow directly.
+   !
+   ! uvmean / zsb / zsb0 are device-canonical across the per-step loop
+   ! (SOR-67, Phase 3): the former bulk `uvmean_h = uvmean` / `zsb_h =
+   ! zsb` / `zsb0_h = zsb0` D2H copies here are dropped. uvmean has no
+   ! per-step host reader (only the device kernel writes it; the host
+   ! shadow is refreshed at output cadence by device_to_host_for_output
+   ! line 3922 for the binary restart file). zsb / zsb0 are host-mutated
+   ! ONLY at kcs==2 entries in update_boundary_conditions per step (the
+   ! sliced H2D over the kcs==2 index list in update_boundary_conditions
+   ! preserves those host writes; kcs==5 entries are refreshed on-device
+   ! by k_update_river_zsb); zsb / zsb0 are not in any netCDF / restart
+   ! output, so the host shadows are never read at output cadence -- the
+   ! bulk D2H here was pure dead work.
    !
    call nvtx_range_push("bnd_fluxes_copyout")
-   ! uvmean / zsb / zsb0 are boundary-sized (nkcuv2 / ngbnd); keep bulk D2H.
-   uvmean_h = uvmean
-   zsb_h    = zsb
-   zsb0_h   = zsb0
    !
    if (store_maximum_waterlevel_h) then
       !
@@ -481,7 +583,14 @@ contains
          enddo
       endif
       !
-      call bridge_out_cell_real4(zsmax_h, zsmax)
+      ! zsmax is now device-canonical across the per-step loop (SOR-67,
+      ! Phase 3): the former per-step `bridge_out_cell_real4(zsmax_h,
+      ! zsmax)` here is dropped. See compute_water_levels_regular for
+      ! the dtmaxout reset-cycle rationale -- the per-step bridge-IN of
+      ! zsmax was also dropped, and the output-time host reset is
+      ! propagated to the device by reset_max_arrays_device_after_output
+      ! (sfincs_partition.cuf), invoked from the sfincs_lib.F90 USE_CUDA
+      ! branch immediately after write_output.
       !
    endif
    call nvtx_range_pop()
@@ -954,5 +1063,32 @@ contains
       zs(nmb) = real(zsb(indb), kind=8)
       !
    end subroutine k_apply_boundary_zs
+   !
+   ! -------------------------------------------------------------------
+   ! Sliced H2D scatter for the kcs==2 boundary water levels (SOR-67,
+   ! Phase 3). One thread per kcs==2 boundary point k in [1, n_in].
+   ! kcs2_bnd_idx_d carries the global ib values where kcs==2 (built
+   ! once in ensure_bnd_workbufs); zsb_kcs2_workbuf_d / zsb0_kcs2_workbuf_d
+   ! carry the corresponding host-fan-out values for those entries
+   ! (sourced from the mpi_bcast-broadcast global workbufs).
+   ! -------------------------------------------------------------------
+   !
+   attributes(global) subroutine k_scatter_kcs2_bnd(n_in)
+      !
+      implicit none
+      !
+      integer, value :: n_in
+      !
+      integer :: k
+      integer :: ib
+      !
+      k = (blockIdx%x - 1) * blockDim%x + threadIdx%x
+      if (k > n_in) return
+      !
+      ib = kcs2_bnd_idx_d(k)
+      zsb (ib) = zsb_kcs2_workbuf_d (k)
+      zsb0(ib) = zsb0_kcs2_workbuf_d(k)
+      !
+   end subroutine k_scatter_kcs2_bnd
 
 end module

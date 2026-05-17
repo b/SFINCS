@@ -171,18 +171,22 @@ contains
       ! Nonhydrostatic still writes host q on the host path; restoring
       ! that correction on the GPU side is a Phase-4 concern.
       !
-      ! zsmax is retained because the dtmaxout reset cycle in
-      ! sfincs_output.f90:208 writes the host alias to a default value at
-      ! each output interval. The OpenACC build propagates that reset via
-      ! `!$acc update device(zsmax)` at sfincs_output.f90:209, but the
-      ! CUDA Fortran build treats that directive as a no-op. The host
-      ! reset must therefore reach the device here. Same conservative
-      ! rationale as vmax/qmax/twet in compute_store_variables.
+      ! zsmax is now device-canonical across the per-step loop (SOR-67,
+      ! Phase 3): the former per-step `bridge_in_cell_real4(zsmax,
+      ! zsmax_h)` here is dropped. With the per-step bridge-OUT of zsmax
+      ! also dropped (compute_water_levels_regular / _subgrid /
+      ! update_boundary_fluxes -- AC #3), zsmax_h becomes stale between
+      ! output gathers, and a per-step H2D would clobber the fresh
+      ! device running max with stale host data. The output-time reset
+      ! cycle remains correct because the CUDA-aware reset hook
+      ! reset_max_arrays_device_after_output (called from sfincs_lib.F90
+      ! USE_CUDA branch immediately after write_output) zeroes the
+      ! device max arrays directly when the host reset fires; the
+      ! `!$acc update device(zsmax)` in sfincs_output.f90:209 remains
+      ! a no-op in the CUDA Fortran build as before.
       !
       call nvtx_range_push("cont_regular_copyin")
       if (use_qext_h)  call bridge_in_cell_real4(qext, qext_h)
-      !
-      if (store_maximum_waterlevel_h) call bridge_in_cell_real4(zsmax, zsmax_h)
       call nvtx_range_pop()
       !
       call nvtx_range_push("cont_regular_kernel")
@@ -216,10 +220,12 @@ contains
       !
       call nvtx_range_push("cont_regular_copyout")
       !
-      if (snapwave_h) then
-         call bridge_out_cell_real4(zsm_h,    zsm)
-         call bridge_out_cell_real4(maxzsm_h, maxzsm)
-      endif
+      ! zsm / maxzsm are now device-canonical between SnapWave coupling
+      ! steps (SOR-67, Phase 3): the former per-step bridge-outs here
+      ! have moved to update_wave_field (sfincs_snapwave_gpu.cuf), which
+      ! fires at dtwave cadence. zsm_h / maxzsm_h for output are
+      ! refreshed by device_to_host_for_output (sfincs_partition.cuf
+      ! lines 3906 and 3910).
       !
       if (store_maximum_waterlevel_h) then
          !
@@ -249,7 +255,20 @@ contains
             enddo
          endif
          !
-         call bridge_out_cell_real4(zsmax_h, zsmax)
+         ! zsmax is now device-canonical across the per-step loop
+         ! (SOR-67, Phase 3): the former per-step `bridge_out_cell_real4(
+         ! zsmax_h, zsmax)` here is dropped. zsmax_h for output is
+         ! refreshed by device_to_host_for_output (sfincs_partition.cuf
+         ! line 3983) at output cadence. The dtmaxout reset cycle in
+         ! sfincs_output.f90:207-235 still works, but no longer relies on
+         ! a per-step bridge-IN of zsmax (that bridge was also dropped --
+         ! see the copy-IN comment block at the top of this routine for
+         ! why a per-step H2D would clobber the running max). The reset
+         ! is propagated to the device directly by
+         ! reset_max_arrays_device_after_output (sfincs_partition.cuf),
+         ! called from the sfincs_lib.F90 USE_CUDA branch immediately
+         ! after write_output and gated on the same
+         ! `write_max .and. dtmaxout > 0` condition the host reset uses.
          !
       endif
       call nvtx_range_pop()
@@ -327,18 +346,15 @@ contains
       ! Nonhydrostatic still writes host q on the host path; restoring
       ! that correction on the GPU side is a Phase-4 concern.
       !
-      ! zsmax is retained because the dtmaxout reset cycle in
-      ! sfincs_output.f90:208 writes the host alias to a default value at
-      ! each output interval. The OpenACC build propagates that reset via
-      ! `!$acc update device(zsmax)` at sfincs_output.f90:209, but the
-      ! CUDA Fortran build treats that directive as a no-op. The host
-      ! reset must therefore reach the device here. Same conservative
-      ! rationale as vmax/qmax/twet in compute_store_variables.
+      ! zsmax is now device-canonical across the per-step loop (SOR-67,
+      ! Phase 3): the former per-step `bridge_in_cell_real4(zsmax,
+      ! zsmax_h)` here is dropped. See compute_water_levels_regular for
+      ! the full rationale; the output-time reset propagation now goes
+      ! through reset_max_arrays_device_after_output instead of the
+      ! per-step bridge_in.
       !
       call nvtx_range_push("cont_subgrid_copyin")
       if (use_qext_h)  call bridge_in_cell_real4(qext, qext_h)
-      !
-      if (store_maximum_waterlevel_h) call bridge_in_cell_real4(zsmax, zsmax_h)
       call nvtx_range_pop()
       !
       call nvtx_range_push("cont_subgrid_kernel")
@@ -373,19 +389,38 @@ contains
       ! at that block.
       !
       call nvtx_range_push("cont_subgrid_copyout")
-      call bridge_out_cell_real8(z_volume_h, z_volume)
+      !
+      ! z_volume is device-canonical across the per-step loop (SOR-67,
+      ! Phase 3): the former per-step `bridge_out_cell_real8(z_volume_h,
+      ! z_volume)` here is dropped. No per-step host reader of z_volume_h
+      ! exists between calls to k_subgrid_main; the host shadow is
+      ! refreshed at output cadence by device_to_host_for_output
+      ! (sfincs_partition.cuf:3911).
+      !
+      ! zsderv is also device-canonical (SOR-67, Phase 3): the former
+      ! per-step `bridge_out_cell_real4(zsderv_h, zsderv)` here is
+      ! dropped. zsderv has no host consumer in the validation matrix
+      ! (not in netCDF output, not read by any host per-step path); the
+      ! GPU-side reader is k_compute_fluxes which reads the device
+      ! shadow and the cross-rank halo entries are refreshed by
+      ! halo_exchange_zsderv. zs0 host-side mirror is kept (host
+      ! wiggle-suppression reads it on the CPU path; outside Phase 3's
+      ! scope).
       !
       if (wiggle_suppression_h) then
          call bridge_out_cell_real4(zs0_h,    zs0)
-         call bridge_out_cell_real4(zsderv_h, zsderv)
       endif
       !
       if (use_storage_volume_h) call bridge_out_cell_real4(storage_volume_h, storage_volume)
       !
-      if (snapwave_h) then
-         call bridge_out_cell_real4(zsm_h,    zsm)
-         call bridge_out_cell_real4(maxzsm_h, maxzsm)
-      endif
+      ! zsm / maxzsm are now device-canonical between SnapWave coupling
+      ! steps (SOR-67, Phase 3): the former per-step bridge-outs here
+      ! have moved to update_wave_field (sfincs_snapwave_gpu.cuf), which
+      ! fires at dtwave cadence -- one D2H per `dtwave` seconds instead
+      ! of one per simulation step. maxzsm_h for output is refreshed by
+      ! device_to_host_for_output (sfincs_partition.cuf:3906); zsm_h for
+      ! output by device_to_host_for_output (sfincs_partition.cuf:3910);
+      ! both also caught by the snapwave-cadence refresh.
       !
       if (store_maximum_waterlevel_h) then
          !
@@ -410,7 +445,15 @@ contains
             enddo
          endif
          !
-         call bridge_out_cell_real4(zsmax_h, zsmax)
+         ! zsmax is now device-canonical across the per-step loop
+         ! (SOR-67, Phase 3): the former per-step `bridge_out_cell_real4(
+         ! zsmax_h, zsmax)` here is dropped. See the matching block in
+         ! compute_water_levels_regular for the dtmaxout reset-cycle
+         ! rationale -- the per-step bridge-IN of zsmax was also dropped,
+         ! and the output-time host reset is propagated to the device by
+         ! reset_max_arrays_device_after_output (sfincs_partition.cuf),
+         ! invoked from the sfincs_lib.F90 USE_CUDA branch immediately
+         ! after write_output.
          !
       endif
       call nvtx_range_pop()
