@@ -73,6 +73,8 @@ module sfincs_partition
       windu1_h => windu1, windv1_h => windv1, windmax_h => windmax, &
       patm_h => patm, patm0_h => patm0, patm1_h => patm1, patmb_h => patmb, &
       nmindbnd_h => nmindbnd, nmi_gbp_h => nmi_gbp, &
+      index_bdr_gbp_h => index_bdr_gbp, &
+      index_zsi_bdr_h => index_zsi_bdr, dzs_bdr_h => dzs_bdr, &
       prcp_h => prcp, prcp0_h => prcp0, prcp1_h => prcp1, &
       cumprcp_h => cumprcp, netprcp_h => netprcp, qext_h => qext, &
       dxminv_h => dxminv, dxrinv_h => dxrinv, dyrinv_h => dyrinv, &
@@ -1172,6 +1174,25 @@ contains
       if (allocated(nmi_gbp_h)) then
          allocate(nmi_gbp, mold=nmi_gbp_h)
          call renumber_to_local_cell(nmi_gbp, nmi_gbp_h)
+      end if
+      ! Downstream-river (kcs==5) boundary catalogs are allocated
+      ! host-side only when downstream_river_boundaries_in_mask AND a
+      ! bdrfile is present. index_bdr_gbp is ngbnd-sized and its entries
+      ! are bdr-file row indices (1..nbdr), not cell indices — copy
+      ! verbatim. index_zsi_bdr is nbdr-sized and its entries ARE
+      ! kcs==1 internal cell indices, so it goes through
+      ! renumber_to_local_cell. dzs_bdr is a per-row scalar offset.
+      if (allocated(index_bdr_gbp_h)) then
+         allocate(index_bdr_gbp, mold=index_bdr_gbp_h)
+         index_bdr_gbp = index_bdr_gbp_h
+      end if
+      if (allocated(index_zsi_bdr_h)) then
+         allocate(index_zsi_bdr, mold=index_zsi_bdr_h)
+         call renumber_to_local_cell(index_zsi_bdr, index_zsi_bdr_h)
+      end if
+      if (allocated(dzs_bdr_h)) then
+         allocate(dzs_bdr, mold=dzs_bdr_h)
+         dzs_bdr = dzs_bdr_h
       end if
       if (allocated(zsb_h))      then; allocate(zsb,      mold=zsb_h);      zsb      = zsb_h;      end if
       if (allocated(zsb0_h))     then; allocate(zsb0,     mold=zsb0_h);     zsb0     = zsb0_h;     end if
@@ -2884,6 +2905,9 @@ contains
       if (allocated(patmb))   deallocate(patmb)
       if (allocated(nmindbnd)) deallocate(nmindbnd)
       if (allocated(nmi_gbp)) deallocate(nmi_gbp)
+      if (allocated(index_bdr_gbp)) deallocate(index_bdr_gbp)
+      if (allocated(index_zsi_bdr)) deallocate(index_zsi_bdr)
+      if (allocated(dzs_bdr))       deallocate(dzs_bdr)
       if (allocated(prcp))    deallocate(prcp)
       if (allocated(prcp0))   deallocate(prcp0)
       if (allocated(prcp1))   deallocate(prcp1)
