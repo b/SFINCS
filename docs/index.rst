@@ -93,11 +93,12 @@ The SFINCS team also includes Koen van Asselt, Tycho Bovenschen, Ap van Dongeren
    developments
 
 .. toctree::
-   :maxdepth: 3   
+   :maxdepth: 3
    :hidden:
    :caption: Getting started:
-   
-   example   
+
+   example
+   gpu
 
 .. toctree::
    :maxdepth: 3

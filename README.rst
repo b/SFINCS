@@ -26,6 +26,8 @@ Download the latest windows executable here: https://download.deltares.nl/sfincs
 
 Get the Docker of version of SFINCS to run on Mac, Linux or HPC here: https://hub.docker.com/r/deltares/sfincs-cpu
 
+For the GPU build (CUDA Fortran, requires an NVIDIA GPU and the NVIDIA Container Toolkit), see the GPU page in the manual: https://sfincs.readthedocs.io/en/latest/gpu.html
+
 How to cite?
 -------------------------------------------------------
 To reference the software please use the the DOI provided in the SFINCS badge that points to the latest release: |doi|
