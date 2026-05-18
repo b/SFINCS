@@ -23,8 +23,10 @@ in CUDA Fortran. The host shadows of the SFINCS state arrays (``zs``,
 output-cadence flush, the SnapWave coupling step (``dtwave``), and the
 feature-boundary flush/pull bracket around wavemaker / nonhydrostatic /
 BMI host code. This invariant — described in detail in the
-:doc:`gpu_canonical_on_device` reference — eliminates the per-step
-host↔device PCIe traffic that earlier OpenACC GPU builds incurred.
+`gpu_canonical_on_device.md
+<https://github.com/Deltares/SFINCS/blob/main/docs/gpu_canonical_on_device.md>`_
+reference — eliminates the per-step host↔device PCIe traffic that
+earlier OpenACC GPU builds incurred.
 
 SnapWave coupling itself remains host-side; see
 `Current limitations`_ for the rationale and the in-flight
@@ -312,7 +314,9 @@ a device array and its ``_h`` host shadow in those files — are a
 ``scripts/check-no-per-step-bridges.sh``, which
 ``source/build_scripts/build_cuda.sh`` runs before every CUDA build.
 
-If you are modifying GPU code, read :doc:`gpu_canonical_on_device`
+If you are modifying GPU code, read
+`gpu_canonical_on_device.md
+<https://github.com/Deltares/SFINCS/blob/main/docs/gpu_canonical_on_device.md>`_
 for the full invariant, the three sync-point definitions, and the
 allowlist (``scripts/per-step-bridge-allowlist.txt``) for legitimate
 retained per-step bridges. New allowlist entries require a written
