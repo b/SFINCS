@@ -54,3 +54,13 @@ The SnapWave host-side hot path on the same case is characterized in
 `tests/perf/snapwave-characterization-20260517/` (SOR-81), which
 identifies the top SnapWave routines and recommends two non-port
 interventions over a SnapWave-GPU port.
+
+The full CPU-vs-GPU wall-clock matrix across the production case set,
+with pre-fix (`d1b84c1`) vs post-fix (post SOR-65 → SOR-86) numbers
+and a matched-parallelism `cpu_n$(nproc)` baseline (OpenMP rather
+than MPI — the CPU build is OpenMP-only because MPI in
+`source/src/sfincs_lib.F90` is gated on `USE_CUDA`), is at
+[`tests/perf/perf-matrix-20260518/SUMMARY.md`](../tests/perf/perf-matrix-20260518/SUMMARY.md)
+(SOR-87). That file is the canonical post-program-of-work performance
+reference; every speedup ratio there carries its full config-pair
+label per AC.
