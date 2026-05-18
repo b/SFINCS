@@ -1,0 +1,118 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    249500
+Number of active u/v points    :    498001
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+
+---------- Starting simulation -----------
+---- Using 128 of 128 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,   322.7 s remaining ...
+  10% complete,   296.5 s remaining ...
+  15% complete,   265.4 s remaining ...
+  20% complete,   251.3 s remaining ...
+  25% complete,   243.7 s remaining ...
+  30% complete,   284.5 s remaining ...
+  35% complete,   318.3 s remaining ...
+  40% complete,   288.7 s remaining ...
+  45% complete,   253.6 s remaining ...
+  50% complete,   221.6 s remaining ...
+  55% complete,   193.8 s remaining ...
+  60% complete,   170.6 s remaining ...
+  65% complete,   158.1 s remaining ...
+  70% complete,   144.7 s remaining ...
+  75% complete,   119.3 s remaining ...
+  80% complete,    94.1 s remaining ...
+  85% complete,    69.8 s remaining ...
+  90% complete,    45.9 s remaining ...
+  95% complete,    22.6 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :    447.571
+ Total simulation time  :    447.421
+ Time in input          :      0.150
+ Time in boundaries     :      0.512 (  0.1%)
+ Time in momentum       :    342.302 ( 76.5%)
+ Time in continuity     :    104.063 ( 23.3%)
+ Time in output         :      0.546 (  0.1%)
+
+ Average time step (s)  :      2.503
+
+----------- Closing off SFINCS -----------
+1 s remaining ...
+  85% complete,    69.8 s remaining ...
+  90% complete,    45.9 s remaining ...
+  95% complete,    22.6 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :    447.571
+ Total simulation time  :    447.421
+ Time in input          :      0.150
+ Time in boundaries     :      0.512 (  0.1%)
+ Time in momentum       :    342.302 ( 76.5%)
+ Time in continuity     :    104.063 ( 23.3%)
+ Time in output         :      0.546 (  0.1%)
+
+ Average time step (s)  :      2.503
+
+----------- Closing off SFINCS -----------

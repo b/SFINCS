@@ -1,0 +1,124 @@
+
+====================
+== NVIDIA HPC SDK ==
+====================
+ 
+NVIDIA HPC SDK version 25.9
+ 
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+--------------------------------------------------------------------------
+WARNING: Open MPI tried to bind a process but failed.  This is a
+warning only; your job will continue, though performance may
+be degraded.
+
+  Local host:        7c602192660f
+  Application name:  /work/source/install_cuda/bin/sfincs
+  Error message:     failed to bind memory
+  Location:          ../../../../../orte/mca/rtc/hwloc/rtc_hwloc.c:447
+
+--------------------------------------------------------------------------
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,   117.5 s remaining ...
+  10% complete,   110.8 s remaining ...
+  15% complete,   103.9 s remaining ...
+  20% complete,    96.8 s remaining ...
+  25% complete,    89.6 s remaining ...
+  30% complete,    82.8 s remaining ...
+  35% complete,    76.7 s remaining ...
+  40% complete,    71.2 s remaining ...
+  45% complete,    66.4 s remaining ...
+  50% complete,    61.6 s remaining ...
+  55% complete,    56.2 s remaining ...
+  60% complete,    50.3 s remaining ...
+  65% complete,    44.3 s remaining ...
+  70% complete,    38.0 s remaining ...
+  75% complete,    31.6 s remaining ...
+  80% complete,    25.2 s remaining ...
+  85% complete,    18.9 s remaining ...
+  90% complete,    12.6 s remaining ...
+  95% complete,     6.3 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :    126.322
+ Total simulation time  :    126.084
+ Time in input          :      0.238
+ Time in boundaries     :     26.874 ( 21.3%)
+ Time in discharges     :      0.401 (  0.3%)
+ Time in meteo forcing  :      7.240 (  5.7%)
+ Time in infiltration   :     14.535 ( 11.5%)
+ Time in momentum       :     41.089 ( 32.6%)
+ Time in structures     :     17.451 ( 13.8%)
+ Time in continuity     :     17.982 ( 14.3%)
+ Time in output         :      0.290 (  0.2%)
+
+ Average time step (s)  :      3.808
+
+----------- Closing off SFINCS -----------

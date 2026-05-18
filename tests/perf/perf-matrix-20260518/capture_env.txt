@@ -1,0 +1,22 @@
+SOR-87 perf matrix capture environment
+======================================
+host CPU         : AMD EPYC 7C13 64-Core Processor
+physical cores   : 64
+logical CPUs     : 128  (nproc; SMT counts both threads)
+host GPU         : NVIDIA RTX A6000  x2
+container image  : sfincs-build-gpu:latest
+post-fix HEAD    : 24cdbf6 (24cdbf66842bb5b6397af9226b669681b2814a8c)
+pre-fix commit   : d1b84c1 (Phase-0 NVTX-annotated; pre SOR-65 zs-device-canonical)
+pre-fix worktree : /tmp/sfincs-pre-phase1-baseline
+captured-at      : 2026-05-18T09:15:36Z
+
+cpu_n128 mapping rationale
+------------------------------
+SFINCS's CPU build supports OpenMP (-fopenmp) and not MPI; MPI calls
+in source/src/sfincs_lib.F90 are gated on USE_CUDA (only the CUDA
+build links mpifort, per source/configure.ac). The SOR-87 AC reads
+"mpirun -n $(nproc) (or equivalent — count host's available cores
+via nproc/lscpu at run time)"; the equivalent for SFINCS's CPU build
+is OMP_NUM_THREADS=$(nproc). cpu_n128 below means
+OMP_NUM_THREADS=128, single process. The "fair-comparison at full
+parallelism" intent is preserved.

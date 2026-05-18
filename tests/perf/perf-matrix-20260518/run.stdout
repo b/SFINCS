@@ -1,0 +1,75 @@
+=== SOR-87 perf matrix — start 2026-05-18T09:15:36Z ===
+cases: case_prod_regular_tide case_prod_quadtree_subgrid_tide case_prod_riverine case_prod_storm_amuv case_prod_compound_snapwave
+nproc: 128  (cpu_n128)
+
+===== case: case_prod_regular_tide =====
+--- [post] cpu_n128 case_prod_regular_tide ---
+    rc=0 wall=448s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_regular_tide__cpu_n128__post/sfincs.log
+--- [post] gpu_n1 case_prod_regular_tide ---
+    rc=0 wall=10s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_regular_tide__gpu_n1__post/sfincs.log
+--- [post] gpu_n2 case_prod_regular_tide ---
+    rc=0 wall=13s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_regular_tide__gpu_n2__post/sfincs.log
+--- [pre] cpu_n128 case_prod_regular_tide ---
+    rc=0 wall=308s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_regular_tide__cpu_n128__pre/sfincs.log
+--- [pre] gpu_n1 case_prod_regular_tide ---
+    rc=0 wall=198s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_regular_tide__gpu_n1__pre/sfincs.log
+--- [pre] gpu_n2 case_prod_regular_tide ---
+    rc=0 wall=150s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_regular_tide__gpu_n2__pre/sfincs.log
+
+===== case: case_prod_quadtree_subgrid_tide =====
+--- [post] cpu_n128 case_prod_quadtree_subgrid_tide ---
+    rc=0 wall=131s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_quadtree_subgrid_tide__cpu_n128__post/sfincs.log
+--- [post] gpu_n1 case_prod_quadtree_subgrid_tide ---
+    rc=0 wall=10s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_quadtree_subgrid_tide__gpu_n1__post/sfincs.log
+--- [post] gpu_n2 case_prod_quadtree_subgrid_tide ---
+    rc=0 wall=13s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_quadtree_subgrid_tide__gpu_n2__post/sfincs.log
+--- [pre] cpu_n128 case_prod_quadtree_subgrid_tide ---
+    rc=0 wall=210s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_quadtree_subgrid_tide__cpu_n128__pre/sfincs.log
+--- [pre] gpu_n1 case_prod_quadtree_subgrid_tide ---
+    rc=0 wall=83s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_quadtree_subgrid_tide__gpu_n1__pre/sfincs.log
+--- [pre] gpu_n2 case_prod_quadtree_subgrid_tide ---
+    rc=0 wall=64s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_quadtree_subgrid_tide__gpu_n2__pre/sfincs.log
+
+===== case: case_prod_riverine =====
+--- [post] cpu_n128 case_prod_riverine ---
+    rc=0 wall=130s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_riverine__cpu_n128__post/sfincs.log
+--- [post] gpu_n1 case_prod_riverine ---
+    rc=0 wall=38s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_riverine__gpu_n1__post/sfincs.log
+--- [post] gpu_n2 case_prod_riverine ---
+    rc=0 wall=30s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_riverine__gpu_n2__post/sfincs.log
+--- [pre] cpu_n128 case_prod_riverine ---
+    rc=0 wall=91s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_riverine__cpu_n128__pre/sfincs.log
+--- [pre] gpu_n1 case_prod_riverine ---
+    rc=0 wall=128s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_riverine__gpu_n1__pre/sfincs.log
+--- [pre] gpu_n2 case_prod_riverine ---
+    rc=0 wall=83s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_riverine__gpu_n2__pre/sfincs.log
+
+===== case: case_prod_storm_amuv =====
+--- [post] cpu_n128 case_prod_storm_amuv ---
+    rc=0 wall=152s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_storm_amuv__cpu_n128__post/sfincs.log
+--- [post] gpu_n1 case_prod_storm_amuv ---
+    rc=0 wall=70s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_storm_amuv__gpu_n1__post/sfincs.log
+--- [post] gpu_n2 case_prod_storm_amuv ---
+    rc=0 wall=51s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_storm_amuv__gpu_n2__post/sfincs.log
+--- [pre] cpu_n128 case_prod_storm_amuv ---
+    rc=0 wall=76s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_storm_amuv__cpu_n128__pre/sfincs.log
+--- [pre] gpu_n1 case_prod_storm_amuv ---
+    rc=0 wall=184s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_storm_amuv__gpu_n1__pre/sfincs.log
+--- [pre] gpu_n2 case_prod_storm_amuv ---
+    rc=0 wall=127s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_storm_amuv__gpu_n2__pre/sfincs.log
+
+===== case: case_prod_compound_snapwave =====
+--- [post] cpu_n128 case_prod_compound_snapwave ---
+    rc=0 wall=94s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_compound_snapwave__cpu_n128__post/sfincs.log
+--- [post] gpu_n1 case_prod_compound_snapwave ---
+    rc=0 wall=57s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_compound_snapwave__gpu_n1__post/sfincs.log
+--- [post] gpu_n2 case_prod_compound_snapwave ---
+    rc=0 wall=62s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_compound_snapwave__gpu_n2__post/sfincs.log
+--- [pre] cpu_n128 case_prod_compound_snapwave ---
+    rc=0 wall=103s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_compound_snapwave__cpu_n128__pre/sfincs.log
+--- [pre] gpu_n1 case_prod_compound_snapwave ---
+    rc=0 wall=143s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_compound_snapwave__gpu_n1__pre/sfincs.log
+--- [pre] gpu_n2 case_prod_compound_snapwave ---
+    rc=0 wall=117s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-87/b-SFINCS/tests/perf/perf-matrix-20260518/case_prod_compound_snapwave__gpu_n2__pre/sfincs.log
+
+=== SOR-87 perf matrix — complete 2026-05-18T10:11:51Z ===
