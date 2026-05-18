@@ -93,3 +93,44 @@ The wall-clock figures and the underlying physical-justification
 discussion come from the SnapWave host-side characterization in
 ``tests/perf/snapwave-characterization-20260517/SUMMARY.md``, in
 particular the section "``dtwave`` coupling frequency — assessment".
+
+SnapWave directional-grid memoization
+-------------------------------------
+
+On every SnapWave coupling step the boundary update rebuilds a partial
+directional grid (``theta``, ``w``, ``prev``, ``ds`` and the
+direction-only part of ``windspreadfac``) by gathering from the
+precomputed 360-direction tables in
+``make_theta_grid`` (``source/src/snapwave/snapwave_boundaries.f90``).
+That gather is a deterministic function of the central mean wave/wind
+direction, and it enters the computation only through the integer index
+``ind = nint(central_theta/dtheta) - ntheta/2``.
+
+As of SOR-82 (the follow-up to SOR-81's host-side characterization,
+``tests/perf/snapwave-characterization-20260517/SUMMARY.md``, which
+measured ``make_theta_grid`` at ~22 % of SnapWave compute on
+``case_prod_compound_snapwave gpu_n2``), the rebuild is memoized: when
+``ind`` matches the value cached from the previous call the gather is
+skipped, because the persistent module-level arrays already hold the
+correct values. This is the discrete form of the SOR-82 spec's
+``dtheta/2`` recompute threshold — two central directions produce the
+same ``ind`` if and only if their difference is too small to move
+``nint(central_theta/dtheta)`` by one, i.e. less than half a
+``dtheta``-wide theta cell. When wind growth is enabled the wind block
+still runs every call, because ``windspreadfac`` is then re-derived
+from per-node ``u10dir`` and varies independently of the central
+direction; the SnapWave physics and numerical scheme are unchanged.
+
+The cache is invalidated at SnapWave initialisation in
+``initialize_snapwave_domain``
+(``source/src/snapwave/snapwave_domain.f90``) so that the first call
+after model startup or restart always rebuilds and a fresh
+``w``/``prev``/``ds`` allocation can never be paired with a prior run's
+stale grid. The memoization is unconditional behaviour with no
+configuration knob; to disable it for debugging, force the guard in
+``make_theta_grid`` to always rebuild by removing the
+``.not. (theta_grid_valid .and. ind == last_theta_ind)`` condition.
+
+The post-memoization profile, including the before/after top-routine
+table and the wall-clock comparison, is in
+``tests/perf/snapwave-memoize-20260517/SUMMARY.md``.
