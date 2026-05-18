@@ -789,27 +789,46 @@ subroutine make_theta_grid(central_theta)
    ! Determine theta grid and adjust w, prev and ds tables
    !
    ! Definition of directional grid
-   !   
-   ind=nint(central_theta/dtheta)-ntheta/2;
-   do itheta = 1, ntheta
-      i360(itheta)=mod2(itheta+ind,ntheta360)
-   enddo
    !
-   do itheta = 1, ntheta
+   ind=nint(central_theta/dtheta)-ntheta/2;
+   !
+   ! Memoization (SOR-82). The reslicing of theta/w/prev/ds/windspreadfac
+   ! below depends on central_theta only through ind. When ind matches the
+   ! last build, every gathered value is identical and the O(ntheta*no_nodes)
+   ! loop can be skipped — the persistent module-level arrays already hold
+   ! the correct values from the previous call. This is the discrete form of
+   ! the dtheta/2 angular threshold in SOR-82's spec: two central_theta
+   ! values produce the same ind iff |central_theta_new - central_theta_old|
+   ! is small enough that nint(central_theta/dtheta) does not change.
+   ! SOR-81's characterization (tests/perf/snapwave-characterization-
+   ! 20260517/SUMMARY.md) measured this routine at ~22% of SnapWave compute
+   ! on case_prod_compound_snapwave gpu_n2.
+   if (.not. (theta_grid_valid .and. ind == last_theta_ind)) then
       !
-      theta(itheta) = theta360(i360(itheta))
-      !
-      do k = 1, no_nodes
-         w(1, itheta, k)    = w360(1, i360(itheta), k)
-         w(2, itheta, k)    = w360(2, i360(itheta), k)
-         prev(1, itheta, k) = prev360(1, i360(itheta), k)
-         prev(2, itheta, k) = prev360(2, i360(itheta), k)
-         ds(itheta, k)      = ds360(i360(itheta), k)
-         !
-         windspreadfac(itheta, k) = windspread360(i360(itheta), k)
+      do itheta = 1, ntheta
+         i360(itheta)=mod2(itheta+ind,ntheta360)
       enddo
       !
-   enddo  
+      do itheta = 1, ntheta
+         !
+         theta(itheta) = theta360(i360(itheta))
+         !
+         do k = 1, no_nodes
+            w(1, itheta, k)    = w360(1, i360(itheta), k)
+            w(2, itheta, k)    = w360(2, i360(itheta), k)
+            prev(1, itheta, k) = prev360(1, i360(itheta), k)
+            prev(2, itheta, k) = prev360(2, i360(itheta), k)
+            ds(itheta, k)      = ds360(i360(itheta), k)
+            !
+            windspreadfac(itheta, k) = windspread360(i360(itheta), k)
+         enddo
+         !
+      enddo
+      !
+      last_theta_ind   = ind
+      theta_grid_valid = .true.
+      !
+   endif
    !
    if (wind) then
        !
