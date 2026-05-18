@@ -206,12 +206,7 @@ contains
    WsorA  = 0.0
    SwE    = 0.0
    SwA    = 0.0
-   windspreadfac = 0.0
-   !
-   ! make_theta_grid memoization (SOR-82): invalidate cache on fresh init so
-   ! the first call always rebuilds, and any prior run's leftover state
-   ! cannot be reused against a fresh w/prev/ds allocation.
-   theta_grid_valid = .false.
+   windspreadfac = 0.0   
    !
    generate_upw = .true.
    exists = .true.

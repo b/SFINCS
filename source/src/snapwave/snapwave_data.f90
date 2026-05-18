@@ -36,8 +36,6 @@ module snapwave_data
    real*4,  dimension(:),       allocatable    :: dist                    ! relative distribution of energy over theta bins
    real*4,  dimension(:),       allocatable    :: theta360                ! wave angles,sine and cosine of wave angles
    integer, dimension(:),       allocatable    :: i360                    ! reference between partial thea grid and full 360 deg theta grid
-   integer                                     :: last_theta_ind          ! make_theta_grid memoization (SOR-82): last value of ind = nint(central_theta/dtheta) - ntheta/2
-   logical                                     :: theta_grid_valid = .false. ! make_theta_grid memoization (SOR-82): false until first build; set false on init to invalidate any prior run's state
    real*4,  dimension(:,:),     allocatable    :: windspread360           ! wind input distribution array full 360 deg theta grid
    real*4,  dimension(:,:),     allocatable    :: windspreadfac           ! wind input distribution array   
    integer, dimension(:,:,:),   allocatable    :: prev                    ! two upwind grid points per grid point and wave direction
