@@ -202,7 +202,7 @@ working directory (the wrapper sets the container ``WORKDIR`` to
 ``tests/run_validation.sh`` for the pattern).
 
 Worked example: ``case_prod_regular_tide`` at ``gpu_n2``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ``tests/cases/case_prod_regular_tide`` is a 500×500 regular-grid
 case with 50 m cells, ``tstop = 86400`` s (24 simulated hours),
