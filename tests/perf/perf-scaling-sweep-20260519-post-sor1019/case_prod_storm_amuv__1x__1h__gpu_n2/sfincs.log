@@ -1,0 +1,133 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Reading input file ...
+Warning : no EPSG code defined
+Info    : input grid interpreted as projected coordinates
+Info    : turning off Coriolis
+Info    : no Coriolis, as latitude is not specified in sfincs.inp
+Info    : running SFINCS with regular bathymetry
+Info    : storing maximum depth in subgrid cell for hmax output
+Info    : turning on advection
+Info    : advection scheme : first-order upwind
+Reading meteo data ...
+Info    : reading amu and amv file
+Info    : reading prcp file sfincs.prcp
+Preparing domain ...
+Info    : using regular mesh
+Info    : turning on wind
+Info    : turning on precipitation
+Info    : using gridded meteo data
+Info : reading ASCII input ...
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+Reading dep file : sfincs.dep
+Info    : turning on process infiltration (via Green-Ampt)
+Info    : reading psi file sfincs.psi
+Info    : reading sigma file sfincs.sigma
+Info    : reading ks file sfincs.ks
+Info    : reading water level boundaries
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : yes
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+Initializing output ...
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,     2.4 s remaining ...
+  10% complete,     2.0 s remaining ...
+  15% complete,     1.8 s remaining ...
+  20% complete,     1.6 s remaining ...
+  25% complete,     1.5 s remaining ...
+  30% complete,     1.4 s remaining ...
+  35% complete,     1.3 s remaining ...
+  40% complete,     1.2 s remaining ...
+  45% complete,     1.1 s remaining ...
+  50% complete,     1.0 s remaining ...
+  55% complete,     0.9 s remaining ...
+  60% complete,     0.8 s remaining ...
+  65% complete,     0.7 s remaining ...
+  70% complete,     0.6 s remaining ...
+  75% complete,     0.5 s remaining ...
+  80% complete,     0.4 s remaining ...
+  85% complete,     0.3 s remaining ...
+  90% complete,     0.2 s remaining ...
+  95% complete,     0.1 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :      2.284
+ Total simulation time  :      1.927
+ Time in input          :      0.356
+ Time in boundaries     :      0.063 (  3.3%)
+ Time in meteo fields   :      0.000 (  0.0%)
+ Time in meteo forcing  :      0.742 ( 38.5%)
+ Time in infiltration   :      0.850 ( 44.1%)
+ Time in momentum       :      0.100 (  5.2%)
+ Time in continuity     :      0.018 (  0.9%)
+ Time in output         :      0.000 (  0.0%)
+
+ Average time step (s)  :      2.779
+
+----------- Closing off SFINCS -----------
+ 1.0%)
+ Time in output         :      0.023 (  1.2%)
+
+ Average time step (s)  :      2.779
+
+----------- Closing off SFINCS -----------

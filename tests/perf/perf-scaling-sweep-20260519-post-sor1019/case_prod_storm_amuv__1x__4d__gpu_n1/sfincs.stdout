@@ -1,0 +1,126 @@
+
+====================
+== NVIDIA HPC SDK ==
+====================
+ 
+NVIDIA HPC SDK version 25.9
+ 
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+--------------------------------------------------------------------------
+WARNING: Open MPI tried to bind a process but failed.  This is a
+warning only; your job will continue, though performance may
+be degraded.
+
+  Local host:        cfbcd6e40dea
+  Application name:  /work/source/install_cuda/bin/sfincs
+  Error message:     failed to bind memory
+  Location:          ../../../../../orte/mca/rtc/hwloc/rtc_hwloc.c:447
+
+--------------------------------------------------------------------------
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Warning! Times in spatially-varying wind input file do not cover entire simulation period! Using nearest available data.
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+Warning! Times in boundary conditions file do not cover entire simulation period !
+Warning! Adjusting last time in boundary conditions time series !
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : yes
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,   260.0 s remaining ...
+  10% complete,   242.9 s remaining ...
+  15% complete,   230.2 s remaining ...
+  20% complete,   217.9 s remaining ...
+  25% complete,   202.0 s remaining ...
+  30% complete,   187.5 s remaining ...
+  35% complete,   173.5 s remaining ...
+  40% complete,   159.7 s remaining ...
+  45% complete,   146.2 s remaining ...
+  50% complete,   132.7 s remaining ...
+  55% complete,   119.4 s remaining ...
+  60% complete,   106.0 s remaining ...
+  65% complete,    92.7 s remaining ...
+  70% complete,    79.5 s remaining ...
+  75% complete,    66.3 s remaining ...
+  80% complete,    53.0 s remaining ...
+  85% complete,    39.8 s remaining ...
+  90% complete,    26.5 s remaining ...
+  95% complete,    13.3 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :    265.739
+ Total simulation time  :    265.489
+ Time in input          :      0.250
+ Time in boundaries     :      5.252 (  2.0%)
+ Time in meteo fields   :      0.008 (  0.0%)
+ Time in meteo forcing  :    111.393 ( 42.0%)
+ Time in infiltration   :    128.435 ( 48.4%)
+ Time in momentum       :     15.154 (  5.7%)
+ Time in continuity     :      2.621 (  1.0%)
+ Time in output         :      1.770 (  0.7%)
+
+ Average time step (s)  :      2.867
+
+----------- Closing off SFINCS -----------

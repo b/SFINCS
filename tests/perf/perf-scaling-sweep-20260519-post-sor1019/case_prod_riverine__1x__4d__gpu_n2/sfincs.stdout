@@ -1,0 +1,247 @@
+
+====================
+== NVIDIA HPC SDK ==
+====================
+ 
+NVIDIA HPC SDK version 25.9
+ 
+Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
+
+--------------------------------------------------------------------------
+WARNING: Open MPI tried to bind a process but failed.  This is a
+warning only; your job will continue, though performance may
+be degraded.
+
+  Local host:        30fc169d1749
+  Application name:  /work/source/install_cuda/bin/sfincs
+  Error message:     failed to bind memory
+  Location:          ../../../../../orte/mca/rtc/hwloc/rtc_hwloc.c:447
+
+--------------------------------------------------------------------------
+[LOG_CAT_ML] You must specify a valid HCA device by setting:
+-x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
+If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
+In case of unfounded HCA device please contact your system administrator.
+[30fc169d1749:00074] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+[LOG_CAT_ML] You must specify a valid HCA device by setting:
+-x HCOLL_MAIN_IB=<dev_name:port> or -x UCX_NET_DEVICES=<dev_name:port>.
+If no device was specified for HCOLL (or the calling library), automatic device detection will be run.
+In case of unfounded HCA device please contact your system administrator.
+[30fc169d1749:00075] Error: ../../../../../ompi/mca/coll/hcoll/coll_hcoll_module.c:310 - mca_coll_hcoll_comm_query() Hcol library init failed
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+------ Preparing model simulation --------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+Warning! Times in boundary conditions file do not cover entire simulation period !
+Warning! Adjusting last time in boundary conditions time series !
+Warning! Times in discharge file do not cover entire simulation period !
+Warning! Adjusting last time in discharge time series !
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+Warning! Times in boundary conditions file do not cover entire simulation period !
+Warning! Adjusting last time in boundary conditions time series !
+Warning! Times in discharge file do not cover entire simulation period !
+Warning! Adjusting last time in discharge time series !
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   0% complete,       - s remaining ...
+[30fc169d1749:00070] 1 more process has sent help message help-orte-odls-default.txt / memory not bound
+[30fc169d1749:00070] Set MCA parameter "orte_base_help_aggregate" to 0 to see all help / error messages
+   5% complete,    93.9 s remaining ...
+   5% complete,    94.5 s remaining ...
+  10% complete,    87.3 s remaining ...
+  10% complete,    87.0 s remaining ...
+  15% complete,    83.8 s remaining ...
+  15% complete,    84.0 s remaining ...
+  20% complete,    78.0 s remaining ...
+  20% complete,    78.1 s remaining ...
+  25% complete,    73.4 s remaining ...
+  25% complete,    73.4 s remaining ...
+  30% complete,    69.3 s remaining ...
+  30% complete,    69.3 s remaining ...
+  35% complete,    64.9 s remaining ...
+  35% complete,    64.8 s remaining ...
+  40% complete,    60.2 s remaining ...
+  40% complete,    60.2 s remaining ...
+  45% complete,    55.4 s remaining ...
+  45% complete,    55.4 s remaining ...
+  50% complete,    50.6 s remaining ...
+  50% complete,    50.5 s remaining ...
+  55% complete,    45.6 s remaining ...
+  55% complete,    45.7 s remaining ...
+  60% complete,    40.7 s remaining ...
+  60% complete,    40.7 s remaining ...
+  65% complete,    35.6 s remaining ...
+  65% complete,    35.7 s remaining ...
+  70% complete,    30.6 s remaining ...
+  70% complete,    30.6 s remaining ...
+  75% complete,    25.6 s remaining ...
+  75% complete,    25.5 s remaining ...
+  80% complete,    20.5 s remaining ...
+  80% complete,    20.5 s remaining ...
+  85% complete,    15.4 s remaining ...
+  85% complete,    15.4 s remaining ...
+  90% complete,    10.3 s remaining ...
+  90% complete,    10.3 s remaining ...
+  95% complete,     5.1 s remaining ...
+  95% complete,     5.1 s remaining ...
+ 100% complete,     0.0 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :    103.107
+ Total simulation time  :    102.743
+ Time in input          :      0.364
+ Time in boundaries     :      5.048 (  4.9%)
+
+---------- Simulation finished -----------
+
+ Total time             :    103.128
+ Total simulation time  :    102.764
+ Time in discharges     :      1.504 (  1.5%)
+ Time in meteo forcing  :     18.609 ( 18.1%)
+ Time in infiltration   :     27.465 ( 26.7%)
+ Time in momentum       :      8.017 (  7.8%)
+ Time in structures     :     32.347 ( 31.5%)
+ Time in continuity     :      2.126 (  2.1%)
+ Time in output         :      1.108 (  1.1%)
+
+ Average time step (s)  :      3.620
+
+----------- Closing off SFINCS -----------
+ Time in input          :      0.363
+ Time in boundaries     :      4.479 (  4.4%)
+ Time in discharges     :      1.483 (  1.4%)
+ Time in meteo forcing  :     18.559 ( 18.1%)
+ Time in infiltration   :     27.420 ( 26.7%)
+ Time in momentum       :      5.344 (  5.2%)
+ Time in structures     :     32.546 ( 31.7%)
+ Time in continuity     :      2.071 (  2.0%)
+ Time in output         :      0.000 (  0.0%)
+
+ Average time step (s)  :      3.620
+
+----------- Closing off SFINCS -----------
