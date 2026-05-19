@@ -1,0 +1,102 @@
+=== SOR-1019 baseline (pre-fix) — start 2026-05-19T10:44:20Z ===
+HEAD: 283dadc (gpu: coalesce per-step q+uv halo exchange into one MPI exchange (SOR-1018) (#127))
+--- [gpu_n2] case_prod_regular_tide 1h ---
+    rc=0 wall=2s
+    simulation 0.446
+    boundaries 0.084
+    momentum 0.152
+    continuity 0.028
+    snapwave 
+    meteo 
+    output 0.033
+    avg_dt 2.367
+    sum_named 0.297
+    unaccounted 0.149
+    step_count 1521
+    per_step_ms 0.0980
+--- [gpu_n2] case_prod_regular_tide 6h ---
+    rc=0 wall=5s
+    simulation 2.352
+    boundaries 0.453
+    momentum 0.832
+    continuity 0.154
+    snapwave 
+    meteo 
+    output 0.141
+    avg_dt 2.495
+    sum_named 1.580
+    unaccounted 0.772
+    step_count 8658
+    per_step_ms 0.0892
+--- [gpu_n2] case_prod_regular_tide 24h ---
+    rc=0 wall=11s
+    simulation 9.128
+    boundaries 1.748
+    momentum 3.213
+    continuity 0.601
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.503
+    sum_named 5.562
+    unaccounted 3.566
+    step_count 34519
+    per_step_ms 0.1033
+--- [gpu_n2] case_prod_regular_tide 4d ---
+    rc=0 wall=40s
+    simulation 37.681
+    boundaries 7.261
+    momentum 13.590
+    continuity 2.502
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.407
+    sum_named 23.353
+    unaccounted 14.328
+    step_count 143582
+    per_step_ms 0.0998
+--- [gpu_n1] case_prod_regular_tide 24h ---
+    rc=0 wall=9s
+    simulation 7.599
+    boundaries 1.479
+    momentum 4.430
+    continuity 1.017
+    snapwave 
+    meteo 
+    output 0.471
+    avg_dt 2.503
+    sum_named 7.397
+    unaccounted 0.202
+    step_count 34519
+    per_step_ms 0.0059
+--- [gpu_n2] case_prod_quadtree_subgrid_tide 24h ---
+    rc=0 wall=12s
+    simulation 9.655
+    boundaries 1.196
+    momentum 2.072
+    continuity 2.581
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 3.089
+    sum_named 5.849
+    unaccounted 3.806
+    step_count 27971
+    per_step_ms 0.1361
+--- [gpu_n2] case_prod_quadtree_subgrid_tide 4d ---
+    rc=0 wall=40s
+    simulation 37.957
+    boundaries 4.772
+    momentum 8.230
+    continuity 10.035
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 3.155
+    sum_named 23.037
+    unaccounted 14.920
+    step_count 109541
+    per_step_ms 0.1362
+
+=== SOR-1019 baseline (pre-fix) — complete 2026-05-19T10:46:19Z ===

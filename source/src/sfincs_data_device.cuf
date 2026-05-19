@@ -326,7 +326,7 @@ module sfincs_data_device
    !
    ! Per-neighbor-rank halo descriptors populated by build_halo_descriptors
    ! in sfincs_partition.cuf. SOR-708 consumes these in the MPI Isend/Irecv
-   ! halo_exchange_zs and halo_exchange_q_uv bodies; SOR-709 wires the
+   ! halo_exchange_cells and halo_exchange_q_uv bodies; SOR-709 wires the
    ! call sites in sfincs_lib.F90. The leading dimension of the 2D index
    ! arrays is the maximum count across neighbors; the trailing dimension
    ! is halo_n_neighbors. Per-neighbor counts in halo_*_count are the
@@ -364,7 +364,7 @@ module sfincs_data_device
    ! has populated host counterparts -- can renumber the connectivity entries
    ! they ship to device through the maps. halo_recv_remote_idx still carries
    ! global indices on the receive side so the recv-translate step in
-   ! halo_exchange_zs / halo_exchange_q_uv keeps that source-of-truth.
+   ! halo_exchange_cells / halo_exchange_q_uv keeps that source-of-truth.
    !
    integer, allocatable :: local_to_global(:)
    integer, allocatable :: local_to_global_uv(:)
@@ -384,20 +384,26 @@ module sfincs_data_device
    ! Isend/Irecv consume them as device pointers, and the scatter kernel
    ! reads from them.
    !
-   ! Two precisions are carried on the cell-halo buffers, one per payload
-   ! class:
-   !
-   !   * The real*4 pair (halo_send_buf_zs / halo_recv_buf_zs) is used by
-   !     halo_exchange_zsderv, whose payload (zsderv) is itself real*4 on
-   !     both host and device and therefore carries no precision step on
-   !     the wire.
-   !
-   !   * The real*8 pair (halo_send_buf_zs_r8 / halo_recv_buf_zs_r8) is used
-   !     by halo_exchange_zs (zs is real*8) and halo_exchange_z_volume
-   !     (z_volume is real*8), where a real*4 wire format would quantize
-   !     the value every step on every halo cell and bias subgrid wet/dry
-   !     transitions. Paired with MPI_DOUBLE_PRECISION on the wire so the
-   !     halo cells receive the owning rank's full real*8 value.
+   ! Cell payload: one combined real*8 buffer pair
+   ! (halo_send_buf_cells / halo_recv_buf_cells) carries the
+   ! post-continuity cell halo arrays — zs (real*8, always), zsderv
+   ! (real*4, when wiggle suppression is built in) and z_volume
+   ! (real*8, when the case is subgrid) — coalesced by SOR-1019 into
+   ! a single per-neighbor exchange. Each neighbor's column packs the
+   ! participating arrays in contiguous bands: zs in rows [1..n], then
+   ! zsderv in rows [n+1..2n] (if allocated), then z_volume in rows
+   ! [2n+1..3n] (if allocated). zsderv is upcast to real*8 in the
+   ! gather kernel and downcast back to real*4 in the scatter kernel
+   ! so the buffer is type-uniform and the MPI message carries one
+   ! MPI_DOUBLE_PRECISION payload per neighbor; the r4 → r8 → r4
+   ! round-trip is bit-exact (r4 ⊂ r8 in IEEE 754) so the scattered
+   ! halo values, and therefore sfincs_map.nc, are unchanged from the
+   ! pre-fix three-separate-exchanges path. The buffer's leading
+   ! dimension is n_cell_bands * max(halo_*_count) where
+   ! n_cell_bands ∈ {1, 2, 3} depending on which arrays are allocated
+   ! at partition_and_localize time. The real*8 wire format also
+   ! avoids any per-step quantization on subgrid wet/dry transitions
+   ! that an r4 wire format would introduce on the z_volume band.
    !
    ! The q / uv edge exchange uses one combined real*4 buffer pair
    ! (halo_send_buf_quv / halo_recv_buf_quv) below. q and uv are real*4
@@ -408,10 +414,11 @@ module sfincs_data_device
    ! uv in rows [count+1..2*count], so the leading dimension here is
    ! 2*max(halo_uv_*_count) instead of max(halo_uv_*_count).
    !
-   real, device, allocatable :: halo_send_buf_zs(:,:)
-   real, device, allocatable :: halo_recv_buf_zs(:,:)
-   real*8, device, allocatable :: halo_send_buf_zs_r8(:,:)
-   real*8, device, allocatable :: halo_recv_buf_zs_r8(:,:)
+   real*8, device, allocatable :: halo_send_buf_cells(:,:)
+   real*8, device, allocatable :: halo_recv_buf_cells(:,:)
+   integer :: halo_cells_n_bands
+   integer :: halo_cells_band_zsderv
+   integer :: halo_cells_band_z_volume
    real, device, allocatable :: halo_send_buf_quv(:,:)
    real, device, allocatable :: halo_recv_buf_quv(:,:)
    !

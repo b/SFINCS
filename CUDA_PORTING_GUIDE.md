@@ -14,8 +14,8 @@ The CUDA build supports `mpirun -n N` partitioning of the quadtree mesh.
 copies catalog arrays to the device in local-indexed form, Phase 5 (the
 `build_halo_descriptors` routine in `source/src/sfincs_partition.cuf`)
 constructs the per-neighbor edge and cell send/recv lists consumed at
-runtime by `halo_exchange_zs`, `halo_exchange_q_uv`, and
-`halo_exchange_zsderv`.
+runtime by `halo_exchange_cells` (coalesced zs + zsderv + z_volume)
+and `halo_exchange_q_uv` (coalesced q + uv).
 
 ### Invariant 1 — per-element symmetry of edge send/recv lists
 
@@ -146,7 +146,7 @@ rank sees the same view of child edges.
 | `source/src/sfincs_partition.cuf` | Partition + halo descriptors + halo exchange bodies + diagnostic helpers. `build_halo_descriptors`, `verify_halo_descriptor_symmetry`, `bridge_out_edge_tail_real4` are here. |
 | `source/src/sfincs_data_device.cuf` | Device-side catalog: `q`, `uv`, `halo_uv_*_local_idx`, `halo_uv_*_remote_idx`. |
 | `source/src/sfincs_momentum_gpu.cuf` | `compute_fluxes` (without the combined-UV call), `k_compute_fluxes`, `k_combined_uv`, `compute_combined_uv` (the post-halo-exchange wrapper). |
-| `source/src/sfincs_lib.F90` | Call sites for `halo_exchange_q_uv` / `halo_exchange_zs` / `halo_exchange_zsderv` / `compute_combined_uv` inside the time loop (`#ifdef USE_CUDA`). |
+| `source/src/sfincs_lib.F90` | Call sites for `halo_exchange_q_uv` / `halo_exchange_cells` / `compute_combined_uv` inside the time loop (`#ifdef USE_CUDA`). |
 
 ## Other debug env-vars
 
