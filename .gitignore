@@ -1,3 +1,6 @@
+# Sorcerer coordinator state (per-checkout, not shared).
+/.sorcerer/
+
 /source/sfincs/x64/Release/sfincs.obj
 /source/.vs
 /source/sfincs/*.u2d
