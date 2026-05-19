@@ -1,0 +1,109 @@
+=== SOR-1019 verify — start 2026-05-19T10:49:23Z ===
+--- [gpu_n2] case_prod_regular_tide 1h ---
+    rc=0 wall=3s
+    simulation 0.397
+    boundaries 0.079
+    momentum 0.144
+    continuity 0.027
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.367
+    sum_named 0.250
+    unaccounted 0.147
+    step_count 1521
+    per_step_ms 0.0966
+--- [gpu_n2] case_prod_regular_tide 6h ---
+    rc=0 wall=4s
+    simulation 2.160
+    boundaries 0.435
+    momentum 0.815
+    continuity 0.150
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.495
+    sum_named 1.400
+    unaccounted 0.760
+    step_count 8658
+    per_step_ms 0.0878
+--- [gpu_n2] case_prod_regular_tide 24h ---
+    rc=0 wall=11s
+    simulation 8.348
+    boundaries 1.732
+    momentum 3.190
+    continuity 0.596
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.503
+    sum_named 5.518
+    unaccounted 2.830
+    step_count 34519
+    per_step_ms 0.0820
+--- [gpu_n2] case_prod_regular_tide 4d ---
+    rc=0 wall=36s
+    simulation 34.525
+    boundaries 7.274
+    momentum 13.635
+    continuity 2.500
+    snapwave 
+    meteo 
+    output 1.829
+    avg_dt 2.407
+    sum_named 25.238
+    unaccounted 9.287
+    step_count 143582
+    per_step_ms 0.0647
+--- [gpu_n1] case_prod_regular_tide 24h ---
+    rc=0 wall=10s
+    simulation 7.651
+    boundaries 1.492
+    momentum 4.452
+    continuity 1.015
+    snapwave 
+    meteo 
+    output 0.490
+    avg_dt 2.503
+    sum_named 7.449
+    unaccounted 0.202
+    step_count 34519
+    per_step_ms 0.0059
+--- [gpu_n2] case_prod_quadtree_subgrid_tide 24h ---
+    rc=0 wall=10s
+    simulation 8.588
+    boundaries 1.210
+    momentum 2.090
+    continuity 2.561
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 3.089
+    sum_named 5.861
+    unaccounted 2.727
+    step_count 27971
+    per_step_ms 0.0975
+--- [gpu_n2] case_prod_quadtree_subgrid_tide 4d ---
+    rc=0 wall=36s
+    simulation 33.353
+    boundaries 5.522
+    momentum 9.421
+    continuity 9.835
+    snapwave 
+    meteo 
+    output 0.399
+    avg_dt 3.155
+    sum_named 25.177
+    unaccounted 8.176
+    step_count 109541
+    per_step_ms 0.0746
+
+=== bit-exactness ===
+[post-fix vs pre-fix] case_prod_regular_tide__24h__gpu_n2/sfincs_map.nc
+RESULT case=case_prod_regular_tide__24h__gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1019/b-SFINCS/tests/perf/halo-exchange-cells-coalesce-20260519/prefix/case_prod_regular_tide__24h__gpu_n2/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1019/b-SFINCS/tests/perf/halo-exchange-cells-coalesce-20260519/postfix/case_prod_regular_tide__24h__gpu_n2/sfincs_map.nc max_abs_diff=0.0 max_zsmax_ref=2.0601131916046143 ratio=0.0 threshold=1e-06 verdict=PASS
+[post-fix vs pre-fix] case_prod_quadtree_subgrid_tide__24h__gpu_n2/sfincs_map.nc
+RESULT case=case_prod_quadtree_subgrid_tide__24h__gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1019/b-SFINCS/tests/perf/halo-exchange-cells-coalesce-20260519/prefix/case_prod_quadtree_subgrid_tide__24h__gpu_n2/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1019/b-SFINCS/tests/perf/halo-exchange-cells-coalesce-20260519/postfix/case_prod_quadtree_subgrid_tide__24h__gpu_n2/sfincs_map.nc max_abs_diff=0.0 max_zsmax_ref=0.9857842326164246 ratio=0.0 threshold=1e-06 verdict=PASS
+[post-fix vs pre-fix] case_prod_quadtree_subgrid_tide__4d__gpu_n2/sfincs_map.nc
+RESULT case=case_prod_quadtree_subgrid_tide__4d__gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1019/b-SFINCS/tests/perf/halo-exchange-cells-coalesce-20260519/prefix/case_prod_quadtree_subgrid_tide__4d__gpu_n2/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1019/b-SFINCS/tests/perf/halo-exchange-cells-coalesce-20260519/postfix/case_prod_quadtree_subgrid_tide__4d__gpu_n2/sfincs_map.nc max_abs_diff=0.0 max_zsmax_ref=0.9857842326164246 ratio=0.0 threshold=1e-06 verdict=PASS
+
+=== SOR-1019 verify — complete 2026-05-19T10:51:14Z ===

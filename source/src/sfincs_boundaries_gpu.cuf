@@ -896,7 +896,7 @@ contains
    ! test `nmb in [1, npn_local_in]` is the exact device equivalent of the
    ! host `bnd_is_local(ib)` filter (true iff the boundary cell is in this
    ! rank's owned slice; halo / non-resident boundary cells are skipped
-   ! here and refreshed by halo_exchange_zs from the owning rank). zs is
+   ! here and refreshed by halo_exchange_cells from the owning rank). zs is
    ! device-canonical, so the kcs==1 internal value is read straight from
    ! the device shadow; the assignment is a pure integer-indexed real*8
    ! copy (kcs==6 targets and kcs==1 sources are disjoint, and each nmb

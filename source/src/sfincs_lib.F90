@@ -738,39 +738,34 @@ module sfincs_lib
          !
 #ifdef USE_CUDA
          !
-         ! Synchronize halo-cell water levels with neighbor ranks so the
-         ! next compute_fluxes sees fresh zs at rank-boundary edges.
+         ! Combined post-continuity cell halo exchange (SOR-1019):
+         ! synchronize halo-cell water levels (zs), the wiggle-
+         ! suppression second derivative (zsderv, when allocated) and
+         ! the subgrid cell volume (z_volume, when allocated) with
+         ! neighbor ranks in a SINGLE coalesced exchange. All three
+         ! arrays use the same cell descriptors
+         ! (halo_*_local_idx / halo_*_count / halo_neighbor_ranks),
+         ! were previously called in immediate succession with
+         ! independent host-side coordination, and are now packed into
+         ! one per-neighbor staging buffer (zs in band 0; zsderv in
+         ! band halo_cells_band_zsderv when allocated; z_volume in
+         ! band halo_cells_band_z_volume when allocated) and exchanged
+         ! with one Isend/Irecv per neighbor + one
+         ! cudaDeviceSynchronize after the combined gather + one after
+         ! the combined scatter + one Waitall(recv)/Waitall(send)
+         ! pair. The downstream readers are: k_compute_fluxes (reads
+         ! zs at halo edges for the next step's flux update;
+         ! abs(zsderv(nm) - zsderv(nmu)) for the wiggle-suppression
+         ! term at owned edges spanning the partition boundary;
+         ! z_volume(nm) / z_volume(nmu) for the directional wet/dry
+         ! flux clamp); the SOR-38 halo-extended infiltration kernels
+         ! (k_inf_constant, k_inf_hor) read z_volume at halo cells
+         ! too. Without the exchange the halo positions stay at their
+         ! Phase-4 init value and rank N's view at halo cells diverges
+         ! from the owning rank's view. No-op when mpi_size == 1.
          !
-         call nvtx_range_push("halo_zs")
-         call halo_exchange_zs()
-         call nvtx_range_pop()
-         !
-         ! SOR-10 cross-rank halo exchange of the subgrid second derivative
-         ! zsderv. k_subgrid_main writes zsderv at owned cells only; the
-         ! next step's k_compute_fluxes reads `abs(zsderv(nm) - zsderv(nmu))`
-         ! for the wiggle-suppression term at owned edges spanning the
-         ! partition boundary, where nm or nmu is a halo cell. No-op when
-         ! mpi_size == 1 or when zsderv is not allocated (non-wiggle build).
-         !
-         call nvtx_range_push("halo_zsderv")
-         call halo_exchange_zsderv()
-         call nvtx_range_pop()
-         !
-         ! SOR-42 cross-rank halo exchange of the subgrid cell volume
-         ! z_volume. The continuity / discharges / source-term updates
-         ! write z_volume at owned cells only; the next step's
-         ! k_compute_fluxes reads z_volume(nm) and z_volume(nmu) for the
-         ! directional wet/dry flux clamp at owned edges spanning the
-         ! partition boundary, and the SOR-38 halo-extended infiltration
-         ! kernels (k_inf_constant, k_inf_hor) read z_volume at halo
-         ! cells too. Without the exchange the halo positions stay at
-         ! their Phase-4 init value and rank N's wet/dry view at halo
-         ! cells diverges from the owning rank's view as soon as the
-         ! cells start filling/emptying. No-op when mpi_size == 1 or
-         ! when z_volume is not allocated (non-subgrid build).
-         !
-         call nvtx_range_push("halo_z_volume")
-         call halo_exchange_z_volume()
+         call nvtx_range_push("halo_cells")
+         call halo_exchange_cells()
          call nvtx_range_pop()
          !
          ! SOR-10 env-gated halo diagnostic. No-op unless SFINCS_DEBUG_HALO_DUMP

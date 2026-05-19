@@ -403,7 +403,7 @@ contains
       ! (not in netCDF output, not read by any host per-step path); the
       ! GPU-side reader is k_compute_fluxes which reads the device
       ! shadow and the cross-rank halo entries are refreshed by
-      ! halo_exchange_zsderv. zs0 host-side mirror is kept (host
+      ! halo_exchange_cells (SOR-1019). zs0 host-side mirror is kept (host
       ! wiggle-suppression reads it on the CPU path; outside Phase 3's
       ! scope).
       !

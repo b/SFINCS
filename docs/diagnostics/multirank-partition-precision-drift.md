@@ -102,9 +102,12 @@ endpoint ratio itself is prior known evidence and was not re-derived).
    single localized ULP event becomes a persistent 1.94e-4 zsmax ratio.
 
 Halo transport is already bit-lossless on every per-step exchange:
-`halo_exchange_zs` / `halo_exchange_z_volume` are MPI_DOUBLE_PRECISION
-(SOR-49); `halo_exchange_q_uv` and `halo_exchange_zsderv` are real\*4 on
-both host and device (SOR-50 plan_defect audit — no precision step). So
+the coalesced `halo_exchange_cells` (SOR-1019) carries zs and z_volume
+through their native MPI_DOUBLE_PRECISION wire and zsderv through an
+r4→r8→r4 round-trip that is bit-exact for any value originating as
+r4 (r4 ⊂ r8 in IEEE 754; SOR-49 wire-precision audit); the coalesced
+`halo_exchange_q_uv` (SOR-1018) carries q and uv as real\*4 on both
+host and device with no precision step (SOR-50 plan_defect audit). So
 the divergence is **not** introduced by the wire format.
 
 ## Hypotheses tested and ruled out
