@@ -1,0 +1,130 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+
+---------- Starting simulation -----------
+---- Using 128 of 128 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,     8.4 s remaining ...
+  10% complete,     6.8 s remaining ...
+  15% complete,     6.9 s remaining ...
+  20% complete,     6.5 s remaining ...
+  25% complete,     5.7 s remaining ...
+  30% complete,     5.0 s remaining ...
+  35% complete,     5.1 s remaining ...
+  40% complete,     4.5 s remaining ...
+  45% complete,     4.0 s remaining ...
+  50% complete,     3.6 s remaining ...
+  55% complete,     3.3 s remaining ...
+  60% complete,     2.8 s remaining ...
+  65% complete,     2.4 s remaining ...
+  70% complete,     2.1 s remaining ...
+  75% complete,     1.7 s remaining ...
+  80% complete,     1.4 s remaining ...
+  85% complete,     1.0 s remaining ...
+  90% complete,     0.7 s remaining ...
+  95% complete,     0.3 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+Info : Write maximum values at final timestep since t=dtmaxout was not reached yet...
+
+---------- Simulation finished -----------
+
+ Total time             :      6.726
+ Total simulation time  :      6.624
+ Time in input          :      0.102
+ Time in boundaries     :      0.057 (  0.9%)
+ Time in discharges     :      0.000 (  0.0%)
+ Time in meteo forcing  :      0.508 (  7.7%)
+ Time in infiltration   :      0.337 (  5.1%)
+ Time in momentum       :      4.182 ( 63.1%)
+ Time in structures     :      0.004 (  0.1%)
+ Time in continuity     :      1.432 ( 21.6%)
+ Time in output         :      0.088 (  1.3%)
+
+ Average time step (s)  :      3.848
+
+----------- Closing off SFINCS -----------
+1.4 s remaining ...
+  85% complete,     1.0 s remaining ...
+  90% complete,     0.7 s remaining ...
+  95% complete,     0.3 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+Info : Write maximum values at final timestep since t=dtmaxout was not reached yet...
+
+---------- Simulation finished -----------
+
+ Total time             :      6.726
+ Total simulation time  :      6.624
+ Time in input          :      0.102
+ Time in boundaries     :      0.057 (  0.9%)
+ Time in discharges     :      0.000 (  0.0%)
+ Time in meteo forcing  :      0.508 (  7.7%)
+ Time in infiltration   :      0.337 (  5.1%)
+ Time in momentum       :      4.182 ( 63.1%)
+ Time in structures     :      0.004 (  0.1%)
+ Time in continuity     :      1.432 ( 21.6%)
+ Time in output         :      0.088 (  1.3%)
+
+ Average time step (s)  :      3.848
+
+----------- Closing off SFINCS -----------
