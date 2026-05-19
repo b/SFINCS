@@ -1,0 +1,116 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Reading input file ...
+Warning : no EPSG code defined
+Info    : input grid interpreted as projected coordinates
+Info    : turning off Coriolis
+Info    : no Coriolis, as latitude is not specified in sfincs.inp
+Info    : running SFINCS with regular bathymetry
+Info    : storing maximum depth in subgrid cell for hmax output
+Info    : turning on advection
+Info    : advection scheme : first-order upwind
+Reading meteo data ...
+Preparing domain ...
+Info    : using regular mesh
+Info : reading ASCII input ...
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    249500
+Number of active u/v points    :    498001
+Reading dep file : sfincs.dep
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+Info    : reading water level boundaries
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+Initializing output ...
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,     9.9 s remaining ...
+  10% complete,     9.3 s remaining ...
+  15% complete,     8.7 s remaining ...
+  20% complete,     8.0 s remaining ...
+  25% complete,     7.5 s remaining ...
+  30% complete,     7.0 s remaining ...
+  35% complete,     6.4 s remaining ...
+  40% complete,     5.9 s remaining ...
+  45% complete,     5.4 s remaining ...
+  50% complete,     4.9 s remaining ...
+  55% complete,     4.5 s remaining ...
+  60% complete,     4.0 s remaining ...
+  65% complete,     3.5 s remaining ...
+  70% complete,     3.0 s remaining ...
+  75% complete,     2.5 s remaining ...
+  80% complete,     2.0 s remaining ...
+  85% complete,     1.5 s remaining ...
+  90% complete,     1.0 s remaining ...
+  95% complete,     0.5 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :     10.269
+ Total simulation time  :      9.816
+ Time in input          :      0.452
+ Time in boundaries     :      1.748 ( 17.8%)
+ Time in momentum       :      3.220 ( 32.8%)
+ Time in continuity     :      0.600 (  6.1%)
+ Time in output         :      0.468 (  4.8%)
+
+ Average time step (s)  :      2.503
+
+----------- Closing off SFINCS -----------

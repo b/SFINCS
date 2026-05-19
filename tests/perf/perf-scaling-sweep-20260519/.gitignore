@@ -1,0 +1,28 @@
+# Per-cell SFINCS output (large; regeneratable by run_perf_scaling.sh).
+sfincs_map.nc
+sfincs_his.nc
+__pycache__
+
+# Per-cell symlinks back to tests/cases/<case>/ source inputs.
+# stage_case() in run_perf_scaling.sh symlinks dep / msk / bnd / bzs /
+# qtr / sbg / meteo forcing files so the SFINCS binary can read them
+# without copying — but the symlinks themselves should not enter the
+# git history (they would either resolve to outside-of-tree paths in
+# downloaders or duplicate the source case dir's bytes inline).
+case_prod_*/sfincs.dep
+case_prod_*/sfincs.msk
+case_prod_*/sfincs.bnd
+case_prod_*/sfincs.bzs
+case_prod_*/sfincs.amu
+case_prod_*/sfincs.amv
+case_prod_*/sfincs.prcp
+case_prod_*/sfincs.psi
+case_prod_*/sfincs.sigma
+case_prod_*/sfincs.ks
+case_prod_*/sfincs.scs
+case_prod_*/sfincs.src
+case_prod_*/sfincs.dis
+case_prod_*/sfincs.weir
+case_prod_*/sfincs.nc
+case_prod_*/sfincs_subgrid.nc
+case_prod_*/snapwave.*
