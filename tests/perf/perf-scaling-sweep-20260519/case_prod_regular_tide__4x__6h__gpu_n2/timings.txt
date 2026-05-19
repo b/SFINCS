@@ -1,0 +1,14 @@
+total 9.806
+simulation 8.677
+input 1.129
+boundaries 1.004
+momentum 4.226
+continuity 0.858
+snapwave 
+meteo 
+output 0.000
+avg_dt 1.246
+sum_named 6.088
+unaccounted 2.589
+step_count 17336
+sim_seconds 21600

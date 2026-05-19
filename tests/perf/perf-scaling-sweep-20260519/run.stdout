@@ -1,0 +1,167 @@
+=== SOR-1017 scaling sweep — start 2026-05-19T07:53:51Z ===
+cases  : case_prod_regular_tide case_prod_quadtree_subgrid_tide case_prod_riverine case_prod_storm_amuv case_prod_compound_snapwave
+lengths: 1h 6h 24h 4d
+configs: cpu_n128 gpu_n1 gpu_n2
+no-4x  : 0
+nproc  : 128  (cpu_n128)
+
+===== case: case_prod_regular_tide (grids: 1x 4x) =====
+--- [cpu_n128] case_prod_regular_tide 1x 1h ---
+    rc=0 wall=11s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__1h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_regular_tide 1x 1h ---
+    rc=0 wall=3s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__1h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_regular_tide 1x 1h ---
+    rc=0 wall=3s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__1h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_regular_tide 1x 6h ---
+    rc=0 wall=53s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__6h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_regular_tide 1x 6h ---
+    rc=0 wall=4s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__6h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_regular_tide 1x 6h ---
+    rc=0 wall=5s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__6h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_regular_tide 1x 24h ---
+    rc=0 wall=281s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__24h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_regular_tide 1x 24h ---
+    rc=0 wall=10s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__24h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_regular_tide 1x 24h ---
+    rc=0 wall=12s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__24h__gpu_n2/sfincs.log
+--- [skip cpu_n128] case_prod_regular_tide 1x 4d (per --drop-4d-cpu) ---
+--- [gpu_n1] case_prod_regular_tide 1x 4d ---
+    rc=0 wall=34s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__4d__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_regular_tide 1x 4d ---
+    rc=0 wall=44s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__1x__4d__gpu_n2/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__1h__cpu_n128: 1000x1000 cells, dx=25.0 (999000 active)
+--- [cpu_n128] case_prod_regular_tide 4x 1h ---
+    rc=0 wall=69s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__1h__cpu_n128/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__1h__gpu_n1: 1000x1000 cells, dx=25.0 (999000 active)
+--- [gpu_n1] case_prod_regular_tide 4x 1h ---
+    rc=0 wall=5s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__1h__gpu_n1/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__1h__gpu_n2: 1000x1000 cells, dx=25.0 (999000 active)
+--- [gpu_n2] case_prod_regular_tide 4x 1h ---
+    rc=0 wall=6s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__1h__gpu_n2/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__6h__cpu_n128: 1000x1000 cells, dx=25.0 (999000 active)
+--- [cpu_n128] case_prod_regular_tide 4x 6h ---
+    rc=0 wall=294s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__6h__cpu_n128/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__6h__gpu_n1: 1000x1000 cells, dx=25.0 (999000 active)
+--- [gpu_n1] case_prod_regular_tide 4x 6h ---
+    rc=0 wall=13s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__6h__gpu_n1/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__6h__gpu_n2: 1000x1000 cells, dx=25.0 (999000 active)
+--- [gpu_n2] case_prod_regular_tide 4x 6h ---
+    rc=0 wall=12s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__6h__gpu_n2/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__24h__cpu_n128: 1000x1000 cells, dx=25.0 (999000 active)
+--- [cpu_n128] case_prod_regular_tide 4x 24h ---
+    rc=0 wall=514s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__24h__cpu_n128/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__24h__gpu_n1: 1000x1000 cells, dx=25.0 (999000 active)
+--- [gpu_n1] case_prod_regular_tide 4x 24h ---
+    rc=0 wall=43s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__24h__gpu_n1/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__24h__gpu_n2: 1000x1000 cells, dx=25.0 (999000 active)
+--- [gpu_n2] case_prod_regular_tide 4x 24h ---
+    rc=0 wall=38s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__24h__gpu_n2/sfincs.log
+--- [skip cpu_n128] case_prod_regular_tide 4x 4d (per --drop-4d-cpu) ---
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__4d__gpu_n1: 1000x1000 cells, dx=25.0 (999000 active)
+--- [gpu_n1] case_prod_regular_tide 4x 4d ---
+    rc=0 wall=169s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__4d__gpu_n1/sfincs.log
+4x-refined case in /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__4d__gpu_n2: 1000x1000 cells, dx=25.0 (999000 active)
+--- [gpu_n2] case_prod_regular_tide 4x 4d ---
+    rc=0 wall=145s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_regular_tide__4x__4d__gpu_n2/sfincs.log
+
+===== case: case_prod_quadtree_subgrid_tide (grids: 1x) =====
+--- [cpu_n128] case_prod_quadtree_subgrid_tide 1x 1h ---
+    rc=0 wall=3s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__1h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_quadtree_subgrid_tide 1x 1h ---
+    rc=0 wall=3s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__1h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_quadtree_subgrid_tide 1x 1h ---
+    rc=0 wall=3s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__1h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_quadtree_subgrid_tide 1x 6h ---
+    rc=0 wall=30s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__6h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_quadtree_subgrid_tide 1x 6h ---
+    rc=0 wall=4s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__6h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_quadtree_subgrid_tide 1x 6h ---
+    rc=0 wall=5s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__6h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_quadtree_subgrid_tide 1x 24h ---
+    rc=0 wall=117s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__24h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_quadtree_subgrid_tide 1x 24h ---
+    rc=0 wall=11s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__24h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_quadtree_subgrid_tide 1x 24h ---
+    rc=0 wall=13s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__24h__gpu_n2/sfincs.log
+--- [skip cpu_n128] case_prod_quadtree_subgrid_tide 1x 4d (per --drop-4d-cpu) ---
+--- [gpu_n1] case_prod_quadtree_subgrid_tide 1x 4d ---
+    rc=0 wall=33s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__4d__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_quadtree_subgrid_tide 1x 4d ---
+    rc=0 wall=44s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_quadtree_subgrid_tide__1x__4d__gpu_n2/sfincs.log
+
+===== case: case_prod_riverine (grids: 1x) =====
+--- [cpu_n128] case_prod_riverine 1x 1h ---
+    rc=0 wall=7s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__1h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_riverine 1x 1h ---
+    rc=0 wall=4s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__1h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_riverine 1x 1h ---
+    rc=0 wall=4s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__1h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_riverine 1x 6h ---
+    rc=0 wall=17s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__6h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_riverine 1x 6h ---
+    rc=0 wall=11s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__6h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_riverine 1x 6h ---
+    rc=0 wall=10s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__6h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_riverine 1x 24h ---
+    rc=0 wall=157s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__24h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_riverine 1x 24h ---
+    rc=0 wall=39s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__24h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_riverine 1x 24h ---
+    rc=0 wall=28s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__24h__gpu_n2/sfincs.log
+--- [skip cpu_n128] case_prod_riverine 1x 4d (per --drop-4d-cpu) ---
+--- [gpu_n1] case_prod_riverine 1x 4d ---
+    rc=0 wall=154s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__4d__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_riverine 1x 4d ---
+    rc=0 wall=115s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_riverine__1x__4d__gpu_n2/sfincs.log
+
+===== case: case_prod_storm_amuv (grids: 1x) =====
+--- [cpu_n128] case_prod_storm_amuv 1x 1h ---
+    rc=0 wall=41s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__1h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_storm_amuv 1x 1h ---
+    rc=0 wall=5s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__1h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_storm_amuv 1x 1h ---
+    rc=0 wall=5s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__1h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_storm_amuv 1x 6h ---
+    rc=0 wall=53s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__6h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_storm_amuv 1x 6h ---
+    rc=0 wall=21s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__6h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_storm_amuv 1x 6h ---
+    rc=0 wall=14s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__6h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_storm_amuv 1x 24h ---
+    rc=0 wall=137s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__24h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_storm_amuv 1x 24h ---
+    rc=0 wall=69s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__24h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_storm_amuv 1x 24h ---
+    rc=0 wall=49s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__24h__gpu_n2/sfincs.log
+--- [skip cpu_n128] case_prod_storm_amuv 1x 4d (per --drop-4d-cpu) ---
+--- [gpu_n1] case_prod_storm_amuv 1x 4d ---
+    rc=0 wall=266s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__4d__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_storm_amuv 1x 4d ---
+    rc=0 wall=184s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_storm_amuv__1x__4d__gpu_n2/sfincs.log
+
+===== case: case_prod_compound_snapwave (grids: 1x) =====
+--- [cpu_n128] case_prod_compound_snapwave 1x 1h ---
+    rc=0 wall=5s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__1h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_compound_snapwave 1x 1h ---
+    rc=0 wall=7s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__1h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_compound_snapwave 1x 1h ---
+    rc=0 wall=8s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__1h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_compound_snapwave 1x 6h ---
+    rc=0 wall=19s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__6h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_compound_snapwave 1x 6h ---
+    rc=0 wall=18s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__6h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_compound_snapwave 1x 6h ---
+    rc=0 wall=20s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__6h__gpu_n2/sfincs.log
+--- [cpu_n128] case_prod_compound_snapwave 1x 24h ---
+    rc=0 wall=97s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__24h__cpu_n128/sfincs.log
+--- [gpu_n1] case_prod_compound_snapwave 1x 24h ---
+    rc=0 wall=66s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__24h__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_compound_snapwave 1x 24h ---
+    rc=0 wall=61s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__24h__gpu_n2/sfincs.log
+--- [skip cpu_n128] case_prod_compound_snapwave 1x 4d (per --drop-4d-cpu) ---
+--- [gpu_n1] case_prod_compound_snapwave 1x 4d ---
+    rc=0 wall=221s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__4d__gpu_n1/sfincs.log
+--- [gpu_n2] case_prod_compound_snapwave 1x 4d ---
+    rc=0 wall=235s log=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1017/b-SFINCS/tests/perf/perf-scaling-sweep-20260519/case_prod_compound_snapwave__1x__4d__gpu_n2/sfincs.log
+
+=== SOR-1017 scaling sweep — complete 2026-05-19T09:03:43Z ===

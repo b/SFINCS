@@ -1,0 +1,131 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Reading input file ...
+Warning : no EPSG code defined
+Info    : input grid interpreted as projected coordinates
+Info    : turning off Coriolis
+Info    : no Coriolis, as latitude is not specified in sfincs.inp
+Info    : running SFINCS with regular bathymetry
+Info    : storing maximum depth in subgrid cell for hmax output
+Info    : turning on advection
+Info    : advection scheme : first-order upwind
+Reading meteo data ...
+Info    : reading amu and amv file
+Info    : reading prcp file sfincs.prcp
+Warning! Times in spatially-varying wind input file do not cover entire simulation period! Using nearest available data.
+Preparing domain ...
+Info    : using regular mesh
+Info    : turning on wind
+Info    : turning on precipitation
+Info    : using gridded meteo data
+Info : reading ASCII input ...
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+Reading dep file : sfincs.dep
+Info    : turning on process infiltration (via Green-Ampt)
+Info    : reading psi file sfincs.psi
+Info    : reading sigma file sfincs.sigma
+Info    : reading ks file sfincs.ks
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+Info    : reading water level boundaries
+Warning! Times in boundary conditions file do not cover entire simulation period !
+Warning! Adjusting last time in boundary conditions time series !
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : yes
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+Initializing output ...
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,   255.2 s remaining ...
+  10% complete,   239.0 s remaining ...
+  15% complete,   226.5 s remaining ...
+  20% complete,   214.4 s remaining ...
+  25% complete,   198.8 s remaining ...
+  30% complete,   184.8 s remaining ...
+  35% complete,   171.2 s remaining ...
+  40% complete,   157.9 s remaining ...
+  45% complete,   145.0 s remaining ...
+  50% complete,   131.8 s remaining ...
+  55% complete,   118.5 s remaining ...
+  60% complete,   105.3 s remaining ...
+  65% complete,    92.2 s remaining ...
+  70% complete,    79.1 s remaining ...
+  75% complete,    66.0 s remaining ...
+  80% complete,    52.7 s remaining ...
+  85% complete,    39.6 s remaining ...
+  90% complete,    26.4 s remaining ...
+  95% complete,    13.2 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :    264.377
+ Total simulation time  :    264.136
+ Time in input          :      0.241
+ Time in boundaries     :      5.331 (  2.0%)
+ Time in meteo fields   :      0.008 (  0.0%)
+ Time in meteo forcing  :    110.638 ( 41.9%)
+ Time in infiltration   :    127.636 ( 48.3%)
+ Time in momentum       :     15.194 (  5.8%)
+ Time in continuity     :      2.628 (  1.0%)
+ Time in output         :      1.806 (  0.7%)
+
+ Average time step (s)  :      2.867
+
+----------- Closing off SFINCS -----------
