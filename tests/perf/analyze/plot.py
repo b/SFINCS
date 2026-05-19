@@ -1,15 +1,22 @@
 """Render the default perf-sweep plot set as PNGs.
 
-Five default plots, all five-subplot grids — one subplot per case in
+Six default plots, all five-subplot grids — one subplot per case in
 the order ``case_prod_regular_tide / case_prod_quadtree_subgrid_tide /
 case_prod_riverine / case_prod_storm_amuv / case_prod_compound_snapwave``:
 
-1. ``wall_vs_length.png``      — wall time vs simulation length.
-2. ``per_step_vs_length.png``  — per-step gap ``U(L)/step_count`` (ms).
-3. ``gpu_vs_cpu_speedup.png``  — ``cpu_n128_wall / gpu_n2_wall``.
-4. ``component_breakdown.png`` — stacked named components at
+1. ``wall_vs_length.png``           — wall time vs simulation length.
+2. ``per_step_vs_length.png``       — per-step gap ``U(L)/step_count`` (ms).
+3. ``gpu_vs_cpu_speedup.png``       — ``cpu_n128_wall / gpu_n2_wall``.
+4. ``component_breakdown.png``      — stacked named components at
    ``1x gpu_n2 4d`` for each case.
-5. ``gpu_utilization.png``     — gpu_sm_p50 + p95 envelope.
+5. ``gpu_utilization.png``          — gpu_sm_p50 + p95 envelope.
+6. ``gpu_saturation_vs_rank.png``   — per-case wall bars vs rank
+   count (gpu_n1, gpu_n2) at the longest available length, with a
+   single-GPU SM% overlay and an ``UNDERLOADED`` annotation on
+   subplots whose single-GPU SM% is below the configured threshold.
+   Bar colors encode whether the next rank-count step helped (green)
+   or hurt (red), so cases where adding GPUs makes things worse are
+   visually obvious without reading axis values.
 
 When a comparison sweep is supplied (CLI ``--prior`` or env
 ``PRIOR_SWEEP``), each of the five also gets a paired "prior vs
@@ -345,6 +352,235 @@ def plot_gpu_utilization(df: pd.DataFrame, label: str, subtitle: str, out_path: 
 
 
 # ---------------------------------------------------------------------------
+# GPU saturation vs rank count
+# ---------------------------------------------------------------------------
+
+# Bar colors keyed by the "n+1 vs n" wall delta direction.
+RANK_HELP_COLOR = "#55A467"   # green — adding ranks reduced wall
+RANK_HURT_COLOR = "#C44E52"   # red   — adding ranks increased wall
+SM_OVERLAY_COLOR = "#444444"  # marker color for SM% overlay
+UNDERLOAD_THRESHOLD_DEFAULT = 30.0
+GPU_RANK_CONFIGS = ("gpu_n1", "gpu_n2")  # extend when gpu_n4 etc. land
+
+
+def _longest_length_present(rows: pd.DataFrame) -> str | None:
+    """Return the longest length tag (1h<6h<24h<4d) present in rows."""
+    if rows.empty:
+        return None
+    have = set(rows["length"].dropna().unique())
+    for L in reversed(LENGTHS):
+        if L in have:
+            return L
+    return None
+
+
+def _saturation_cell(df: pd.DataFrame, case: str, grid: str) -> dict | None:
+    """Collect the per-rank wall/SM% values for one (case, grid) saturation panel.
+
+    Returns ``None`` when there's no usable data (no gpu_n* cells at any
+    shared length). Otherwise returns a dict with keys:
+
+      length       — the longest length shared by at least one rank config
+      walls        — {rank_config: wall_seconds}
+      sm_p50       — {rank_config: gpu_sm_p50 at this cell (may be NaN)}
+      best_config  — rank config with the lowest wall
+      sm_overlay   — single-GPU (gpu_n1) SM% used for the UNDERLOADED check
+    """
+    sub = df[(df["case"] == case) & (df["grid"] == grid)
+             & (df["config"].isin(GPU_RANK_CONFIGS))]
+    if sub.empty:
+        return None
+    length = _longest_length_present(sub)
+    if length is None:
+        return None
+    cell = sub[sub["length"] == length]
+    walls: dict[str, float] = {}
+    sm: dict[str, float] = {}
+    for cfg in GPU_RANK_CONFIGS:
+        row = cell[cell["config"] == cfg]
+        if row.empty:
+            continue
+        wall = row.iloc[0]["wall"]
+        if wall == wall:
+            walls[cfg] = float(wall)
+        sm_val = row.iloc[0]["gpu_sm_p50"]
+        sm[cfg] = float(sm_val) if sm_val == sm_val else float("nan")
+    if not walls:
+        return None
+    best_config = min(walls, key=walls.get)
+    sm_overlay = sm.get("gpu_n1", float("nan"))
+    return {
+        "length": length,
+        "walls": walls,
+        "sm_p50": sm,
+        "best_config": best_config,
+        "sm_overlay": sm_overlay,
+    }
+
+
+def _bar_colors_for(walls: dict[str, float]) -> list[str]:
+    """Return bar colors per GPU_RANK_CONFIGS in order.
+
+    n=1 is always neutral (baseline). For n>=2, color is green when the
+    wall decreased vs n-1, red when it increased or stayed the same.
+    Configs missing from ``walls`` get a neutral light-grey placeholder.
+    """
+    colors: list[str] = []
+    for i, cfg in enumerate(GPU_RANK_CONFIGS):
+        if cfg not in walls:
+            colors.append("#cccccc")
+            continue
+        if i == 0:
+            colors.append(RANK_HELP_COLOR)
+            continue
+        prev = GPU_RANK_CONFIGS[i - 1]
+        if prev not in walls:
+            colors.append(RANK_HELP_COLOR)
+            continue
+        colors.append(RANK_HELP_COLOR if walls[cfg] < walls[prev] else RANK_HURT_COLOR)
+    return colors
+
+
+def plot_gpu_saturation(
+    df: pd.DataFrame,
+    out_dir: str | os.PathLike,
+    sm_threshold: float = UNDERLOAD_THRESHOLD_DEFAULT,
+    grid: str = "1x",
+    label: str | None = None,
+    subtitle: str = "",
+    filename: str = "gpu_saturation_vs_rank.png",
+) -> Path:
+    """Render the per-case GPU-saturation-vs-rank-count panel.
+
+    Each subplot is one case. The left Y axis shows wall time (s) per
+    rank count (one bar per GPU_RANK_CONFIGS entry) at the longest
+    length available for that (case, grid). Bars are colored green
+    when adding the rank reduced wall, red when it increased wall.
+    The right Y axis overlays the single-GPU (gpu_n1) SM% as a marker.
+    Subplots whose gpu_n1 SM% is below ``sm_threshold`` are annotated
+    "UNDERLOADED — n2 adds overhead without compute payoff".
+
+    Writes ``<out_dir>/<filename>`` and returns the path.
+    """
+    out_path = Path(out_dir) / filename
+    cases = _cases_in(df)
+    if not cases:
+        # Nothing to plot — still write an empty placeholder so callers
+        # can chain without worrying about whether the file exists.
+        Path(out_dir).mkdir(parents=True, exist_ok=True)
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.text(0.5, 0.5, "no cases in sweep", ha="center", va="center",
+                transform=ax.transAxes)
+        ax.axis("off")
+        _save(fig, out_path)
+        return out_path
+
+    nrows, ncols, figsize = _layout(len(cases))
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    flat = axes.flatten()
+
+    x_positions = np.arange(len(GPU_RANK_CONFIGS))
+    rank_ticks = [c.removeprefix("gpu_n") for c in GPU_RANK_CONFIGS]
+
+    for i, case in enumerate(cases):
+        ax = flat[i]
+        cell = _saturation_cell(df, case, grid)
+        if cell is None:
+            ax.text(0.5, 0.5, f"{case}\n(no gpu_n* data at grid={grid})",
+                    ha="center", va="center", transform=ax.transAxes, fontsize=8)
+            ax.axis("off")
+            continue
+
+        walls = cell["walls"]
+        sm_p50 = cell["sm_p50"]
+        colors = _bar_colors_for(walls)
+
+        heights = [walls.get(cfg, 0.0) for cfg in GPU_RANK_CONFIGS]
+        # Mark missing configs with a hatch + lighter color so the
+        # eye doesn't read a missing config as "zero wall".
+        bar_container = ax.bar(
+            x_positions, heights,
+            color=colors,
+            edgecolor="black", linewidth=0.7,
+            width=0.5,
+        )
+        for cfg, bar in zip(GPU_RANK_CONFIGS, bar_container):
+            if cfg not in walls:
+                bar.set_hatch("//")
+                bar.set_alpha(0.4)
+
+        # Annotate each bar with its wall value.
+        for cfg, bar in zip(GPU_RANK_CONFIGS, bar_container):
+            if cfg not in walls:
+                continue
+            v = walls[cfg]
+            ax.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                v,
+                f"{v:.1f}s",
+                ha="center", va="bottom", fontsize=8,
+            )
+
+        ax.set_xticks(x_positions)
+        ax.set_xticklabels(rank_ticks)
+        ax.set_xlabel("rank count")
+        ax.set_ylabel("wall time (s)")
+        max_wall = max((v for v in walls.values()), default=1.0)
+        ax.set_ylim(0, max_wall * 1.35 if max_wall > 0 else 1.0)
+        ax.grid(True, axis="y", alpha=0.3)
+
+        # Right-Y overlay: SM% per rank as a marker.
+        ax_r = ax.twinx()
+        ax_r.set_ylim(0, 100)
+        ax_r.set_ylabel("single-GPU SM% (overlay)", fontsize=8)
+        sm_xs, sm_ys = [], []
+        for j, cfg in enumerate(GPU_RANK_CONFIGS):
+            v = sm_p50.get(cfg, float("nan"))
+            if v == v:
+                sm_xs.append(x_positions[j])
+                sm_ys.append(v)
+        if sm_xs:
+            ax_r.plot(sm_xs, sm_ys, marker="D", linestyle=":",
+                      color=SM_OVERLAY_COLOR, label="SM%")
+            for x, y in zip(sm_xs, sm_ys):
+                ax_r.text(x, y + 2.0, f"{y:.0f}%", ha="center", va="bottom",
+                          fontsize=7, color=SM_OVERLAY_COLOR)
+
+        # UNDERLOADED annotation — based on single-GPU (gpu_n1) SM%.
+        sm_overlay = cell["sm_overlay"]
+        if sm_overlay == sm_overlay and sm_overlay < sm_threshold:
+            ax.text(
+                0.5, 0.92,
+                f"UNDERLOADED — n2 adds overhead without compute payoff\n"
+                f"(gpu_n1 SM%={sm_overlay:.0f}% < {sm_threshold:.0f}%)",
+                transform=ax.transAxes,
+                ha="center", va="top", fontsize=8,
+                color=RANK_HURT_COLOR,
+                bbox=dict(facecolor="#fff7f5", edgecolor=RANK_HURT_COLOR,
+                          boxstyle="round,pad=0.3", linewidth=0.8),
+            )
+
+        best = cell["best_config"]
+        case_label = case.replace("case_prod_", "")
+        ax.set_title(
+            f"{case_label}  (grid={grid}, length={cell['length']})\n"
+            f"best config: {best}",
+            fontsize=9,
+        )
+
+    for j in range(len(cases), nrows * ncols):
+        flat[j].axis("off")
+
+    title = "GPU saturation vs rank count"
+    if label:
+        title = f"{title} — {label}"
+    _add_title(fig, title, subtitle)
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    _save(fig, out_path)
+    return out_path
+
+
+# ---------------------------------------------------------------------------
 # Compare-prior overlays
 # ---------------------------------------------------------------------------
 
@@ -435,6 +671,9 @@ def render(
 
     p = plots_dir / "gpu_utilization.png"
     plot_gpu_utilization(df, label, subtitle, p); paths.append(p)
+
+    p = plot_gpu_saturation(df, plots_dir, label=label, subtitle=subtitle)
+    paths.append(p)
 
     if prior_sweep_dir is not None:
         prior = Path(prior_sweep_dir)
