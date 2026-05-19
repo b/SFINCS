@@ -1,5 +1,9 @@
 # SOR-1017 — scaling sweep (sim length + grid + config)
 
+> Visualizations: see [`./plots/`](./plots/) — wall time, per-step gap,
+> GPU vs CPU speedup, component breakdown, GPU utilization. Regenerated
+> by `python -m tests.perf.analyze.plot --sweep tests/perf/perf-scaling-sweep-20260519`.
+
 Follow-up to **[SOR-87](../perf-matrix-20260518/SUMMARY.md)**. The
 SOR-87 24h cases were too short to distinguish whether the post-fix
 `gpu_n2` "unaccounted time" gap — defined as `total_simulation_time
