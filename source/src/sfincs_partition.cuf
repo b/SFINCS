@@ -438,12 +438,14 @@ contains
       if (halo_uv_n_neighbors > 0) then
          block
             integer :: max_send_uv, max_recv_uv
+            ! 2x: one combined q+uv exchange (SOR-1018). Each
+            ! neighbor column holds q in rows [1..count] and uv in
+            ! rows [count+1..2*count], so the staging buffers are
+            ! sized to twice the per-neighbor edge count.
             max_send_uv = max(maxval(halo_uv_send_count), 1)
             max_recv_uv = max(maxval(halo_uv_recv_count), 1)
-            allocate(halo_send_buf_q (max_send_uv, halo_uv_n_neighbors))
-            allocate(halo_recv_buf_q (max_recv_uv, halo_uv_n_neighbors))
-            allocate(halo_send_buf_uv(max_send_uv, halo_uv_n_neighbors))
-            allocate(halo_recv_buf_uv(max_recv_uv, halo_uv_n_neighbors))
+            allocate(halo_send_buf_quv(2*max_send_uv, halo_uv_n_neighbors))
+            allocate(halo_recv_buf_quv(2*max_recv_uv, halo_uv_n_neighbors))
          end block
       end if
       !
@@ -3146,10 +3148,8 @@ contains
       if (allocated(halo_recv_buf_zs))        deallocate(halo_recv_buf_zs)
       if (allocated(halo_send_buf_zs_r8))     deallocate(halo_send_buf_zs_r8)
       if (allocated(halo_recv_buf_zs_r8))     deallocate(halo_recv_buf_zs_r8)
-      if (allocated(halo_send_buf_q))         deallocate(halo_send_buf_q)
-      if (allocated(halo_recv_buf_q))         deallocate(halo_recv_buf_q)
-      if (allocated(halo_send_buf_uv))        deallocate(halo_send_buf_uv)
-      if (allocated(halo_recv_buf_uv))        deallocate(halo_recv_buf_uv)
+      if (allocated(halo_send_buf_quv))       deallocate(halo_send_buf_quv)
+      if (allocated(halo_recv_buf_quv))       deallocate(halo_recv_buf_quv)
       if (allocated(gather_recvcounts))                  deallocate(gather_recvcounts)
       if (allocated(gather_displacements))               deallocate(gather_displacements)
       if (allocated(gather_perrank_local_to_global))     deallocate(gather_perrank_local_to_global)
@@ -3252,13 +3252,29 @@ contains
    subroutine halo_exchange_q_uv()
       !
       ! Per-step halo exchange of edge fluxes (q) and edge velocities (uv)
-      ! across rank boundaries. Two sequential CUDA-aware MPI exchanges,
-      ! each modeled on halo_exchange_zs: gather owned edges into the
-      ! device staging buffer, Isend/Irecv with HPC-X consuming the
-      ! device pointers directly, scatter the received halo values back
-      ! into the local-indexed device shadows of q / uv at the local
-      ! edge positions in halo_uv_*_local_idx (no local_to_global_uv_d
-      ! translation now that the device shadows are local-indexed).
+      ! across rank boundaries. SOR-1018: q and uv are coalesced into a
+      ! SINGLE CUDA-aware MPI exchange. Both arrays are real*4 and use
+      ! the identical edge descriptors (halo_uv_*_local_idx /
+      ! halo_uv_*_count / halo_neighbor_ranks), so they are packed into
+      ! one combined per-neighbor staging buffer — q in rows
+      ! [1..count], uv in rows [count+1..2*count] — and exchanged with
+      ! one Isend/Irecv per neighbor, one cudaDeviceSynchronize after
+      ! the combined gather and one after the combined scatter, and one
+      ! Waitall(recv)/Waitall(send) pair. This is exactly the prior
+      ! two-sequential-exchanges path with the per-exchange host-side
+      ! coordination (cudaDeviceSynchronize / MPI_Waitall / MPI_Isend /
+      ! MPI_Irecv / request-array allocate) halved; the per-step
+      ! profile (tests/perf/halo-exchange-profile-20260519/FINDINGS.md)
+      ! showed this routine was ~50 % of the gpu_n2 per-step gap because
+      ! it ran the single-array exchange twice. Wire format is unchanged
+      ! (real*4 -> MPI_REAL -> real*4 for both q and uv), so the
+      ! scattered halo values and sfincs_map.nc stay bit-identical; the
+      ! single tag (HALO_TAG_Q) suffices since q and uv now travel as
+      ! one contiguous payload rather than two separately-tagged
+      ! messages. The scatter writes the local-indexed device shadows
+      ! of q / uv directly at the halo_uv_*_local_idx positions (no
+      ! local_to_global_uv_d translation now that the device shadows
+      ! are local-indexed).
       !
       integer :: nbr_slot, i, n
       integer :: ierr, istat
@@ -3274,79 +3290,67 @@ contains
       allocate(statuses_recv(MPI_STATUS_SIZE, halo_uv_n_neighbors))
       allocate(statuses_send(MPI_STATUS_SIZE, halo_uv_n_neighbors))
       !
-      ! ===== Exchange #1: q =================================================
+      ! Step 1: post all combined receives. Each message carries this
+      ! neighbor's q halo edges followed by its uv halo edges:
+      ! 2*halo_uv_recv_count real*4 elements.
       !
       do nbr_slot = 1, halo_uv_n_neighbors
-         call MPI_Irecv(halo_recv_buf_q(:, nbr_slot), halo_uv_recv_count(nbr_slot), &
+         call MPI_Irecv(halo_recv_buf_quv(:, nbr_slot), 2*halo_uv_recv_count(nbr_slot), &
                         MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_Q, &
                         MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
       end do
+      !
+      ! Step 2: gather owned edges into the combined send buffer — q
+      ! into rows [1..n], uv into rows [n+1..2n] of each neighbor's
+      ! column (n = this neighbor's send count).
       !
       do nbr_slot = 1, halo_uv_n_neighbors
          n = halo_uv_send_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            halo_send_buf_q(i, nbr_slot) = q( halo_uv_send_local_idx(i, nbr_slot) )
+            halo_send_buf_quv(i,     nbr_slot) = q ( halo_uv_send_local_idx(i, nbr_slot) )
+            halo_send_buf_quv(n + i, nbr_slot) = uv( halo_uv_send_local_idx(i, nbr_slot) )
          end do
       end do
       !
+      ! Synchronize so the gathered halo_send_buf_quv is fully resident
+      ! in device memory before MPI reads it; the !$cuf kernel launches
+      ! on the default stream and HPC-X's CUDA-aware path does not order
+      ! itself against that stream automatically.
+      !
       istat = cudaDeviceSynchronize()
       !
+      ! Step 3: post combined sends.
+      !
       do nbr_slot = 1, halo_uv_n_neighbors
-         call MPI_Isend(halo_send_buf_q(:, nbr_slot), halo_uv_send_count(nbr_slot), &
+         call MPI_Isend(halo_send_buf_quv(:, nbr_slot), 2*halo_uv_send_count(nbr_slot), &
                         MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_Q, &
                         MPI_COMM_WORLD, request_send(nbr_slot), ierr)
       end do
       !
+      ! Step 4: wait for the receives so the scatter has data to write.
+      !
       call MPI_Waitall(halo_uv_n_neighbors, request_recv, statuses_recv, ierr)
+      !
+      ! Step 5: scatter the received halo values back into the device
+      ! shadows of q / uv — q from rows [1..n], uv from rows
+      ! [n+1..2n] (n = this neighbor's recv count).
       !
       do nbr_slot = 1, halo_uv_n_neighbors
          n = halo_uv_recv_count(nbr_slot)
          !$cuf kernel do(1) <<<*,*>>>
          do i = 1, n
-            q( halo_uv_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_q(i, nbr_slot)
+            q ( halo_uv_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_quv(i,     nbr_slot)
+            uv( halo_uv_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_quv(n + i, nbr_slot)
          end do
       end do
       !
-      istat = cudaDeviceSynchronize()
-      !
-      call MPI_Waitall(halo_uv_n_neighbors, request_send, statuses_send, ierr)
-      !
-      ! ===== Exchange #2: uv ================================================
-      !
-      do nbr_slot = 1, halo_uv_n_neighbors
-         call MPI_Irecv(halo_recv_buf_uv(:, nbr_slot), halo_uv_recv_count(nbr_slot), &
-                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_UV, &
-                        MPI_COMM_WORLD, request_recv(nbr_slot), ierr)
-      end do
-      !
-      do nbr_slot = 1, halo_uv_n_neighbors
-         n = halo_uv_send_count(nbr_slot)
-         !$cuf kernel do(1) <<<*,*>>>
-         do i = 1, n
-            halo_send_buf_uv(i, nbr_slot) = uv( halo_uv_send_local_idx(i, nbr_slot) )
-         end do
-      end do
+      ! Make scattered halo cells visible to subsequent kernels before
+      ! returning to the time loop.
       !
       istat = cudaDeviceSynchronize()
       !
-      do nbr_slot = 1, halo_uv_n_neighbors
-         call MPI_Isend(halo_send_buf_uv(:, nbr_slot), halo_uv_send_count(nbr_slot), &
-                        MPI_REAL, halo_neighbor_ranks(nbr_slot), HALO_TAG_UV, &
-                        MPI_COMM_WORLD, request_send(nbr_slot), ierr)
-      end do
-      !
-      call MPI_Waitall(halo_uv_n_neighbors, request_recv, statuses_recv, ierr)
-      !
-      do nbr_slot = 1, halo_uv_n_neighbors
-         n = halo_uv_recv_count(nbr_slot)
-         !$cuf kernel do(1) <<<*,*>>>
-         do i = 1, n
-            uv( halo_uv_recv_local_idx(i, nbr_slot) ) = halo_recv_buf_uv(i, nbr_slot)
-         end do
-      end do
-      !
-      istat = cudaDeviceSynchronize()
+      ! Step 6: wait for the sends so halo_send_buf_quv is reusable next step.
       !
       call MPI_Waitall(halo_uv_n_neighbors, request_send, statuses_send, ierr)
       !

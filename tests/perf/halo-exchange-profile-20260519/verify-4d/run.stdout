@@ -1,0 +1,79 @@
+=== SOR-1018 verify-4d — start 2026-05-19T09:53:05Z ===
+--- [gpu_n2] case_prod_regular_tide 1h ---
+    rc=0 wall=2s
+    simulation 0.416
+    boundaries 0.076
+    momentum 0.142
+    continuity 0.027
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.367
+    sum_named 0.245
+    unaccounted 0.171
+    step_count 1521
+    per_step_ms 0.1124
+--- [gpu_n2] case_prod_regular_tide 6h ---
+    rc=0 wall=5s
+    simulation 2.287
+    boundaries 0.435
+    momentum 0.823
+    continuity 0.151
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.495
+    sum_named 1.409
+    unaccounted 0.878
+    step_count 8658
+    per_step_ms 0.1014
+--- [gpu_n2] case_prod_regular_tide 24h ---
+    rc=0 wall=10s
+    simulation 8.966
+    boundaries 1.718
+    momentum 3.173
+    continuity 0.601
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.503
+    sum_named 5.492
+    unaccounted 3.474
+    step_count 34519
+    per_step_ms 0.1006
+--- [gpu_n2] case_prod_regular_tide 4d ---
+    rc=0 wall=39s
+    simulation 37.251
+    boundaries 7.164
+    momentum 13.602
+    continuity 2.512
+    snapwave 
+    meteo 
+    output 0.000
+    avg_dt 2.407
+    sum_named 23.278
+    unaccounted 13.973
+    step_count 143582
+    per_step_ms 0.0973
+--- [gpu_n1] case_prod_regular_tide 24h ---
+    rc=0 wall=9s
+    simulation 7.651
+    boundaries 1.505
+    momentum 4.450
+    continuity 1.013
+    snapwave 
+    meteo 
+    output 0.472
+    avg_dt 2.503
+    sum_named 7.440
+    unaccounted 0.211
+    step_count 34519
+    per_step_ms 0.0061
+
+=== bit-exactness ===
+[post-fix gpu_n2 vs post-fix gpu_n1 (single-rank reference)]
+RESULT case=case_prod_regular_tide__24h__gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1018/b-SFINCS/tests/perf/halo-exchange-profile-20260519/verify-4d/case_prod_regular_tide__24h__gpu_n1/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1018/b-SFINCS/tests/perf/halo-exchange-profile-20260519/verify-4d/case_prod_regular_tide__24h__gpu_n2/sfincs_map.nc max_abs_diff=3.0040740966796875e-05 max_zsmax_ref=2.0601131916046143 ratio=1.4582082717211405e-05 threshold=1e-06 verdict=FAIL
+[post-fix gpu_n2 vs PRE-fix nsys-capture gpu_n2 (coalescing must be bit-exact)]
+RESULT case=case_prod_regular_tide__24h__gpu_n2 ref=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1018/b-SFINCS/tests/perf/halo-exchange-profile-20260519/case_prod_regular_tide__24h__gpu_n2/sfincs_map.nc cand=/home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1018/b-SFINCS/tests/perf/halo-exchange-profile-20260519/verify-4d/case_prod_regular_tide__24h__gpu_n2/sfincs_map.nc max_abs_diff=0.0 max_zsmax_ref=2.0601131916046143 ratio=0.0 threshold=1e-06 verdict=PASS
+
+=== SOR-1018 verify-4d — complete 2026-05-19T09:54:12Z ===

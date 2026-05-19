@@ -399,18 +399,21 @@ module sfincs_data_device
    !     transitions. Paired with MPI_DOUBLE_PRECISION on the wire so the
    !     halo cells receive the owning rank's full real*8 value.
    !
-   ! The q / uv edge exchanges have their own dedicated real*4 buffer pairs
-   ! (halo_send_buf_q/uv, halo_recv_buf_q/uv) below; q and uv are real*4 on
-   ! both sides so they have no precision step either.
+   ! The q / uv edge exchange uses one combined real*4 buffer pair
+   ! (halo_send_buf_quv / halo_recv_buf_quv) below. q and uv are real*4
+   ! on both sides so they have no precision step either; SOR-1018
+   ! coalesced what used to be two sequential single-array exchanges
+   ! (separate halo_send_buf_q / halo_send_buf_uv pairs) into one
+   ! exchange whose per-neighbor column packs q in rows [1..count] and
+   ! uv in rows [count+1..2*count], so the leading dimension here is
+   ! 2*max(halo_uv_*_count) instead of max(halo_uv_*_count).
    !
    real, device, allocatable :: halo_send_buf_zs(:,:)
    real, device, allocatable :: halo_recv_buf_zs(:,:)
    real*8, device, allocatable :: halo_send_buf_zs_r8(:,:)
    real*8, device, allocatable :: halo_recv_buf_zs_r8(:,:)
-   real, device, allocatable :: halo_send_buf_q(:,:)
-   real, device, allocatable :: halo_recv_buf_q(:,:)
-   real, device, allocatable :: halo_send_buf_uv(:,:)
-   real, device, allocatable :: halo_recv_buf_uv(:,:)
+   real, device, allocatable :: halo_send_buf_quv(:,:)
+   real, device, allocatable :: halo_recv_buf_quv(:,:)
    !
    ! SnapWave gather/scatter metadata (SOR-711). Populated once at startup
    ! by partition_and_localize and consumed every dtwave interval inside

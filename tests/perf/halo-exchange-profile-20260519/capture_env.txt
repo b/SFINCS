@@ -1,0 +1,10 @@
+SOR-1018 halo-exchange-profile capture environment
+==================================================
+host GPU         : NVIDIA RTX A6000  x2
+container image  : sfincs-build-gpu:latest
+HEAD             : bcf6c5f (bcf6c5f01cbee2b50dd31bbe5ad07acd9a7c7fa1)
+captured-at      : 2026-05-19T09:38:34Z
+nsys (container) : NVIDIA Nsight Systems version 2025.5.1.121-255136380782v0
+case             : case_prod_regular_tide
+length           : 24h
+config           : gpu_n2
