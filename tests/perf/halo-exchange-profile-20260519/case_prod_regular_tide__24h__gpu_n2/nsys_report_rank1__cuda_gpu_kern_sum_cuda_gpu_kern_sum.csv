@@ -1,0 +1,18 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+59.5,1932822576,34514,56001.1,55585.0,51649,61537,2288.5,sfincs_momentum_k_compute_fluxes_
+12.8,415974799,34514,12052.3,12000.0,11456,13632,293.0,sfincs_continuity_k_regular_main_
+5.5,179774067,34514,5208.7,5216.0,5024,5568,98.7,sfincs_boundaries_k_update_boundary_fluxes_
+3.1,101242818,34514,2933.4,2944.0,2816,3201,44.8,sfincs_boundaries_k_apply_boundary_zs_
+2.6,85709146,34514,2483.3,2496.0,2336,2784,64.6,sfincs_partition_halo_exchange_q_uv_3288_gpu
+2.4,77248905,34514,2238.2,2240.0,2176,2432,29.8,sfincs_boundaries_k_scatter_kcs2_bnd_
+2.2,71890788,34514,2082.9,2080.0,2016,2400,26.8,sfincs_partition_halo_exchange_zs_3204_gpu
+2.2,71016272,34514,2057.6,2048.0,1920,2336,58.9,sfincs_partition_halo_exchange_q_uv_3306_gpu
+2.2,70164729,34514,2032.9,2016.0,1952,2241,37.1,sfincs_partition_halo_exchange_zsderv_3429_gpu
+2.1,66774791,34514,1934.7,1920.0,1824,2176,44.1,sfincs_partition_halo_exchange_q_uv_3326_gpu
+1.8,59477442,34514,1723.3,1728.0,1664,1952,27.4,sfincs_partition_halo_exchange_zs_3234_gpu
+1.8,58347288,34514,1690.5,1696.0,1632,1920,32.3,sfincs_partition_halo_exchange_zsderv_3447_gpu
+1.8,57690743,34514,1671.5,1664.0,1632,1857,24.8,sfincs_partition_halo_exchange_q_uv_3344_gpu
+0.0,195588,78,2507.5,2528.0,1920,3136,434.0,sfincs_partition_gather_to_rank0_real4_4197_gpu
+0.0,71875,26,2764.4,2784.0,2464,2817,67.2,sfincs_partition_gather_to_rank0_int1_4354_gpu
+0.0,51008,26,1961.8,1952.0,1952,2016,19.8,sfincs_partition_gather_to_rank0_real8_4279_gpu
+0.0,4096,2,2048.0,2048.0,2048,2048,0.0,sfincs_partition_reset_max_arrays_device_after_output_4043_gpu

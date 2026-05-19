@@ -1,0 +1,37 @@
+# Large nsys capture binaries — regeneratable by run_halo_profile.sh.
+# The committed evidence is the extracted *_sum*.csv tables (small)
+# plus FINDINGS.md; the raw .nsys-rep / .sqlite are ~100-200 MB each
+# and are intentionally NOT vendored.
+*.nsys-rep
+*.sqlite
+
+# Per-cell SFINCS output (large; regeneratable). Unanchored so the
+# pattern also catches the verify-4d/ run subdirs.
+sfincs_map.nc
+sfincs_his.nc
+__pycache__
+
+# Per-cell symlinks back to tests/cases/<case>/ source inputs.
+# stage_case() symlinks the forcing / grid files so the SFINCS binary
+# can read them without copying; the symlinks must not enter git (they
+# would resolve outside the tree or duplicate the source case bytes).
+# sfincs.inp is a real copy (length-modified) and is NOT excluded.
+# Unanchored basenames so both the top-level profiled cell and the
+# nested verify-4d/<cell>/ dirs are covered.
+sfincs.dep
+sfincs.msk
+sfincs.bnd
+sfincs.bzs
+sfincs.amu
+sfincs.amv
+sfincs.prcp
+sfincs.psi
+sfincs.sigma
+sfincs.ks
+sfincs.scs
+sfincs.src
+sfincs.dis
+sfincs.weir
+sfincs.nc
+sfincs_subgrid.nc
+snapwave.*

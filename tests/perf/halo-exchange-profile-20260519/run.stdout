@@ -1,0 +1,33 @@
+=== SOR-1018 halo-exchange profile — start 2026-05-19T09:38:34Z ===
+case=case_prod_regular_tide length=24h config=gpu_n2
+--- [gpu_n2] case_prod_regular_tide 24h under nsys profile ---
+    rc=0 wall=50s
+step_count=34519 (sim_seconds=86400)
+--- nsys stats for nsys_report_rank0 ---
+--- nsys stats for nsys_report_rank1 ---
+
+=== SOR-1018 halo-exchange profile — complete 2026-05-19T09:41:44Z ===
+artifacts under: /home/b/development/github/Deltares/SFINCS/.sorcerer/worktrees/SOR-1018/b-SFINCS/tests/perf/halo-exchange-profile-20260519/case_prod_regular_tide__24h__gpu_n2
+  nsys_report_rank0__cuda_api_sum_cuda_api_sum.csv
+  nsys_report_rank0__cuda_gpu_kern_sum_cuda_gpu_kern_sum.csv
+  nsys_report_rank0__mpi_event_sum_mpi_event_sum.csv
+  nsys_report_rank0__mpi_msg_size_sum_mpi_msg_size_sum.csv
+  nsys_report_rank0.nsys-rep
+  nsys_report_rank0__nvtx_pushpop_sum_nvtx_pushpop_sum.csv
+  nsys_report_rank0.sqlite
+  nsys_report_rank1__cuda_api_sum_cuda_api_sum.csv
+  nsys_report_rank1__cuda_gpu_kern_sum_cuda_gpu_kern_sum.csv
+  nsys_report_rank1__mpi_event_sum_mpi_event_sum.csv
+  nsys_report_rank1__mpi_msg_size_sum_mpi_msg_size_sum.csv
+  nsys_report_rank1.nsys-rep
+  nsys_report_rank1__nvtx_pushpop_sum_nvtx_pushpop_sum.csv
+  nsys_report_rank1.sqlite
+  sfincs.bnd
+  sfincs.bzs
+  sfincs.dep
+  sfincs.inp
+  sfincs.log
+  sfincs_map.nc
+  sfincs.msk
+  sfincs.stdout
+  step_count.txt
