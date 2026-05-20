@@ -1,0 +1,22 @@
+SFINCS perf-scaling-sweep capture environment
+=============================================
+host CPU         : AMD EPYC 7C13 64-Core Processor
+physical cores   : 64
+logical CPUs     : 128  (nproc; SMT counts both threads)
+host GPU         : NVIDIA RTX A6000  x2
+container image  : sfincs-build-gpu:latest
+HEAD             : d801d2f (d801d2f81972778120b3a7c9e30122194aa8e650)
+captured-at      : 2026-05-19T22:32:39Z
+PERF_MAX_CELL_WALL_MIN : 30  (per-cell projection budget)
+
+CPU thread-count axis rationale
+-------------------------------
+SFINCS's CPU build supports OpenMP (-fopenmp) and not MPI; MPI calls
+in source/src/sfincs_lib.F90 are gated on USE_CUDA. Each cpu_n<k>
+runs the same single-process CPU binary with OMP_NUM_THREADS=k and
+OMP_PROC_BIND=true. cpu_n128 = OMP_NUM_THREADS=128, single process.
+
+Cells whose projected wall (cpu_n128 measured wall × 128 / k) exceeds
+PERF_MAX_CELL_WALL_MIN minutes are skipped — timings.txt for the
+skipped cell carries a "skipped_estimated_wall <minutes>" annotation
+so the analysis layer can plot a marker at the projected position.

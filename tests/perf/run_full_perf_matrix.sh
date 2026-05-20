@@ -48,13 +48,19 @@ REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 PERF_DIR=$REPO_ROOT/tests/perf
 PY=${PYTHON:-python3}
 
-# Pick template runner — the most recently-modified sweep dir's runner.
+# Pick template runner — the canonical tests/perf/run_perf_scaling.sh,
+# or the most-recent dated sweep template if the canonical is missing
+# (back-compat for sweeps captured before SOR-1025).
 if [ -z "${RUNNER_SRC:-}" ]; then
-    RUNNER_SRC=$(ls -td "$PERF_DIR"/perf-scaling-sweep-*/run_perf_scaling.sh 2>/dev/null | head -1)
+    if [ -f "$PERF_DIR/run_perf_scaling.sh" ]; then
+        RUNNER_SRC=$PERF_DIR/run_perf_scaling.sh
+    else
+        RUNNER_SRC=$(ls -td "$PERF_DIR"/perf-scaling-sweep-*/run_perf_scaling.sh 2>/dev/null | head -1)
+    fi
 fi
 if [ -z "${RUNNER_SRC:-}" ] || [ ! -f "$RUNNER_SRC" ]; then
-    echo "ERROR: no run_perf_scaling.sh template found under $PERF_DIR/perf-scaling-sweep-*/" >&2
-    echo "       set RUNNER_SRC=<path> to override" >&2
+    echo "ERROR: no run_perf_scaling.sh template found at $PERF_DIR/run_perf_scaling.sh" >&2
+    echo "       (or under $PERF_DIR/perf-scaling-sweep-*/); set RUNNER_SRC=<path> to override" >&2
     exit 1
 fi
 
@@ -85,10 +91,15 @@ echo "  passthrough args: $*"
 cp -f "$RUNNER_SRC" "$OUT_DIR/run_perf_scaling.sh"
 chmod +x "$OUT_DIR/run_perf_scaling.sh"
 
-# generate_4x_regular_tide.py is required by the 4x branch.
-GEN_4X=$(dirname "$RUNNER_SRC")/generate_4x_regular_tide.py
-if [ -f "$GEN_4X" ]; then
-    cp -f "$GEN_4X" "$OUT_DIR/generate_4x_regular_tide.py"
+# generate_4x_regular_tide.py is required by the 4x branch. Prefer
+# the canonical copy beside this script; fall back to the one in the
+# template's own directory.
+GEN_4X_CANONICAL=$PERF_DIR/generate_4x_regular_tide.py
+GEN_4X_LEGACY=$(dirname "$RUNNER_SRC")/generate_4x_regular_tide.py
+if [ -f "$GEN_4X_CANONICAL" ]; then
+    cp -f "$GEN_4X_CANONICAL" "$OUT_DIR/generate_4x_regular_tide.py"
+elif [ -f "$GEN_4X_LEGACY" ]; then
+    cp -f "$GEN_4X_LEGACY" "$OUT_DIR/generate_4x_regular_tide.py"
 fi
 
 # Run the capture harness. The template runner writes into its own

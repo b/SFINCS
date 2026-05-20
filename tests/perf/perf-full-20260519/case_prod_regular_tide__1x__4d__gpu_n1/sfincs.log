@@ -1,0 +1,118 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Reading input file ...
+Warning : no EPSG code defined
+Info    : input grid interpreted as projected coordinates
+Info    : turning off Coriolis
+Info    : no Coriolis, as latitude is not specified in sfincs.inp
+Info    : running SFINCS with regular bathymetry
+Info    : storing maximum depth in subgrid cell for hmax output
+Info    : turning on advection
+Info    : advection scheme : first-order upwind
+Reading meteo data ...
+Preparing domain ...
+Info    : using regular mesh
+Info : reading ASCII input ...
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    249500
+Number of active u/v points    :    498001
+Reading dep file : sfincs.dep
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+Info    : reading water level boundaries
+Warning! Times in boundary conditions file do not cover entire simulation period !
+Warning! Adjusting last time in boundary conditions time series !
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+Initializing output ...
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,    29.4 s remaining ...
+  10% complete,    27.0 s remaining ...
+  15% complete,    26.0 s remaining ...
+  20% complete,    24.2 s remaining ...
+  25% complete,    22.6 s remaining ...
+  30% complete,    21.3 s remaining ...
+  35% complete,    19.9 s remaining ...
+  40% complete,    18.4 s remaining ...
+  45% complete,    17.0 s remaining ...
+  50% complete,    15.5 s remaining ...
+  55% complete,    14.0 s remaining ...
+  60% complete,    12.4 s remaining ...
+  65% complete,    10.9 s remaining ...
+  70% complete,     9.4 s remaining ...
+  75% complete,     7.8 s remaining ...
+  80% complete,     6.3 s remaining ...
+  85% complete,     4.7 s remaining ...
+  90% complete,     3.1 s remaining ...
+  95% complete,     1.6 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :     31.662
+ Total simulation time  :     31.378
+ Time in input          :      0.283
+ Time in boundaries     :      6.005 ( 19.1%)
+ Time in momentum       :     18.715 ( 59.6%)
+ Time in continuity     :      4.180 ( 13.3%)
+ Time in output         :      1.719 (  5.5%)
+
+ Average time step (s)  :      2.407
+
+----------- Closing off SFINCS -----------

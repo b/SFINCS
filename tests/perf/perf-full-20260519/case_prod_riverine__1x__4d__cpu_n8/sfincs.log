@@ -1,0 +1,132 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+Warning! Times in boundary conditions file do not cover entire simulation period !
+Warning! Adjusting last time in boundary conditions time series !
+Warning! Times in discharge file do not cover entire simulation period !
+Warning! Adjusting last time in discharge time series !
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+
+---------- Starting simulation -----------
+---- Using 8 of 128 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,   145.8 s remaining ...
+  10% complete,   134.6 s remaining ...
+  15% complete,   135.3 s remaining ...
+  20% complete,   126.2 s remaining ...
+  25% complete,   117.1 s remaining ...
+  30% complete,   110.3 s remaining ...
+  35% complete,   103.2 s remaining ...
+  40% complete,    95.8 s remaining ...
+  45% complete,    88.2 s remaining ...
+  50% complete,    80.5 s remaining ...
+  55% complete,    72.7 s remaining ...
+  60% complete,    64.8 s remaining ...
+  65% complete,    56.9 s remaining ...
+  70% complete,    49.0 s remaining ...
+  75% complete,    41.3 s remaining ...
+  80% complete,    33.3 s remaining ...
+  85% complete,    25.2 s remaining ...
+  90% complete,    16.9 s remaining ...
+  95% complete,     8.5 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :    169.894
+ Total simulation time  :    169.786
+ Time in input          :      0.109
+ Time in boundaries     :      1.358 (  0.8%)
+ Time in discharges     :      0.005 (  0.0%)
+ Time in meteo forcing  :      1.902 (  1.1%)
+ Time in infiltration   :      3.728 (  2.2%)
+ Time in momentum       :    142.839 ( 84.1%)
+ Time in structures     :      0.022 (  0.0%)
+ Time in continuity     :     18.511 ( 10.9%)
+ Time in output         :      1.282 (  0.8%)
+
+ Average time step (s)  :      3.620
+
+----------- Closing off SFINCS -----------
+e,    49.0 s remaining ...
+  75% complete,    41.3 s remaining ...
+  80% complete,    33.3 s remaining ...
+  85% complete,    25.2 s remaining ...
+  90% complete,    16.9 s remaining ...
+  95% complete,     8.5 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :    169.894
+ Total simulation time  :    169.786
+ Time in input          :      0.109
+ Time in boundaries     :      1.358 (  0.8%)
+ Time in discharges     :      0.005 (  0.0%)
+ Time in meteo forcing  :      1.902 (  1.1%)
+ Time in infiltration   :      3.728 (  2.2%)
+ Time in momentum       :    142.839 ( 84.1%)
+ Time in structures     :      0.022 (  0.0%)
+ Time in continuity     :     18.511 ( 10.9%)
+ Time in output         :      1.282 (  0.8%)
+
+ Average time step (s)  :      3.620
+
+----------- Closing off SFINCS -----------

@@ -1,0 +1,130 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Reading input file ...
+Info    : input grid interpreted as projected coordinates
+Info    : turning off Coriolis
+Info    : no Coriolis, as latitude is not specified in sfincs.inp
+Info    : running SFINCS with subgrid bathymetry
+Info    : storing mean depth in subgrid cell for hmax output
+Info    : turning on advection
+Info    : advection scheme : first-order upwind
+Reading meteo data ...
+Preparing domain ...
+Info    : using quadtree mesh
+Info    : reading QuadTree netCDF file sfincs.nc
+Quadtree grid info - nr_levels :          3
+Quadtree grid info -        x0 :       0.00
+Quadtree grid info -        y0 :       0.00
+Quadtree grid info -        dx :     200.00
+Quadtree grid info -        dy :     200.00
+Quadtree grid info -      mmax :        130
+Quadtree grid info -      nmax :        130
+Quadtree grid info -  rotation :       0.00
+Info    : number of quadtree refinement transitions : 952
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    102880
+Number of active u/v points    :    205976
+Number of cells in level   1   :      5664
+Number of cells in level   2   :     27520
+Number of cells in level   3   :     69696
+Info   : reading sub-grid netCDF file
+Info    : number of subgrid levels : 10
+CUDA-aware MPI: yes (MPIX_Query_cuda_support=1)
+Info    : reading water level boundaries
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+Initializing output ...
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,     0.4 s remaining ...
+  10% complete,     0.3 s remaining ...
+  15% complete,     0.3 s remaining ...
+  20% complete,     0.3 s remaining ...
+  25% complete,     0.3 s remaining ...
+  30% complete,     0.2 s remaining ...
+  35% complete,     0.2 s remaining ...
+  40% complete,     0.2 s remaining ...
+  45% complete,     0.2 s remaining ...
+  50% complete,     0.2 s remaining ...
+  55% complete,     0.2 s remaining ...
+  60% complete,     0.1 s remaining ...
+  65% complete,     0.1 s remaining ...
+  70% complete,     0.1 s remaining ...
+  75% complete,     0.1 s remaining ...
+  80% complete,     0.1 s remaining ...
+  85% complete,     0.1 s remaining ...
+  90% complete,     0.0 s remaining ...
+  95% complete,     0.0 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+Info : Write maximum values at final timestep since t=dtmaxout was not reached yet...
+
+---------- Simulation finished -----------
+
+ Total time             :      0.663
+ Total simulation time  :      0.345
+ Time in input          :      0.318
+ Time in boundaries     :      0.052 ( 15.1%)
+ Time in momentum       :      0.111 ( 32.1%)
+ Time in continuity     :      0.168 ( 48.6%)
+ Time in output         :      0.006 (  1.7%)
+
+ Average time step (s)  :      3.044
+
+----------- Closing off SFINCS -----------

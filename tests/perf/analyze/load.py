@@ -59,6 +59,8 @@ COLUMNS = (
     "gpu_sm_p95",
     "U_L",
     "per_step",
+    "skipped",
+    "skipped_estimated_wall",
     "cell_dir",
 )
 
@@ -95,6 +97,11 @@ def parse_timings(path: str | os.PathLike) -> dict:
         except ValueError:
             out[key] = float("nan")
     return out
+
+
+def is_skipped_cell(timings: dict) -> bool:
+    """Return True if a parsed timings dict represents a skip-by-projection cell."""
+    return "skipped_estimated_wall" in timings
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +257,48 @@ def _length_label_for(seconds: int | None) -> str | None:
 
 def _row_for_cell(cell_dir: Path, parts: dict) -> dict:
     timings = parse_timings(cell_dir / "timings.txt")
+    skipped = is_skipped_cell(timings)
+    skipped_min = timings.get("skipped_estimated_wall", float("nan"))
+    if skipped:
+        # Skip-by-projection cell — no SFINCS run, no GPU dmon. wall
+        # is None so the analysis layer can plot a marker at the
+        # projected position rather than treat the cell as missing.
+        p50 = float("nan")
+        p95 = float("nan")
+        wall = float("nan")
+        sim = float("nan")
+        step_count_val = timings.get("step_count", float("nan"))
+        comps = {c: float("nan") for c in NAMED_COMPONENTS}
+        u_l = float("nan")
+        per_step = float("nan")
+        length = parts.get("length")
+        if length is None:
+            seconds = _seconds_from_inp(cell_dir / "sfincs.inp")
+            length = _length_label_for(seconds)
+        return {
+            "case": parts["case"],
+            "grid": parts["grid"],
+            "length": length,
+            "config": parts["config"],
+            "variant": parts["variant"],
+            "wall": wall,
+            "total_simulation_time": sim,
+            "boundaries": comps["boundaries"],
+            "momentum": comps["momentum"],
+            "continuity": comps["continuity"],
+            "snapwave": comps["snapwave"],
+            "meteo": comps["meteo"],
+            "output": comps["output"],
+            "step_count": step_count_val,
+            "gpu_sm_p50": p50,
+            "gpu_sm_p95": p95,
+            "U_L": u_l,
+            "per_step": per_step,
+            "skipped": True,
+            "skipped_estimated_wall": skipped_min,
+            "cell_dir": str(cell_dir),
+        }
+
     p50, p95 = parse_dmon(cell_dir / "nvidia_smi_dmon.txt")
 
     # Wall is the total wall-clock SFINCS prints; total_simulation_time
@@ -301,6 +350,8 @@ def _row_for_cell(cell_dir: Path, parts: dict) -> dict:
         "gpu_sm_p95": p95,
         "U_L": u_l,
         "per_step": per_step,
+        "skipped": False,
+        "skipped_estimated_wall": skipped_min,
         "cell_dir": str(cell_dir),
     }
 

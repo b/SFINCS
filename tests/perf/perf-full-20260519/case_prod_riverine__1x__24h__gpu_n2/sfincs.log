@@ -1,0 +1,127 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Reading input file ...
+Warning : no EPSG code defined
+Info    : input grid interpreted as projected coordinates
+Info    : turning off Coriolis
+Info    : no Coriolis, as latitude is not specified in sfincs.inp
+Info    : running SFINCS with regular bathymetry
+Info    : storing maximum depth in subgrid cell for hmax output
+Info    : turning on advection
+Info    : advection scheme : first-order upwind
+Reading meteo data ...
+Info    : reading prcp file sfincs.prcp
+Preparing domain ...
+Info    : using regular mesh
+Info    : turning on precipitation
+Info : reading ASCII input ...
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    160000
+Number of active u/v points    :    319200
+Reading dep file : sfincs.dep
+Info    : turning on infiltration (via Curve Number method - A)
+Info    : reading scs file sfincs.scs
+Info    : reading weir file
+Info    : 6 structure u/v points found
+Info    : reading water level boundaries
+Info    : reading discharges
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : no
+Quadtree refinement  : no
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : yes
+Infiltration         : yes
+SnapWave             : no
+Wave paddles         : no
+------------------------------------------
+
+Initializing output ...
+
+---------- Starting simulation -----------
+---- Using 2 of 2 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,    27.1 s remaining ...
+  10% complete,    24.8 s remaining ...
+  15% complete,    22.9 s remaining ...
+  20% complete,    20.9 s remaining ...
+  25% complete,    19.3 s remaining ...
+  30% complete,    17.7 s remaining ...
+  35% complete,    16.3 s remaining ...
+  40% complete,    15.1 s remaining ...
+  45% complete,    13.9 s remaining ...
+  50% complete,    12.7 s remaining ...
+  55% complete,    11.4 s remaining ...
+  60% complete,    10.1 s remaining ...
+  65% complete,     8.8 s remaining ...
+  70% complete,     7.6 s remaining ...
+  75% complete,     6.3 s remaining ...
+  80% complete,     5.0 s remaining ...
+  85% complete,     3.7 s remaining ...
+  90% complete,     2.5 s remaining ...
+  95% complete,     1.2 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+---------- Simulation finished -----------
+
+ Total time             :     25.415
+ Total simulation time  :     25.028
+ Time in input          :      0.387
+ Time in boundaries     :      1.104 (  4.4%)
+ Time in discharges     :      0.356 (  1.4%)
+ Time in meteo forcing  :      4.786 ( 19.1%)
+ Time in infiltration   :      6.357 ( 25.4%)
+ Time in momentum       :      1.280 (  5.1%)
+ Time in structures     :      7.818 ( 31.2%)
+ Time in c structures     :      7.860 ( 31.4%)
+ Time in continuity     :      0.510 (  2.0%)
+ Time in output         :      0.283 (  1.1%)
+
+ Average time step (s)  :      3.808
+
+----------- Closing off SFINCS -----------
