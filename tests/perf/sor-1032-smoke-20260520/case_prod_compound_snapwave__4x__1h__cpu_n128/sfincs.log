@@ -1,0 +1,210 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Info    : dtwave=1800.0 s is below the SFINCS default 3600 s; on slow-moving wave climates a larger dtwave may reduce wall clock significantly (see docs/waves.rst). Confirm with the science owner of this case.
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    405832
+Number of active u/v points    :    812088
+Number of cells in level   1   :     23500
+Number of cells in level   2   :    107756
+Number of cells in level   3   :    274576
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : yes
+Wave paddles         : no
+------------------------------------------
+
+Coupling with SnapWave ...
+
+----------- Welcome to SnapWave ---------
+
+   @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
+  @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
+  @@@      @@@ @@  @@  @@  @@  @@   @@@
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+             .......:.......
+         ...:::::::::::::::::...
+      ..:::::::............::::::..
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
+.::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
+::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
+..:@@@@@@@@@@@@@@@@@@@@^..............::.
+..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
+ .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
+    ..:::::::::::::::::::::::::::::..
+      ..:::::::::::::::::::::::::..
+         ...:::::::::::::::::...
+             .......:.......
+
+-----------------------------------------
+
+Build-Revision: $Rev: svn 197-branch:SnapWave_IG
+Build-Date: $Date: 2025-04-14
+
+------ Preparing model simulation --------
+
+------------------------------------------
+SnapWave Computational mesh
+------------------------------------------
+Number of active SnapWave nodes:    405832
+Number of active SnapWave cells:    406265
+
+------------------------------------------
+SnapWave Processes
+------------------------------------------
+SnapWave IG waves                  : yes
+SnapWave implicit IG source term   : no
+SnapWave IG bc using Herbers       : yes
+SnapWave wind growth               : no
+SnapWave vegetation                : no
+------------------------------------------
+
+---------- Starting simulation -----------
+---- Using 128 of 128 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,    67.0 s remaining ...
+  10% complete,    37.7 s remaining ...
+  15% complete,    26.7 s remaining ...
+  20% complete,    21.3 s remaining ...
+  25% complete,    17.8 s remaining ...
+  30% complete,    15.6 s remaining ...
+  35% complete,    13.7 s remaining ...
+  40% complete,    12.0 s remaining ...
+  45% complete,    10.5 s remaining ...
+  50% complete,    12.0 s remaining ...
+  55% complete,    10.5 s remaining ...
+  60% complete,     9.1 s remaining ...
+  65% complete,     7.7 s remaining ...
+  70% complete,     6.4 s remaining ...
+  75% complete,     5.2 s remaining ...
+  80% complete,     4.0 s remaining ...
+  85% complete,     2.9 s remaining ...
+  90% complete,     1.9 s remaining ...
+  95% complete,     0.9 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+Info : Write maximum values at final timestep since t=dtmaxout was not reached yet...
+
+---------- Simulation finished -----------
+
+ Total time             :     26.111
+ Total simulation time  :     21.325
+ Time in input          :      4.786
+ Time in boundaries     :      0.024 (  0.1%)
+ Time in momentum       :      9.430 ( 44.2%)
+ Time in continuity     :      3.172 ( 14.9%)
+ Time in SnapWave       :      8.590 ( 40.3%)
+ Time in output         :      0.104 (  0.5%)
+
+ Average time step (s)  :      1.524
+
+----------- Closing off SFINCS -----------
+ wave direction
+   iteration      1 error =    1.00000   %ok =   25.30
+   iteration      2 error =    0.08183   %ok =   29.17
+Computing SnapWave at t =        0.0 s took   2.94 seconds
+   0% complete,       - s remaining ...
+   5% complete,    67.0 s remaining ...
+  10% complete,    37.7 s remaining ...
+  15% complete,    26.7 s remaining ...
+  20% complete,    21.3 s remaining ...
+  25% complete,    17.8 s remaining ...
+  30% complete,    15.6 s remaining ...
+  35% complete,    13.7 s remaining ...
+  40% complete,    12.0 s remaining ...
+  45% complete,    10.5 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   24.96
+   iteration      2 error =    0.08391   %ok =   29.39
+Computing SnapWave at t =     1801.0 s took   2.75 seconds
+  50% complete,    12.0 s remaining ...
+  55% complete,    10.5 s remaining ...
+  60% complete,     9.1 s remaining ...
+  65% complete,     7.7 s remaining ...
+  70% complete,     6.4 s remaining ...
+  75% complete,     5.2 s remaining ...
+  80% complete,     4.0 s remaining ...
+  85% complete,     2.9 s remaining ...
+  90% complete,     1.9 s remaining ...
+  95% complete,     0.9 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   22.32
+   iteration      2 error =    0.08710   %ok =   24.13
+Computing SnapWave at t =     3600.9 s took   2.88 seconds
+ 100% complete,     0.0 s remaining ...
+
+Info : Write maximum values at final timestep since t=dtmaxout was not reached yet...
+
+---------- Simulation finished -----------
+
+ Total time             :     26.111
+ Total simulation time  :     21.325
+ Time in input          :      4.786
+ Time in boundaries     :      0.024 (  0.1%)
+ Time in momentum       :      9.430 ( 44.2%)
+ Time in continuity     :      3.172 ( 14.9%)
+ Time in SnapWave       :      8.590 ( 40.3%)
+ Time in output         :      0.104 (  0.5%)
+
+ Average time step (s)  :      1.524
+
+----------- Closing off SFINCS -----------
