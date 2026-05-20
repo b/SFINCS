@@ -15,10 +15,16 @@ By default compares the ``1x gpu_n2 4d`` cell per case (the cell the
 SOR-1020 SUMMARY.md focuses on); ``--grid``, ``--config``, ``--length``
 override.
 
+Also exposes ``render_gpu_rank_recommendation`` — a single-sweep section
+that mechanically reports the best ``gpu_n<k>`` config per (case, grid)
+along with the wall-time delta vs the next-best config and the SM%
+of the recommended config.
+
 CLI:
 
     python -m tests.perf.analyze.compare --prior <dir> --current <dir>
     python -m tests.perf.analyze.compare --prior <dir> --current <dir> > delta.md
+    python -m tests.perf.analyze.compare --current <dir> --gpu-rank-recommendation
 """
 from __future__ import annotations
 
@@ -29,6 +35,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import load
+from . import plot as _plot
 
 DEFAULT_CASE_ORDER = (
     "case_prod_regular_tide",
@@ -112,24 +119,111 @@ def render_delta_table(
     return "\n".join(lines) + "\n"
 
 
+def render_gpu_rank_recommendation(
+    sweep: str,
+    sm_threshold_pct: float = 30.0,
+) -> str:
+    """Return the "GPU rank-count recommendation" markdown section.
+
+    Per (case, grid) combo in the sweep where at least two
+    ``gpu_n<k>`` configs are measured at the same length, lists:
+
+    - best config (``gpu_n<k>`` with minimum wall time at that length)
+    - wall-time delta vs the next-best config (seconds)
+    - SM% of the recommended config (``gpu_sm_p50``)
+
+    Cases flagged UNDERLOADED (single-GPU SM% < ``sm_threshold_pct``)
+    are marked with an ``†`` and a footnote so the operator can see at
+    a glance which recommendations come from an underloaded baseline.
+    """
+    df = load.load_sweep(sweep)
+    entries = _plot.compute_gpu_saturation_panel(df, sm_threshold_pct=sm_threshold_pct)
+    label = load.sweep_label(sweep)
+
+    lines: list[str] = []
+    lines.append(f"### GPU rank-count recommendation — `{label}`")
+    lines.append("")
+    if not entries:
+        lines.append("_No (case, grid) combos with ≥ 2 gpu_n&lt;k&gt; configs._")
+        return "\n".join(lines) + "\n"
+    lines.append(
+        f"Threshold for UNDERLOADED annotation: SM% < {sm_threshold_pct:.0f}."
+    )
+    lines.append("")
+    lines.append(
+        "| case | grid | length | best config | next-best | "
+        "Δ wall (s) vs next-best | SM% of best |"
+    )
+    lines.append(
+        "|------|------|--------|-------------|-----------|"
+        "------------------------|-------------|"
+    )
+    for e in entries:
+        underloaded_mark = " †" if e["underloaded"] else ""
+        delta = e["delta_vs_next_best"]
+        sm = e["best_sm"]
+        sm_str = f"{sm:.0f}%" if sm == sm else "—"
+        lines.append(
+            f"| `{e['case']}` | {e['grid']} | {e['length']} | "
+            f"**{e['best_config']}**{underloaded_mark} | {e['next_best_config']} | "
+            f"{delta:+.2f} | {sm_str} |"
+        )
+    if any(e["underloaded"] for e in entries):
+        lines.append("")
+        lines.append(
+            f"† UNDERLOADED — single-GPU SM% mean below the "
+            f"{sm_threshold_pct:.0f}% threshold; adding ranks may add "
+            "halo-exchange overhead without proportional compute payoff."
+        )
+    return "\n".join(lines) + "\n"
+
+
 def _main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Mechanical SUMMARY.md delta table.")
-    p.add_argument("--prior", required=True, help="Prior sweep directory.")
+    p.add_argument("--prior", default=None, help="Prior sweep directory.")
     p.add_argument("--current", required=True, help="Current sweep directory.")
     p.add_argument("--grid", default="1x")
     p.add_argument("--length", default="4d")
     p.add_argument("--config", default="gpu_n2")
+    p.add_argument(
+        "--gpu-rank-recommendation",
+        action="store_true",
+        help="Emit the GPU rank-count recommendation section for --current.",
+    )
+    p.add_argument(
+        "--sm-threshold-pct",
+        type=float,
+        default=30.0,
+        help="UNDERLOADED-annotation threshold for the GPU rank-count section.",
+    )
     p.add_argument("--out", default=None,
                    help="Write to this path (default: stdout).")
     args = p.parse_args(argv)
 
-    md = render_delta_table(
-        prior_sweep=args.prior,
-        current_sweep=args.current,
-        grid=args.grid,
-        length=args.length,
-        config=args.config,
-    )
+    if args.gpu_rank_recommendation:
+        md = render_gpu_rank_recommendation(
+            sweep=args.current,
+            sm_threshold_pct=args.sm_threshold_pct,
+        )
+    else:
+        if not args.prior:
+            p.error("--prior is required unless --gpu-rank-recommendation is set")
+        md = render_delta_table(
+            prior_sweep=args.prior,
+            current_sweep=args.current,
+            grid=args.grid,
+            length=args.length,
+            config=args.config,
+        )
+        # Append the GPU rank-count recommendation section so the
+        # operator gets a one-shot SUMMARY refresh from a single
+        # compare.py invocation; existing SUMMARY content above is
+        # preserved by the operator's existing paste workflow.
+        rec = render_gpu_rank_recommendation(
+            sweep=args.current,
+            sm_threshold_pct=args.sm_threshold_pct,
+        )
+        md = md + "\n" + rec
 
     if args.out is None:
         sys.stdout.write(md)

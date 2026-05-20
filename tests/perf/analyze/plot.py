@@ -1,6 +1,6 @@
 """Render the default perf-sweep plot set as PNGs.
 
-Eight default plots, all per-case grids — one subplot per case in
+Nine default plots, all per-case grids — one subplot per case in
 the order ``case_prod_regular_tide / case_prod_quadtree_subgrid_tide /
 case_prod_riverine / case_prod_storm_amuv / case_prod_compound_snapwave``:
 
@@ -10,12 +10,16 @@ case_prod_riverine / case_prod_storm_amuv / case_prod_compound_snapwave``:
 4. ``component_breakdown.png``          — stacked named components at
    ``1x gpu_n2 4d`` for each case.
 5. ``gpu_utilization.png``              — gpu_sm_p50 + p95 envelope.
-6. ``omp_scaling.png``                  — wall vs cpu_n<k> threads (log-x),
+6. ``gpu_saturation_vs_rank.png``       — per-case wall bars + SM%
+   overlay, colored green/red by whether ``gpu_n<k+1> wall`` ≤ or > the
+   prior rank's wall. Annotates UNDERLOADED when single-GPU SM% mean
+   is below a configurable threshold.
+7. ``omp_scaling.png``                  — wall vs cpu_n<k> threads (log-x),
    one line per length, per case. Skipped cells render as "x"
    markers at the projected position.
-7. ``omp_efficiency.png``               — strong-scaling efficiency
+8. ``omp_efficiency.png``               — strong-scaling efficiency
    ``(cpu_n1_wall / k) / cpu_n<k>_wall`` vs threads (perfect = 1.0).
-8. ``gpu_cpu_crossover_heatmap.png``    — heat map per case of
+9. ``gpu_cpu_crossover_heatmap.png``    — heat map per case of
    ``cpu_n<k>_wall / gpu_n<g>_wall`` across ``k × g``. Cells > 1
    are CPU-faster; cells < 1 are GPU-faster.
 
@@ -58,6 +62,11 @@ CONFIG_COLORS = {
     "gpu_n2": "#55A467",    # green
 }
 CONFIG_LABEL = {"cpu_n128": "cpu_n128", "gpu_n1": "gpu_n1", "gpu_n2": "gpu_n2"}
+
+# Saturation-panel colors — encode the helpful/hurtful direction of
+# the rank-count increment. Used by plot_gpu_saturation.
+SATURATION_BAR_GREEN = "#2CA02C"  # adding ranks helps (or baseline)
+SATURATION_BAR_RED = "#C44E52"    # adding ranks hurts
 
 COMPONENT_COLORS = {
     "boundaries": "#4C72B0",
@@ -637,6 +646,264 @@ def plot_gpu_cpu_crossover_heatmap(df: pd.DataFrame, label: str, subtitle: str, 
 
 
 # ---------------------------------------------------------------------------
+# GPU saturation vs rank count (SOR-1037)
+# ---------------------------------------------------------------------------
+
+def _longest_length_with(df: pd.DataFrame, case: str, grid: str, config: str) -> str | None:
+    """Return the longest measured length for a (case, grid, config) cell, or None."""
+    for L in reversed(LENGTHS):
+        row = df[
+            (df["case"] == case)
+            & (df["grid"] == grid)
+            & (df["length"] == L)
+            & (df["config"] == config)
+        ]
+        if not row.empty:
+            w = row.iloc[0]["wall"]
+            if w == w:
+                return L
+    return None
+
+
+def _row_for(df: pd.DataFrame, case: str, grid: str, length: str, config: str):
+    sub = df[
+        (df["case"] == case)
+        & (df["grid"] == grid)
+        & (df["length"] == length)
+        & (df["config"] == config)
+    ]
+    if sub.empty:
+        return None
+    return sub.iloc[0]
+
+
+def compute_gpu_saturation_panel(
+    df: pd.DataFrame,
+    sm_threshold_pct: float = 30.0,
+) -> list[dict]:
+    """Build per-(case, grid) saturation metadata for the GPU rank panel.
+
+    For each (case, grid) combo where at least two ``gpu_n<k>`` configs
+    have a measured wall time at some shared longest length, emit one
+    entry containing:
+
+    - ``case``, ``grid``, ``length``
+    - ``rank_counts``: sorted ``[k1, k2, ...]`` for the gpu_n<k> configs present
+    - ``walls``: aligned list of wall times (s) at the longest length
+    - ``sms``: aligned list of SM% (gpu_sm_p50) means at the longest length
+    - ``bar_colors``: aligned list of helpful/hurtful color hex codes:
+      green when ``walls[i] <= walls[i-1]`` (or for ``i == 0``, baseline),
+      red when ``walls[i] > walls[i-1]``
+    - ``underloaded``: True when ``sms[0] < sm_threshold_pct``
+    - ``best_config``, ``best_wall``, ``next_best_config``,
+      ``delta_vs_next_best`` (seconds; positive means best is faster than next)
+
+    The plot driver and the SUMMARY recommendation section share this
+    helper so they cannot drift on what counts as helpful, hurtful, or
+    underloaded.
+    """
+    out: list[dict] = []
+    gs = _gpu_rank_counts(df)
+    if len(gs) < 2:
+        return out
+
+    cases = _cases_in(df)
+    grids = sorted(df["grid"].dropna().unique().tolist())
+    for case in cases:
+        for grid in grids:
+            # The shared longest length must have wall measured for
+            # EVERY rank count we want to compare. Pick the longest
+            # length where all gs[*] are measured; fall back to the
+            # longest length where the first two are measured.
+            measured_lengths_per_g = {
+                g: _longest_length_with(df, case, grid, f"gpu_n{g}") for g in gs
+            }
+            # Need at least gs[0] and gs[1] measured.
+            if not measured_lengths_per_g.get(gs[0]) or not measured_lengths_per_g.get(gs[1]):
+                continue
+            # Use the shortest of those longest-lengths so all configs
+            # have data at the chosen length.
+            available_lengths = [v for v in measured_lengths_per_g.values() if v]
+            length = min(available_lengths, key=lambda L: LENGTH_SECONDS[L])
+            # Collect rows at that length.
+            ranks: list[int] = []
+            walls: list[float] = []
+            sms: list[float] = []
+            for g in gs:
+                row = _row_for(df, case, grid, length, f"gpu_n{g}")
+                if row is None:
+                    continue
+                w = row["wall"]
+                if not (w == w):
+                    continue
+                ranks.append(g)
+                walls.append(float(w))
+                sm = row["gpu_sm_p50"]
+                sms.append(float(sm) if sm == sm else float("nan"))
+            if len(ranks) < 2:
+                continue
+
+            # Bar colors. Baseline is green; subsequent bars green if
+            # wall[i] <= wall[i-1] (helpful), red otherwise (hurtful).
+            colors = [SATURATION_BAR_GREEN]
+            for i in range(1, len(walls)):
+                if walls[i] <= walls[i - 1]:
+                    colors.append(SATURATION_BAR_GREEN)
+                else:
+                    colors.append(SATURATION_BAR_RED)
+
+            # Best config = wall-time minimum.
+            best_idx = int(np.argmin(walls))
+            best_config = f"gpu_n{ranks[best_idx]}"
+            # Next-best = second-smallest wall.
+            order = sorted(range(len(walls)), key=lambda j: walls[j])
+            next_idx = order[1]
+            next_best_config = f"gpu_n{ranks[next_idx]}"
+            delta = walls[next_idx] - walls[best_idx]
+
+            underloaded = sms[0] == sms[0] and sms[0] < sm_threshold_pct
+
+            out.append({
+                "case": case,
+                "grid": grid,
+                "length": length,
+                "rank_counts": ranks,
+                "walls": walls,
+                "sms": sms,
+                "bar_colors": colors,
+                "underloaded": bool(underloaded),
+                "best_config": best_config,
+                "best_wall": walls[best_idx],
+                "best_sm": sms[best_idx],
+                "next_best_config": next_best_config,
+                "next_best_wall": walls[next_idx],
+                "delta_vs_next_best": delta,
+                "sm_threshold_pct": sm_threshold_pct,
+            })
+    return out
+
+
+def plot_gpu_saturation(
+    df: pd.DataFrame,
+    out_dir: str | os.PathLike,
+    sm_threshold_pct: float = 30.0,
+    label: str = "",
+    subtitle: str = "",
+) -> Path | None:
+    """Render the GPU saturation vs rank-count panel.
+
+    One subplot per (case, grid) with at least two ``gpu_n<k>`` configs
+    measured at the same longest available length. Each subplot draws:
+
+    - Left Y axis: a wall-time bar per rank count (linear scale).
+      Bar colors encode the rank-count increment direction —
+      ``SATURATION_BAR_GREEN`` when ``gpu_n<k+1> wall <= gpu_n<k> wall``
+      (helpful, ``gpu_n1`` is baseline-green), ``SATURATION_BAR_RED``
+      when greater (hurtful). The red-vs-green encoding is the at-a-glance
+      "is adding another GPU rank a win or a loss for this case?" signal.
+    - Right Y axis: ``gpu_n1`` SM% (p50) overlay as a small grey bar.
+      The subplot gets an "UNDERLOADED — n2 adds overhead without compute
+      payoff" annotation when ``sms[0] < sm_threshold_pct``.
+    - Per-subplot title carries the best-config recommendation
+      ("best: gpu_n1" or "best: gpu_n2") based on the actual wall-time
+      minimum in the data.
+
+    The default ``sm_threshold_pct=30`` is a heuristic: GPU
+    streaming-multiprocessor utilization below one-third typically
+    indicates the kernel isn't keeping the SMs busy at single-GPU,
+    so adding another rank tends to introduce halo-exchange overhead
+    without a proportional compute payoff. The chosen default is not
+    a perfect predictor — some workloads have low SM% but heavy
+    per-step compute that DOES amortize across ranks (riverine,
+    storm_amuv in the post-SOR-1019 sweep) — so the threshold is a
+    function parameter callers can tune for their specific capture.
+
+    Returns the written PNG path, or None when the sweep has no
+    eligible (case, grid) combos.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "gpu_saturation_vs_rank.png"
+
+    entries = compute_gpu_saturation_panel(df, sm_threshold_pct=sm_threshold_pct)
+    if not entries:
+        return None
+
+    nrows, ncols, figsize = _layout(len(entries))
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    flat = axes.flatten()
+    for i, entry in enumerate(entries):
+        ax = flat[i]
+        ranks = entry["rank_counts"]
+        walls = entry["walls"]
+        sms = entry["sms"]
+        colors = entry["bar_colors"]
+        x = np.arange(len(ranks))
+        ax.bar(
+            x, walls, width=0.55, color=colors,
+            edgecolor="black", linewidth=0.5,
+        )
+        # Annotate wall time on top of each bar for legibility.
+        ymax = max(walls) if walls else 1.0
+        for j, (w, c) in enumerate(zip(walls, colors)):
+            tag = "helpful" if c == SATURATION_BAR_GREEN else "hurtful"
+            if j == 0:
+                tag = "baseline"
+            ax.text(j, w + 0.02 * ymax, f"{w:.1f}s\n({tag})",
+                    ha="center", va="bottom", fontsize=7)
+        ax.set_xticks(x)
+        ax.set_xticklabels([f"gpu_n{g}" for g in ranks])
+        ax.set_xlabel("rank count")
+        ax.set_ylabel("wall time (s)")
+        ax.set_ylim(0, ymax * 1.25)
+        ax.grid(True, axis="y", alpha=0.3)
+
+        # Right Y: SM% (p50) overlay.
+        ax2 = ax.twinx()
+        sm_x = x + 0.28
+        # Replace NaN with 0 for plotting (and skip the annotation).
+        sm_plot = [s if s == s else 0.0 for s in sms]
+        ax2.bar(
+            sm_x, sm_plot, width=0.15,
+            color="#666666", alpha=0.75, edgecolor="black", linewidth=0.3,
+            label="SM% (p50)",
+        )
+        ax2.set_ylim(0, 100)
+        ax2.set_ylabel("GPU SM% (p50)")
+
+        # Title: case [grid] | best: gpu_nK | length
+        grid_suffix = f" [{entry['grid']}]" if entry["grid"] != "1x" else ""
+        ax.set_title(
+            f"{entry['case']}{grid_suffix}  |  best: {entry['best_config']}  "
+            f"({entry['length']})",
+            fontsize=9,
+        )
+
+        # UNDERLOADED annotation.
+        if entry["underloaded"]:
+            n1_sm = sms[0]
+            ax.text(
+                0.5, 0.94,
+                "UNDERLOADED — n2 adds overhead without compute payoff\n"
+                f"(SM%={n1_sm:.0f} < threshold={sm_threshold_pct:.0f})",
+                transform=ax.transAxes, ha="center", va="top",
+                fontsize=7, color=SATURATION_BAR_RED,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
+                          edgecolor=SATURATION_BAR_RED, alpha=0.9),
+            )
+
+    for j in range(len(entries), nrows * ncols):
+        flat[j].axis("off")
+
+    title = "GPU saturation vs rank count"
+    if label:
+        title = f"{title} — {label}"
+    _add_title(fig, title, subtitle)
+    _save(fig, out_path)
+    return out_path
+
+
+# ---------------------------------------------------------------------------
 # Compare-prior overlays
 # ---------------------------------------------------------------------------
 
@@ -727,6 +994,13 @@ def render(
 
     p = plots_dir / "gpu_utilization.png"
     plot_gpu_utilization(df, label, subtitle, p); paths.append(p)
+
+    # GPU saturation vs rank count — rendered when at least two
+    # gpu_n<k> rank counts are present in the sweep.
+    if len(_gpu_rank_counts(df)) >= 2:
+        sat = plot_gpu_saturation(df, plots_dir, label=label, subtitle=subtitle)
+        if sat is not None:
+            paths.append(sat)
 
     # OpenMP scaling / efficiency / GPU-vs-CPU crossover — rendered
     # only when the sweep carries a CPU thread-count axis (cpu_n<k>
