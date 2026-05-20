@@ -11,9 +11,12 @@ currently hand-curated in SUMMARY.md:
     | <case> | per_step (ms) | ... | ... | ... | ... |
     ...
 
-By default compares the ``1x gpu_n2 4d`` cell per case (the cell the
-SOR-1020 SUMMARY.md focuses on); ``--grid``, ``--config``, ``--length``
-override.
+By default emits two paired delta tables — one at ``gpu_n2`` (the
+production deploy shape) and one at the CPU baseline
+``plot.CPU_REFERENCE`` (``cpu_n64`` per SOR-1041, the OpenMP knee on
+the production host). ``--config`` overrides the single config used
+by the GPU section; ``--cpu-reference`` overrides the CPU baseline
+section; ``--grid`` / ``--length`` override the cell.
 
 Also exposes ``render_gpu_rank_recommendation`` — a single-sweep section
 that mechanically reports the best ``gpu_n<k>`` config per (case, grid)
@@ -119,6 +122,29 @@ def render_delta_table(
     return "\n".join(lines) + "\n"
 
 
+def render_methodology_section() -> str:
+    """Return the SUMMARY's Methodology backward-compat note.
+
+    The 2026-05-20 update (SOR-1041) switched the CPU reference from
+    ``cpu_n128`` to ``cpu_n64``. Pre-SOR-1025 sweeps lack a ``cpu_n64``
+    column; their CPU references stay at ``cpu_n128`` (the only data
+    they have). Operators need to know this so cross-sweep CPU
+    baselines aren't compared naively.
+    """
+    return (
+        "### Methodology\n"
+        "\n"
+        "**2026-05-20 update**: CPU reference column now uses "
+        f"`{_plot.CPU_REFERENCE}`. Pre-SOR-1025 sweeps "
+        "(perf-matrix-20260518, perf-scaling-sweep-20260519, "
+        "perf-scaling-sweep-20260519-post-sor1019) lack a "
+        f"`{_plot.CPU_REFERENCE}` column; their CPU references stay at "
+        "`cpu_n128` (the only data they have). Direct CPU-baseline "
+        "comparisons across pre- and post-SOR-1025 sweeps must be made "
+        "with this asymmetry in mind.\n"
+    )
+
+
 def render_gpu_rank_recommendation(
     sweep: str,
     sm_threshold_pct: float = 30.0,
@@ -186,6 +212,15 @@ def _main(argv: list[str] | None = None) -> int:
     p.add_argument("--length", default="4d")
     p.add_argument("--config", default="gpu_n2")
     p.add_argument(
+        "--cpu-reference",
+        default=_plot.CPU_REFERENCE,
+        help=(
+            "CPU baseline config for the paired CPU delta table "
+            f"(default: {_plot.CPU_REFERENCE} — SOR-1041's OpenMP knee on the "
+            "production host)."
+        ),
+    )
+    p.add_argument(
         "--gpu-rank-recommendation",
         action="store_true",
         help="Emit the GPU rank-count recommendation section for --current.",
@@ -208,12 +243,19 @@ def _main(argv: list[str] | None = None) -> int:
     else:
         if not args.prior:
             p.error("--prior is required unless --gpu-rank-recommendation is set")
-        md = render_delta_table(
+        gpu_table = render_delta_table(
             prior_sweep=args.prior,
             current_sweep=args.current,
             grid=args.grid,
             length=args.length,
             config=args.config,
+        )
+        cpu_table = render_delta_table(
+            prior_sweep=args.prior,
+            current_sweep=args.current,
+            grid=args.grid,
+            length=args.length,
+            config=args.cpu_reference,
         )
         # Append the GPU rank-count recommendation section so the
         # operator gets a one-shot SUMMARY refresh from a single
@@ -223,7 +265,8 @@ def _main(argv: list[str] | None = None) -> int:
             sweep=args.current,
             sm_threshold_pct=args.sm_threshold_pct,
         )
-        md = md + "\n" + rec
+        methodology = render_methodology_section()
+        md = gpu_table + "\n" + cpu_table + "\n" + rec + "\n" + methodology
 
     if args.out is None:
         sys.stdout.write(md)

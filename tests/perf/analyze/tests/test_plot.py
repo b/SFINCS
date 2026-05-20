@@ -112,6 +112,48 @@ class HelpersTest(unittest.TestCase):
 
 
 @unittest.skipUnless(HAS_MPL, "matplotlib not installed in this env")
+class CpuReferenceTest(unittest.TestCase):
+    """Tests for the SOR-1041 CPU baseline constant.
+
+    The CPU reference used in cross-config comparisons must point at
+    ``cpu_n64`` (the OpenMP knee on the production host — n128 anti-scales
+    due to SMT contention; see tests/perf/perf-full-20260519/SUMMARY.md).
+    A synthetic DataFrame whose ``cpu_n64`` wall is faster than its
+    ``cpu_n128`` wall must produce a speedup ratio computed from
+    ``cpu_n64`` (not ``cpu_n128``).
+    """
+
+    def test_constant_is_cpu_n64(self) -> None:
+        self.assertEqual(plot.CPU_REFERENCE, "cpu_n64")
+
+    def test_constant_is_referenced_consistently(self) -> None:
+        # Color and label maps must be keyed by the canonical constant
+        # so the wall_vs_length / per_step_vs_length plots draw the
+        # correct baseline color when CPU_REFERENCE is flipped.
+        self.assertIn(plot.CPU_REFERENCE, plot.CONFIG_COLORS)
+        self.assertIn(plot.CPU_REFERENCE, plot.CONFIG_LABEL)
+
+    def test_speedup_uses_cpu_n64_not_cpu_n128(self) -> None:
+        import pandas as pd
+        # Synthesize a DataFrame where cpu_n64 wall (60) is faster than
+        # cpu_n128 wall (200). gpu_n2 wall is 10. Expected speedup if
+        # the denominator is cpu_n64: 60/10 = 6.0. If the implementation
+        # regressed back to cpu_n128, the speedup would be 200/10 = 20.0.
+        df = pd.DataFrame([
+            {"case": "case_synth", "grid": "1x", "length": "4d",
+             "config": "cpu_n64", "wall": 60.0},
+            {"case": "case_synth", "grid": "1x", "length": "4d",
+             "config": "cpu_n128", "wall": 200.0},
+            {"case": "case_synth", "grid": "1x", "length": "4d",
+             "config": "gpu_n2", "wall": 10.0},
+        ])
+        shared, speedup = plot.compute_gpu_vs_cpu_speedup(df, "case_synth", "1x")
+        self.assertEqual(len(shared), 1)
+        self.assertAlmostEqual(float(speedup[0]), 6.0,
+                               msg="speedup must use cpu_n64 (60s) not cpu_n128 (200s)")
+
+
+@unittest.skipUnless(HAS_MPL, "matplotlib not installed in this env")
 class GpuSaturationPanelTest(unittest.TestCase):
     """Tests for plot_gpu_saturation (SOR-1037).
 

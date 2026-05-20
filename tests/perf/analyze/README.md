@@ -40,7 +40,9 @@ python3 -m venv .venv && .venv/bin/pip install -r tests/perf/analyze/requirement
 
   1. `wall_vs_length.png`             — wall time vs simulation length per case.
   2. `per_step_vs_length.png`         — per-step `U(L)/step_count` (ms).
-  3. `gpu_vs_cpu_speedup.png`         — `cpu_n128 / gpu_n2` speedup.
+  3. `gpu_vs_cpu_speedup.png`         — `<CPU_REFERENCE> / gpu_n2` speedup
+     (the module-level `plot.CPU_REFERENCE` constant; defaults to `cpu_n64`
+     per SOR-1041 — the OpenMP knee on the production host).
   4. `component_breakdown.png`        — stacked named components at
      `1x gpu_n2 4d`.
   5. `gpu_utilization.png`            — GPU sm % (`p50` line + `p95` envelope).
