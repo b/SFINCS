@@ -16,21 +16,45 @@ python3 -m venv .venv && .venv/bin/pip install -r tests/perf/analyze/requirement
 
   `case, grid, length, config, variant, wall, total_simulation_time,
   boundaries, momentum, continuity, snapwave, meteo, output,
-  step_count, gpu_sm_p50, gpu_sm_p95, U_L, per_step, cell_dir`
+  step_count, gpu_sm_p50, gpu_sm_p95, U_L, per_step, skipped,
+  skipped_estimated_wall, cell_dir`
 
   Handles both the SOR-1017+ scaling-sweep directory layout
   (`<case>__<grid>__<length>__<config>/`) and the earlier SOR-87
   perf-matrix layout (`<case>__<config>__<pre|post>/`).
 
-* `plot.py` — renders five default PNG plots into
-  `<sweep_dir>/plots/`:
+  **Skipped cells (SOR-1025).** `run_perf_scaling.sh` writes a
+  `timings.txt` with a `skipped_estimated_wall <minutes>` line when
+  the per-cell projection exceeds `PERF_MAX_CELL_WALL_MIN` (no SFINCS
+  run for that cell). `load_sweep` surfaces these as rows with
+  `skipped=True`, `wall=NaN`, and `skipped_estimated_wall=<minutes>`
+  — the row is present in the DataFrame, not silently dropped.
+  Downstream plots draw an `x` marker at the projected position
+  rather than treating the cell as missing data.
 
-  1. `wall_vs_length.png`      — wall time vs simulation length per case.
-  2. `per_step_vs_length.png`  — per-step `U(L)/step_count` (ms).
-  3. `gpu_vs_cpu_speedup.png`  — `cpu_n128 / gpu_n2` speedup.
-  4. `component_breakdown.png` — stacked named components at
+* `plot.py` — renders the default PNG plots into
+  `<sweep_dir>/plots/`. The original five are always rendered; the
+  three SOR-1025 plots are rendered only when the sweep carries
+  cpu_n\<k\> cells for at least two distinct k values.
+
+  1. `wall_vs_length.png`             — wall time vs simulation length per case.
+  2. `per_step_vs_length.png`         — per-step `U(L)/step_count` (ms).
+  3. `gpu_vs_cpu_speedup.png`         — `cpu_n128 / gpu_n2` speedup.
+  4. `component_breakdown.png`        — stacked named components at
      `1x gpu_n2 4d`.
-  5. `gpu_utilization.png`     — GPU sm % (`p50` line + `p95` envelope).
+  5. `gpu_utilization.png`            — GPU sm % (`p50` line + `p95` envelope).
+  6. `omp_scaling.png`                — wall vs cpu_n\<k\> threads
+     (log-x), one line per length, per case. Projected (skipped) cells
+     render as `x` markers; the knee of the 4d curve is annotated
+     with a dashed vertical line.
+  7. `omp_efficiency.png`             — strong-scaling efficiency
+     `(ref_wall · ref_k / k) / cpu_n<k>_wall` vs threads (perfect = 1.0).
+     The reference is `cpu_n1` when measured; falls back to the
+     smallest measured k otherwise.
+  8. `gpu_cpu_crossover_heatmap.png`  — heat map per case of
+     `cpu_n<k>_wall / gpu_n<g>_wall`. Values > 1 (red-ish) are
+     CPU-faster; < 1 (blue-ish) are GPU-faster. Built from the
+     longest measured length per case.
 
   CLI:
 
@@ -66,4 +90,25 @@ python3 -m venv .venv && .venv/bin/pip install -r tests/perf/analyze/requirement
 
 `tests/perf/run_full_perf_matrix.sh` runs the capture sweep AND the
 analyze layer, producing a self-contained results directory with the
-default plots and a populated notebook.
+default plots and a populated notebook. The canonical sweep template
+lives at `tests/perf/run_perf_scaling.sh`; the orchestrator copies it
+into the per-sweep output directory before invocation.
+
+## Cost control: `PERF_MAX_CELL_WALL_MIN`
+
+The CPU thread-count axis (`cpu_n1` … `cpu_n128`) makes the full
+matrix infeasible at the smallest thread counts on long runs:
+`cpu_n1` on `case_prod_regular_tide 1x 4d` projects to ~15 hours. The
+harness measures the `cpu_n128` baseline first for each
+`(case, grid, length)` and projects each smaller-k wall as
+`cpu_n128_wall × 128 / k`. Cells whose projection exceeds
+`PERF_MAX_CELL_WALL_MIN` minutes (default 30) are skipped with a
+`skipped_estimated_wall <minutes>` annotation in `timings.txt`.
+
+Override the budget per-invocation:
+
+```
+PERF_MAX_CELL_WALL_MIN=60 bash tests/perf/run_full_perf_matrix.sh
+# or directly on the inner runner:
+bash tests/perf/<sweep_dir>/run_perf_scaling.sh --max-cell-min 60
+```

@@ -7,6 +7,7 @@ against the corresponding SUMMARY.md value.
 from __future__ import annotations
 
 import math
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -108,6 +109,67 @@ class ParseDmonTest(unittest.TestCase):
         # SUMMARY.md says steady-state for 24h was ~24%.
         self.assertGreaterEqual(p50, 15.0)
         self.assertLessEqual(p50, 35.0)
+
+
+class SkippedCellTest(unittest.TestCase):
+    """SOR-1025: skip-by-projection cells must surface in the DataFrame
+    with ``skipped=True`` and a populated ``skipped_estimated_wall``."""
+
+    def _build_sweep(self, tmp: Path) -> None:
+        # One ran cpu_n128 cell + one skipped cpu_n1 cell at the same
+        # (case, grid, length), plus one gpu cell for diversity.
+        ran = tmp / "case_prod_regular_tide__1x__1h__cpu_n128"
+        ran.mkdir(parents=True)
+        (ran / "timings.txt").write_text(
+            "total 12.5\n"
+            "simulation 12.0\n"
+            "input 0.5\n"
+            "boundaries 0.1\n"
+            "momentum 6.0\n"
+            "continuity 3.0\n"
+            "snapwave \n"
+            "meteo 1.0\n"
+            "output 0.2\n"
+            "avg_dt 3.66\n"
+            "sum_named 10.3\n"
+            "unaccounted 1.7\n"
+            "step_count 983\n"
+            "sim_seconds 3600\n"
+        )
+        skipped = tmp / "case_prod_regular_tide__1x__1h__cpu_n1"
+        skipped.mkdir(parents=True)
+        (skipped / "timings.txt").write_text(
+            "skipped_estimated_wall 26.67\n"
+            "sim_seconds 3600\n"
+        )
+
+    def test_skipped_row_present(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            self._build_sweep(tmp)
+            df = load.load_sweep(tmp)
+            self.assertEqual(len(df), 2)
+
+            ran = df[df["config"] == "cpu_n128"]
+            self.assertEqual(len(ran), 1)
+            self.assertFalse(bool(ran.iloc[0]["skipped"]))
+            self.assertTrue(math.isnan(float(ran.iloc[0]["skipped_estimated_wall"])))
+            self.assertAlmostEqual(float(ran.iloc[0]["wall"]), 12.5, places=2)
+
+            skipped = df[df["config"] == "cpu_n1"]
+            self.assertEqual(len(skipped), 1)
+            self.assertTrue(bool(skipped.iloc[0]["skipped"]))
+            self.assertAlmostEqual(
+                float(skipped.iloc[0]["skipped_estimated_wall"]), 26.67, places=2
+            )
+            # wall is NaN for skipped cells — plots draw a marker at
+            # the projected position rather than treat the row as a
+            # measured point.
+            self.assertTrue(math.isnan(float(skipped.iloc[0]["wall"])))
+
+    def test_is_skipped_cell_helper(self) -> None:
+        self.assertTrue(load.is_skipped_cell({"skipped_estimated_wall": 42.0}))
+        self.assertFalse(load.is_skipped_cell({"total": 1.0}))
 
 
 if __name__ == "__main__":

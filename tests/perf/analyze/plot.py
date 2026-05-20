@@ -1,15 +1,23 @@
 """Render the default perf-sweep plot set as PNGs.
 
-Five default plots, all five-subplot grids — one subplot per case in
+Eight default plots, all per-case grids — one subplot per case in
 the order ``case_prod_regular_tide / case_prod_quadtree_subgrid_tide /
 case_prod_riverine / case_prod_storm_amuv / case_prod_compound_snapwave``:
 
-1. ``wall_vs_length.png``      — wall time vs simulation length.
-2. ``per_step_vs_length.png``  — per-step gap ``U(L)/step_count`` (ms).
-3. ``gpu_vs_cpu_speedup.png``  — ``cpu_n128_wall / gpu_n2_wall``.
-4. ``component_breakdown.png`` — stacked named components at
+1. ``wall_vs_length.png``               — wall time vs simulation length.
+2. ``per_step_vs_length.png``           — per-step gap ``U(L)/step_count`` (ms).
+3. ``gpu_vs_cpu_speedup.png``           — ``cpu_n128_wall / gpu_n2_wall``.
+4. ``component_breakdown.png``          — stacked named components at
    ``1x gpu_n2 4d`` for each case.
-5. ``gpu_utilization.png``     — gpu_sm_p50 + p95 envelope.
+5. ``gpu_utilization.png``              — gpu_sm_p50 + p95 envelope.
+6. ``omp_scaling.png``                  — wall vs cpu_n<k> threads (log-x),
+   one line per length, per case. Skipped cells render as "x"
+   markers at the projected position.
+7. ``omp_efficiency.png``               — strong-scaling efficiency
+   ``(cpu_n1_wall / k) / cpu_n<k>_wall`` vs threads (perfect = 1.0).
+8. ``gpu_cpu_crossover_heatmap.png``    — heat map per case of
+   ``cpu_n<k>_wall / gpu_n<g>_wall`` across ``k × g``. Cells > 1
+   are CPU-faster; cells < 1 are GPU-faster.
 
 When a comparison sweep is supplied (CLI ``--prior`` or env
 ``PRIOR_SWEEP``), each of the five also gets a paired "prior vs
@@ -345,6 +353,290 @@ def plot_gpu_utilization(df: pd.DataFrame, label: str, subtitle: str, out_path: 
 
 
 # ---------------------------------------------------------------------------
+# OpenMP scaling / efficiency / GPU-CPU crossover
+# ---------------------------------------------------------------------------
+
+LENGTH_COLORS = {
+    "1h": "#4C72B0",
+    "6h": "#DD8452",
+    "24h": "#55A467",
+    "4d": "#C44E52",
+}
+
+
+def _cpu_thread_counts(df: pd.DataFrame) -> list[int]:
+    """Return the sorted list of k values from cpu_n<k> configs present."""
+    out: set[int] = set()
+    for cfg in df["config"].dropna().unique():
+        if isinstance(cfg, str) and cfg.startswith("cpu_n"):
+            try:
+                out.add(int(cfg[len("cpu_n"):]))
+            except ValueError:
+                continue
+    return sorted(out)
+
+
+def _gpu_rank_counts(df: pd.DataFrame) -> list[int]:
+    """Return the sorted list of g values from gpu_n<g> configs present."""
+    out: set[int] = set()
+    for cfg in df["config"].dropna().unique():
+        if isinstance(cfg, str) and cfg.startswith("gpu_n"):
+            try:
+                out.add(int(cfg[len("gpu_n"):]))
+            except ValueError:
+                continue
+    return sorted(out)
+
+
+def _cpu_wall_at_k(df: pd.DataFrame, case: str, grid: str, length: str, k: int):
+    """Return (wall, skipped_estimated_min) for one (case, grid, length, cpu_n<k>)."""
+    row = df[
+        (df["case"] == case)
+        & (df["grid"] == grid)
+        & (df["length"] == length)
+        & (df["config"] == f"cpu_n{k}")
+    ]
+    if row.empty:
+        return (float("nan"), float("nan"))
+    r = row.iloc[0]
+    return (float(r["wall"]) if r["wall"] == r["wall"] else float("nan"),
+            float(r["skipped_estimated_wall"])
+                if r["skipped_estimated_wall"] == r["skipped_estimated_wall"]
+                else float("nan"))
+
+
+def plot_omp_scaling(df: pd.DataFrame, label: str, subtitle: str, out_path: Path) -> None:
+    """Wall time vs cpu_n<k> threads, log-x, one line per length, per case.
+
+    Skipped cells render as "x" markers at the projected position so
+    the operator can see "skipped — projected > budget" alongside
+    measured points. The OpenMP knee (smallest k beyond which adding
+    threads stops halving wall) is highlighted with a vertical
+    dashed line per case.
+    """
+    cases = _cases_in(df)
+    ks = _cpu_thread_counts(df)
+    if not cases or not ks:
+        return
+    nrows, ncols, figsize = _layout(len(cases))
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    flat = axes.flatten()
+    for i, case in enumerate(cases):
+        ax = flat[i]
+        knee_marker = None
+        for L in LENGTHS:
+            xs_run: list[int] = []
+            ys_run: list[float] = []
+            xs_skip: list[int] = []
+            ys_skip: list[float] = []
+            for k in ks:
+                wall, skipped_min = _cpu_wall_at_k(df, case, "1x", L, k)
+                if wall == wall:
+                    xs_run.append(k)
+                    ys_run.append(wall)
+                elif skipped_min == skipped_min:
+                    xs_skip.append(k)
+                    ys_skip.append(skipped_min * 60.0)  # min → s
+            if xs_run:
+                ax.plot(
+                    xs_run, ys_run, marker="o", linestyle="-",
+                    color=LENGTH_COLORS.get(L, "#000"),
+                    label=f"{L} measured",
+                )
+            if xs_skip:
+                ax.plot(
+                    xs_skip, ys_skip, marker="x", linestyle=":",
+                    color=LENGTH_COLORS.get(L, "#000"), alpha=0.6,
+                    label=f"{L} projected",
+                )
+            # Knee detection — smallest k where doubling k yields <
+            # 30% wall reduction. Only computed for the longest length
+            # whose curve is complete enough to detect.
+            if L == "4d" and len(xs_run) >= 2:
+                pairs = sorted(zip(xs_run, ys_run))
+                for j in range(len(pairs) - 1):
+                    k_lo, w_lo = pairs[j]
+                    k_hi, w_hi = pairs[j + 1]
+                    if k_hi >= 2 * k_lo and w_lo > 0 and (w_lo - w_hi) / w_lo < 0.3:
+                        knee_marker = k_lo
+                        break
+        if knee_marker is not None:
+            ax.axvline(knee_marker, color="#888", linestyle="--", alpha=0.7,
+                       label=f"knee @ k={knee_marker}")
+        ax.set_xscale("log", base=2)
+        ax.set_yscale("log")
+        ax.set_xticks(ks)
+        ax.set_xticklabels([str(k) for k in ks])
+        ax.set_xlabel("OMP_NUM_THREADS")
+        ax.set_ylabel("wall time (s)")
+        ax.set_title(case, fontsize=10)
+        ax.grid(True, which="both", alpha=0.3)
+        if i == 0:
+            ax.legend(loc="best", fontsize=7, ncol=2)
+    for j in range(len(cases), nrows * ncols):
+        flat[j].axis("off")
+    _add_title(fig, f"OpenMP scaling (wall vs threads, 1x grid) — {label}", subtitle)
+    _save(fig, out_path)
+
+
+def plot_omp_efficiency(df: pd.DataFrame, label: str, subtitle: str, out_path: Path) -> None:
+    """Strong-scaling efficiency: ``(cpu_n1_wall / k) / cpu_n<k>_wall``.
+
+    Perfect parallelism = 1.0. Deviations < 1.0 indicate parallelism
+    overhead / contention. Per case, one line per length.
+
+    When cpu_n1 was skipped at a given length, fall back to the
+    smallest measured k as the reference and scale accordingly:
+    efficiency = (ref_wall * ref_k / k) / cpu_n<k>_wall.
+    """
+    cases = _cases_in(df)
+    ks = _cpu_thread_counts(df)
+    if not cases or not ks:
+        return
+    nrows, ncols, figsize = _layout(len(cases))
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    flat = axes.flatten()
+    for i, case in enumerate(cases):
+        ax = flat[i]
+        for L in LENGTHS:
+            ref_wall = float("nan")
+            ref_k = 0
+            for k in ks:
+                wall, _ = _cpu_wall_at_k(df, case, "1x", L, k)
+                if wall == wall:
+                    ref_wall = wall
+                    ref_k = k
+                    break
+            if not (ref_wall == ref_wall):
+                continue
+            xs: list[int] = []
+            ys: list[float] = []
+            for k in ks:
+                wall, _ = _cpu_wall_at_k(df, case, "1x", L, k)
+                if not (wall == wall) or wall <= 0:
+                    continue
+                eff = (ref_wall * ref_k / k) / wall
+                xs.append(k)
+                ys.append(eff)
+            if xs:
+                ax.plot(
+                    xs, ys, marker="o", linestyle="-",
+                    color=LENGTH_COLORS.get(L, "#000"),
+                    label=f"{L} (ref k={ref_k})",
+                )
+        ax.axhline(1.0, color="red", linestyle=":", alpha=0.5, label="ideal")
+        ax.set_xscale("log", base=2)
+        ax.set_xticks(ks)
+        ax.set_xticklabels([str(k) for k in ks])
+        ax.set_xlabel("OMP_NUM_THREADS")
+        ax.set_ylabel("efficiency (ref_wall · ref_k / k) / wall_k")
+        ax.set_ylim(0, max(1.2, ax.get_ylim()[1] if ax.get_ylim()[1] > 1.2 else 1.2))
+        ax.set_title(case, fontsize=10)
+        ax.grid(True, which="both", alpha=0.3)
+        if i == 0:
+            ax.legend(loc="best", fontsize=7)
+    for j in range(len(cases), nrows * ncols):
+        flat[j].axis("off")
+    _add_title(fig, f"OpenMP strong-scaling efficiency (1x grid, 4d unless otherwise) — {label}", subtitle)
+    _save(fig, out_path)
+
+
+def plot_gpu_cpu_crossover_heatmap(df: pd.DataFrame, label: str, subtitle: str, out_path: Path) -> None:
+    """Per-case heat map of ``cpu_n<k>_wall / gpu_n<g>_wall``.
+
+    One subplot per case; one row per cpu_n<k> (sorted ascending),
+    one column per gpu_n<g>. Cells > 1 (red-ish) are CPU-faster;
+    cells < 1 (blue-ish) are GPU-faster. The boundary line (ratio
+    = 1) is the crossover. Built from the 4d-length rows — the
+    longest length is the one operators care about for "is the
+    crossover threshold k still useful as the run grows?"
+    """
+    cases = _cases_in(df)
+    ks = _cpu_thread_counts(df)
+    gs = _gpu_rank_counts(df)
+    if not cases or not ks or not gs:
+        return
+    nrows, ncols, figsize = _layout(len(cases))
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    flat = axes.flatten()
+    cmap = plt.get_cmap("RdBu_r")
+
+    # Use the longest available length per case (4d if present).
+    def _length_for(case: str) -> str | None:
+        for L in reversed(LENGTHS):
+            row = df[
+                (df["case"] == case)
+                & (df["grid"] == "1x")
+                & (df["length"] == L)
+                & (df["config"] == f"gpu_n{gs[0]}")
+            ]
+            if not row.empty and row.iloc[0]["wall"] == row.iloc[0]["wall"]:
+                return L
+        return None
+
+    for i, case in enumerate(cases):
+        ax = flat[i]
+        L = _length_for(case)
+        if L is None:
+            ax.axis("off")
+            ax.set_title(f"{case}\n(no gpu data)", fontsize=10)
+            continue
+        mat = np.full((len(ks), len(gs)), np.nan, dtype=float)
+        for ri, k in enumerate(ks):
+            cpu_wall, _ = _cpu_wall_at_k(df, case, "1x", L, k)
+            for ci, g in enumerate(gs):
+                row = df[
+                    (df["case"] == case)
+                    & (df["grid"] == "1x")
+                    & (df["length"] == L)
+                    & (df["config"] == f"gpu_n{g}")
+                ]
+                if row.empty:
+                    continue
+                gpu_wall = float(row.iloc[0]["wall"])
+                if not (cpu_wall == cpu_wall) or not (gpu_wall == gpu_wall) or gpu_wall <= 0:
+                    continue
+                mat[ri, ci] = cpu_wall / gpu_wall
+        # log-scale ratio for symmetric color centering at 1.0
+        with np.errstate(invalid="ignore", divide="ignore"):
+            log_mat = np.log2(mat)
+        vmax = np.nanmax(np.abs(log_mat)) if np.any(np.isfinite(log_mat)) else 1.0
+        if vmax <= 0:
+            vmax = 1.0
+        im = ax.imshow(
+            log_mat, aspect="auto", origin="lower",
+            cmap=cmap, vmin=-vmax, vmax=vmax,
+        )
+        ax.set_xticks(range(len(gs)))
+        ax.set_xticklabels([f"gpu_n{g}" for g in gs])
+        ax.set_yticks(range(len(ks)))
+        ax.set_yticklabels([f"cpu_n{k}" for k in ks])
+        ax.set_xlabel("GPU config")
+        ax.set_ylabel("CPU config")
+        ax.set_title(f"{case} ({L})", fontsize=10)
+        # Annotate each cell with the linear ratio.
+        for ri in range(len(ks)):
+            for ci in range(len(gs)):
+                v = mat[ri, ci]
+                if v == v:
+                    txt = f"{v:.2f}"
+                    color = "white" if abs(log_mat[ri, ci]) > vmax * 0.5 else "black"
+                    ax.text(ci, ri, txt, ha="center", va="center", color=color, fontsize=7)
+                else:
+                    ax.text(ci, ri, "—", ha="center", va="center", color="#888", fontsize=7)
+        fig.colorbar(im, ax=ax, label="log2(cpu/gpu)", fraction=0.05)
+    for j in range(len(cases), nrows * ncols):
+        flat[j].axis("off")
+    _add_title(
+        fig,
+        f"GPU vs CPU crossover heatmap — {label}\n"
+        "ratio = cpu_n<k>_wall / gpu_n<g>_wall  (>1 CPU-faster, <1 GPU-faster)",
+        subtitle,
+    )
+    _save(fig, out_path)
+
+
+# ---------------------------------------------------------------------------
 # Compare-prior overlays
 # ---------------------------------------------------------------------------
 
@@ -435,6 +727,20 @@ def render(
 
     p = plots_dir / "gpu_utilization.png"
     plot_gpu_utilization(df, label, subtitle, p); paths.append(p)
+
+    # OpenMP scaling / efficiency / GPU-vs-CPU crossover — rendered
+    # only when the sweep carries a CPU thread-count axis (cpu_n<k>
+    # for k != 128). Sweeps captured before SOR-1025 skip these.
+    if len(_cpu_thread_counts(df)) >= 2:
+        p = plots_dir / "omp_scaling.png"
+        plot_omp_scaling(df, label, subtitle, p); paths.append(p)
+
+        p = plots_dir / "omp_efficiency.png"
+        plot_omp_efficiency(df, label, subtitle, p); paths.append(p)
+
+        if _gpu_rank_counts(df):
+            p = plots_dir / "gpu_cpu_crossover_heatmap.png"
+            plot_gpu_cpu_crossover_heatmap(df, label, subtitle, p); paths.append(p)
 
     if prior_sweep_dir is not None:
         prior = Path(prior_sweep_dir)

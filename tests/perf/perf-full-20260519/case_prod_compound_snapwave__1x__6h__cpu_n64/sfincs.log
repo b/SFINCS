@@ -1,0 +1,250 @@
+
+------------ Welcome to SFINCS ------------
+
+  @@@@@  @@@@@@@ @@ @@  @@   @@@@   @@@@@
+ @@@ @@@ @@@@@@@ @@ @@@ @@ @@@@@@@ @@@ @@@
+ @@@     @@      @@ @@@ @@ @@   @@ @@@
+  @@@@@  @@@@@@  @@ @@@@@@ @@       @@@@@
+     @@@ @@      @@ @@ @@@ @@   @@     @@@
+ @@@ @@@ @@      @@ @@  @@  @@@@@@ @@@ @@@
+  @@@@@  @@      @@ @@   @   @@@@   @@@@@
+
+              ..............
+          ......:@@@@@@@@:......
+       ..::::..@@........@@.:::::..
+     ..:::::..@@..::..::..@@.::::::..
+    .::::::..@@............@@.:::::::.
+   .::::::..@@..............@@.:::::::.
+  .::::::::..@@............@@..::::::::.
+ .:::::::::...@@.@..@@..@.@@..::::::::::.
+ .:::::::::...:@@@..@@..@@@:..:::::::::..
+ ............@@.@@..@@..@@.@@............
+ ^^^~~^^~~^^@@..............@@^^^~^^^~~^^
+ .::::::::::@@..............@@.:::::::::.
+  .......:.@@.....@.....@....@@.:.......
+   .::....@@......@.@@@.@....@@.....::.
+    .:::~@@.:...:.@@...@@.:.:.@@~::::.
+     .::~@@@@@@@@@@.....@@@@@@@@@~::.
+       ..:~~~~~~~:.......:~~~~~~~:..
+          ......................
+              ..............
+
+------------------------------------------
+
+Build-Revision: $Rev: v2.3.2 mt. Faber+branch:318
+Build-Date: $Date: 2025-04-13
+
+------ Preparing model simulation --------
+
+Info    : dtwave=1800.0 s is below the SFINCS default 3600 s; on slow-moving wave climates a larger dtwave may reduce wall clock significantly (see docs/waves.rst). Confirm with the science owner of this case.
+------------------------------------------
+Computational mesh
+------------------------------------------
+Number of active z points      :    102880
+Number of active u/v points    :    205976
+Number of cells in level   1   :      5664
+Number of cells in level   2   :     27520
+Number of cells in level   3   :     69696
+
+------------------------------------------
+Processes
+------------------------------------------
+Subgrid topography   : yes
+Quadtree refinement  : yes
+Advection            : yes
+Viscosity            : no
+Coriolis             : no
+Wind                 : no
+Atmospheric pressure : no
+Precipitation        : no
+Infiltration         : no
+SnapWave             : yes
+Wave paddles         : no
+------------------------------------------
+
+Coupling with SnapWave ...
+
+----------- Welcome to SnapWave ---------
+
+   @@@@@   @@  @@  @@@@@@  @@@@@@   @@@
+  @@@ @@@  @@@ @@  @@@@@@  @@@@@@   @@@
+  @@@      @@@ @@  @@  @@  @@  @@   @@@
+   @@@@@   @@@@@@  @@@@@@  @@@@@@   @@@
+      @@@  @@ @@@  @@  @@  @@
+  @@@ @@@  @@  @@  @@  @@  @@       @@@
+   @@@@@   @@   @  @@  @@  @@       @@@
+
+             .......:.......
+         ...:::::::::::::::::...
+      ..:::::::............::::::..
+    ..::::::.....:@@@@@@@@....:::::..
+   .::::::...~@@@@@@@@@@@@@@~..::::::.
+  .::::::..:@@@@@@@@@@@@@@@@@@:.::::::.
+ .:::::..:@@@@@@@@@@@@@@@@@@@@@:.::::::.
+.::::..:@@@@@@@@@@@@@@^......:@@.:::::::.
+.::...:@@@@@@@@@@@@@@@.:::::..^^.:::::::.
+::.:@@@@@@@@@@@@@@@@@@..::::::..:::::::::
+..:@@@@@@@@@@@@@@@@@@@@^..............::.
+..:@@@@@@@@@@@@@@@@@@@@@@@^:..:~^~^~:..:.
+ .:@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@:.
+  .@@~^~@@@@~^~@@@@~^~@@@@~^~@@@@~^~@@.
+   ...................................
+    ..:::::::::::::::::::::::::::::..
+      ..:::::::::::::::::::::::::..
+         ...:::::::::::::::::...
+             .......:.......
+
+-----------------------------------------
+
+Build-Revision: $Rev: svn 197-branch:SnapWave_IG
+Build-Date: $Date: 2025-04-14
+
+------ Preparing model simulation --------
+
+------------------------------------------
+SnapWave Computational mesh
+------------------------------------------
+Number of active SnapWave nodes:    102880
+Number of active SnapWave cells:    103105
+
+------------------------------------------
+SnapWave Processes
+------------------------------------------
+SnapWave IG waves                  : yes
+SnapWave implicit IG source term   : no
+SnapWave IG bc using Herbers       : yes
+SnapWave wind growth               : no
+SnapWave vegetation                : no
+------------------------------------------
+
+---------- Starting simulation -----------
+---- Using 64 of 128 available threads ----
+
+   0% complete,       - s remaining ...
+   5% complete,    28.6 s remaining ...
+  10% complete,    23.7 s remaining ...
+  15% complete,    16.3 s remaining ...
+  20% complete,    16.1 s remaining ...
+  25% complete,    15.5 s remaining ...
+  30% complete,    14.0 s remaining ...
+  35% complete,    13.7 s remaining ...
+  40% complete,    11.5 s remaining ...
+  45% complete,    10.7 s remaining ...
+  50% complete,     9.9 s remaining ...
+  55% complete,     8.3 s remaining ...
+  60% complete,     7.5 s remaining ...
+  65% complete,     6.2 s remaining ...
+  70% complete,     5.4 s remaining ...
+  75% complete,     4.6 s remaining ...
+  80% complete,     3.5 s remaining ...
+  85% complete,     2.7 s remaining ...
+  90% complete,     1.7 s remaining ...
+  95% complete,     0.9 s remaining ...
+ 100% complete,     0.0 s remaining ...
+
+Info : Write maximum values at final timestep since t=dtmaxout was not reached yet...
+
+---------- Simulation finished -----------
+
+ Total time             :     19.134
+ Total simulation time  :     17.721
+ Time in input          :      1.413
+ Time in boundaries     :      0.058 (  0.3%)
+ Time in momentum       :      4.423 ( 25.0%)
+ Time in continuity     :      1.559 (  8.8%)
+ Time in SnapWave       :     11.542 ( 65.1%)
+ Time in output         :      0.114 (  0.6%)
+
+ Average time step (s)  :      3.002
+
+----------- Closing off SFINCS -----------
+wave direction
+   iteration      1 error =    1.00000   %ok =   25.68
+   iteration      2 error =    0.08697   %ok =   30.34
+Computing SnapWave at t =        0.0 s took   0.94 seconds
+   0% complete,       - s remaining ...
+   5% complete,    28.6 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   25.48
+   iteration      2 error =    0.08929   %ok =   30.60
+Computing SnapWave at t =     1803.0 s took   0.81 seconds
+  10% complete,    23.7 s remaining ...
+  15% complete,    16.3 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   22.67
+   iteration      2 error =    0.09246   %ok =   24.99
+Computing SnapWave at t =     3601.0 s took   0.88 seconds
+  20% complete,    16.1 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   18.74
+   iteration      2 error =    0.09393   %ok =   21.61
+Computing SnapWave at t =     5401.1 s took   0.88 seconds
+  25% complete,    15.5 s remaining ...
+  30% complete,    14.0 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   16.41
+   iteration      2 error =    0.09412   %ok =   21.12
+Computing SnapWave at t =     7202.5 s took   0.88 seconds
+  35% complete,    13.7 s remaining ...
+  40% complete,    11.5 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   17.33
+   iteration      2 error =    0.09391   %ok =   23.27
+Computing SnapWave at t =     9002.9 s took   0.88 seconds
+  45% complete,    10.7 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   18.83
+   iteration      2 error =    0.09349   %ok =   24.75
+Computing SnapWave at t =    10801.7 s took   0.88 seconds
+  50% complete,     9.9 s remaining ...
+  55% complete,     8.3 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   18.96
+   iteration      2 error =    0.09269   %ok =   24.84
+Computing SnapWave at t =    12602.4 s took   0.88 seconds
+  60% complete,     7.5 s remaining ...
+  65% complete,     6.2 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   18.68
+   iteration      2 error =    0.09147   %ok =   25.01
+Computing SnapWave at t =    14401.9 s took   0.88 seconds
+  70% complete,     5.4 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   19.72
+   iteration      2 error =    0.08957   %ok =   26.57
+Computing SnapWave at t =    16200.9 s took   0.94 seconds
+  75% complete,     4.6 s remaining ...
+  80% complete,     3.5 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   21.38
+   iteration      2 error =    0.08644   %ok =   28.59
+Computing SnapWave at t =    18000.3 s took   0.88 seconds
+  85% complete,     2.7 s remaining ...
+  90% complete,     1.7 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   22.59
+   iteration      2 error =    0.08180   %ok =   30.05
+Computing SnapWave at t =    19801.1 s took   0.88 seconds
+  95% complete,     0.9 s remaining ...
+INFO SnapWave - Making directional grid around boundary mean wave direction
+   iteration      1 error =    1.00000   %ok =   22.66
+   iteration      2 error =    0.07539   %ok =   30.39
+Computing SnapWave at t =    21602.5 s took   0.88 seconds
+ 100% complete,     0.0 s remaining ...
+
+Info : Write maximum values at final timestep since t=dtmaxout was not reached yet...
+
+---------- Simulation finished -----------
+
+ Total time             :     19.134
+ Total simulation time  :     17.721
+ Time in input          :      1.413
+ Time in boundaries     :      0.058 (  0.3%)
+ Time in momentum       :      4.423 ( 25.0%)
+ Time in continuity     :      1.559 (  8.8%)
+ Time in SnapWave       :     11.542 ( 65.1%)
+ Time in output         :      0.114 (  0.6%)
+
+ Average time step (s)  :      3.002
+
+----------- Closing off SFINCS -----------
