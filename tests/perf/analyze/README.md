@@ -34,8 +34,9 @@ python3 -m venv .venv && .venv/bin/pip install -r tests/perf/analyze/requirement
 
 * `plot.py` — renders the default PNG plots into
   `<sweep_dir>/plots/`. The original five are always rendered; the
-  three SOR-1025 plots are rendered only when the sweep carries
-  cpu_n\<k\> cells for at least two distinct k values.
+  SOR-1037 saturation plot needs ≥ 2 gpu_n\<k\> rank counts; the three
+  SOR-1025 plots are rendered only when the sweep carries cpu_n\<k\>
+  cells for at least two distinct k values.
 
   1. `wall_vs_length.png`             — wall time vs simulation length per case.
   2. `per_step_vs_length.png`         — per-step `U(L)/step_count` (ms).
@@ -43,15 +44,22 @@ python3 -m venv .venv && .venv/bin/pip install -r tests/perf/analyze/requirement
   4. `component_breakdown.png`        — stacked named components at
      `1x gpu_n2 4d`.
   5. `gpu_utilization.png`            — GPU sm % (`p50` line + `p95` envelope).
-  6. `omp_scaling.png`                — wall vs cpu_n\<k\> threads
+  6. `gpu_saturation_vs_rank.png`     — per-(case, grid) wall-time bars
+     at the longest length, coloured green (helpful) or red (hurtful)
+     by the rank-count increment direction, with a single-GPU SM% (p50)
+     overlay on the right Y axis. Annotates `UNDERLOADED` when the
+     single-GPU SM% mean is below a configurable threshold (default
+     30%). The threshold is a function parameter — tune it for noisier
+     captures or different workloads.
+  7. `omp_scaling.png`                — wall vs cpu_n\<k\> threads
      (log-x), one line per length, per case. Projected (skipped) cells
      render as `x` markers; the knee of the 4d curve is annotated
      with a dashed vertical line.
-  7. `omp_efficiency.png`             — strong-scaling efficiency
+  8. `omp_efficiency.png`             — strong-scaling efficiency
      `(ref_wall · ref_k / k) / cpu_n<k>_wall` vs threads (perfect = 1.0).
      The reference is `cpu_n1` when measured; falls back to the
      smallest measured k otherwise.
-  8. `gpu_cpu_crossover_heatmap.png`  — heat map per case of
+  9. `gpu_cpu_crossover_heatmap.png`  — heat map per case of
      `cpu_n<k>_wall / gpu_n<g>_wall`. Values > 1 (red-ish) are
      CPU-faster; < 1 (blue-ish) are GPU-faster. Built from the
      longest measured length per case.
@@ -67,13 +75,19 @@ python3 -m venv .venv && .venv/bin/pip install -r tests/perf/analyze/requirement
   `*_compare.png` plots are produced in the same `plots/` directory.
 
 * `compare.py` — mechanical regen of the SUMMARY.md
-  `Delta vs <prior> baseline` table.
+  `Delta vs <prior> baseline` table; also appends the `GPU rank-count
+  recommendation` section (best gpu_n\<k\> per case/grid, wall-time
+  delta vs next-best, SM% of recommended config).
 
   ```
   python -m tests.perf.analyze.compare \
       --prior tests/perf/perf-scaling-sweep-20260519 \
       --current tests/perf/perf-scaling-sweep-20260519-post-sor1019 \
       > delta.md
+  # single-sweep, recommendation section only:
+  python -m tests.perf.analyze.compare \
+      --current tests/perf/perf-scaling-sweep-20260519-post-sor1019 \
+      --gpu-rank-recommendation
   ```
 
 * `explore.ipynb` — Jupyter notebook with the default plots and
